@@ -20,7 +20,8 @@ export class BoardView {
   constructor(el, promoEl, onMove) {
     this.el = el;
     this.promoEl = promoEl;
-    this.shapes = [];
+    this.layers = {}; // named groups of arrows/circles: explorer, engine, hint
+    this.onOrientationChange = null;
     this.cg = Chessground(el, {
       orientation: 'white',
       coordinates: true,
@@ -53,17 +54,26 @@ export class BoardView {
     });
   }
 
-  /** Arrows drawn by the app (e.g. repertoire moves): [{orig, dest, brush}] */
+  /** Set one named layer of app-drawn arrows/circles ([{orig, dest?, brush}]); other layers are kept. */
+  setLayer(name, shapes) {
+    this.layers[name] = shapes;
+    this._drawShapes();
+  }
+
+  /** The repertoire explorer's arrows. */
   setShapes(shapes) {
-    this.shapes = shapes;
+    this.setLayer('explorer', shapes);
+  }
+
+  _drawShapes() {
     // A hidden board has no size; drawing then produces NaN coordinates. Draw when shown.
-    if (this.el.offsetParent !== null) this.cg.setAutoShapes(shapes);
+    if (this.el.offsetParent !== null) this.cg.setAutoShapes(Object.values(this.layers).flat());
   }
 
   /** Call after the board becomes visible again (e.g. leaving the dashboard). */
   redraw() {
     this.cg.redrawAll();
-    this.cg.setAutoShapes(this.shapes);
+    this._drawShapes();
   }
 
   orientation() {
@@ -71,11 +81,12 @@ export class BoardView {
   }
 
   setOrientation(color) {
-    if (this.orientation() !== color) this.cg.toggleOrientation();
+    if (this.orientation() !== color) this.flip();
   }
 
   flip() {
     this.cg.toggleOrientation();
+    this.onOrientationChange?.(this.orientation());
   }
 
   /**

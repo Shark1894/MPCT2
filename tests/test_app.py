@@ -56,3 +56,13 @@ def test_build_id_changes_when_web_files_change(tmp_path):
 
 def test_unknown_api_route_is_404():
     assert client.get("/api/nope").status_code == 404
+
+
+def test_stockfish_files_served_with_correct_types():
+    # Browsers refuse to compile WebAssembly served with any other MIME type.
+    for name in ["stockfish-19-lite", "stockfish-19-lite-single"]:
+        js = client.get(f"/assets/{BUILD_ID}/vendor/stockfish/{name}.js")
+        wasm = client.get(f"/assets/{BUILD_ID}/vendor/stockfish/{name}.wasm")
+        assert js.status_code == 200 and "javascript" in js.headers["content-type"]
+        assert wasm.status_code == 200 and wasm.headers["content-type"] == "application/wasm"
+        assert wasm.content[:4] == b"\0asm"

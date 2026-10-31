@@ -7,6 +7,7 @@ import { renderMoveList } from './movelist.js';
 import { RepertoirePanel } from './repertoire.js';
 import { TrainingController } from './training.js';
 import { DashboardView } from './dashboard.js';
+import { AnalysisPanel } from './analysis.js';
 import { isModalOpen, store } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -14,6 +15,15 @@ const $ = (id) => document.getElementById(id);
 const game = new Game();
 restoreGame();
 const board = new BoardView($('board'), $('promo'), onBoardMove);
+
+const analysis = new AnalysisPanel({
+  game,
+  board,
+  onPlayMoves: (ucis) => {
+    for (const uci of ucis) if (!game.play(uci.slice(0, 2), uci.slice(2, 4), uci[4])) break;
+    render();
+  },
+});
 
 const repertoire = new RepertoirePanel({
   game,
@@ -54,6 +64,8 @@ const trainer = new TrainingController({
   panel: repertoire,
   render: () => render(),
   onModeChange: (active) => {
+    if (active) analysis.pause('training');
+    else analysis.resume('training');
     document.body.classList.toggle('training', active);
     $('mode-badge').hidden = !active;
     $('view-dashboard').disabled = active;
@@ -73,8 +85,13 @@ function setView(next) {
   $('view-board').setAttribute('aria-pressed', String(view === 'board'));
   $('view-dashboard').setAttribute('aria-pressed', String(view === 'dashboard'));
   store.set('view', view);
-  if (view === 'dashboard') dashboard.refresh();
-  else board.redraw();
+  if (view === 'dashboard') {
+    analysis.pause('dashboard');
+    dashboard.refresh();
+  } else {
+    board.redraw();
+    analysis.resume('dashboard');
+  }
   window.scrollTo(0, 0);
 }
 
@@ -118,6 +135,7 @@ function render() {
   if (game.fen() !== shownFen) {
     shownFen = game.fen();
     repertoire.positionChanged();
+    analysis.positionChanged();
   }
 }
 
@@ -256,4 +274,4 @@ repertoire.init().then(() => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, repertoire, trainer, dashboard, setView, render };
+window.mpct = { game, board, repertoire, trainer, dashboard, setView, render, analysis };

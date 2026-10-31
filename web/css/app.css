@@ -206,15 +206,23 @@ textarea[readonly] {
   justify-content: center;
   align-items: start;
   grid-template-columns: var(--left-w) auto var(--right-w);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   grid-template-areas:
     'repertoire board controls'
+    'repertoire board engine'
     'repertoire board history'
     'repertoire board tools';
 }
 
+.engine {
+  grid-area: engine;
+}
+
 .board-area {
   grid-area: board;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
 }
 
 .controls {
@@ -241,8 +249,13 @@ textarea[readonly] {
     calc(100dvh - var(--topbar-h) - 2 * var(--gap))
   );
   position: relative;
-  width: var(--board);
+  width: calc(var(--board) - var(--evalbar-space, 0px));
   aspect-ratio: 1;
+}
+
+/* Room for the evaluation bar beside the board while the engine is on. */
+body.engine-on {
+  --evalbar-space: 26px;
 }
 
 #board {
@@ -404,6 +417,193 @@ textarea[readonly] {
 
 .comment-status {
   font-size: 12px;
+}
+
+/* ---- engine ---- */
+
+.eval-bar {
+  position: relative;
+  flex: 0 0 20px;
+  width: 20px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #2b2f38;
+  border: 1px solid var(--border);
+}
+
+.eval-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 50%;
+  background: #ecebe7;
+  transition: height 0.4s ease;
+}
+
+.eval-bar.flipped .eval-fill {
+  top: 0;
+  bottom: auto;
+}
+
+.eval-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: -0.03em;
+  color: #222;
+}
+
+.eval-label:not(.white-ahead) {
+  top: 3px;
+  bottom: auto;
+  color: #eee;
+}
+
+.eval-bar.flipped .eval-label {
+  top: 3px;
+  bottom: auto;
+}
+
+.eval-bar.flipped .eval-label:not(.white-ahead) {
+  top: auto;
+  bottom: 3px;
+}
+
+.engine-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.switch {
+  min-height: 34px;
+  padding: 4px 12px 4px 34px;
+  position: relative;
+  font-size: 14px;
+}
+
+.switch::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.2s;
+}
+
+.switch[aria-checked='true'] {
+  border-color: var(--blue);
+}
+
+.switch[aria-checked='true']::before {
+  background: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+
+.engine-eval {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.engine-depth {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.engine-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.engine-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 1.5em;
+}
+
+.engine-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.engine-score {
+  flex: 0 0 auto;
+  min-width: 52px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.engine-score.for-white {
+  background: #ecebe7;
+  color: #1b1f27;
+}
+
+.engine-score.for-black {
+  background: #2b2f38;
+  color: #ecebe7;
+  border: 1px solid var(--border);
+}
+
+.engine-moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 2px;
+  min-width: 0;
+}
+
+.engine-move {
+  min-height: 24px;
+  padding: 1px 3px;
+  font-size: 13px;
+  background: none;
+  border: none;
+  border-radius: 3px;
+}
+
+button.engine-move:hover {
+  background: var(--surface-2);
+}
+
+.engine-settings {
+  display: flex;
+  gap: 12px;
+}
+
+.engine-settings label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.engine-settings select {
+  width: auto;
+  min-height: 32px;
+  padding: 4px 6px;
+}
+
+.engine-status {
+  min-height: 0;
+}
+
+body.training .engine {
+  display: none;
 }
 
 /* ---- branch tags ---- */
@@ -626,8 +826,12 @@ button.move:hover {
 
 /* On desktop the move list fills the column height left over beside the board. */
 .history {
-  max-height: calc(100dvh - var(--topbar-h) - 2 * var(--gap) - 340px);
-  min-height: 180px;
+  max-height: calc(100dvh - var(--topbar-h) - 2 * var(--gap) - 400px);
+  min-height: 140px;
+}
+
+body.engine-on .history {
+  max-height: calc(100dvh - var(--topbar-h) - 2 * var(--gap) - 620px);
 }
 
 /* ---- FEN ---- */
@@ -1088,6 +1292,7 @@ button.move:hover {
     grid-template-areas:
       'board controls'
       'board repertoire'
+      'board engine'
       'board history'
       'board tools';
   }
@@ -1096,7 +1301,7 @@ button.move:hover {
     position: sticky;
     top: var(--gap);
     align-self: start;
-    grid-row: 1 / span 4;
+    grid-row: 1 / span 5;
   }
 
   .board-wrap {
@@ -1106,7 +1311,8 @@ button.move:hover {
     );
   }
 
-  .history {
+  .history,
+  body.engine-on .history {
     max-height: 40vh;
   }
 }
@@ -1116,7 +1322,7 @@ button.move:hover {
 @media (max-width: 760px) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'board' 'controls' 'repertoire' 'history' 'tools';
+    grid-template-areas: 'board' 'controls' 'repertoire' 'engine' 'history' 'tools';
     padding: 8px;
     gap: 10px;
   }
@@ -1131,7 +1337,8 @@ button.move:hover {
     margin: 0 auto;
   }
 
-  .history {
+  .history,
+  body.engine-on .history {
     max-height: 32vh;
   }
 

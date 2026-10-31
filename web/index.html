@@ -30,6 +30,10 @@
          Wider screens place the same sections with CSS grid areas. -->
     <main class="layout">
       <section class="board-area" aria-label="Chess board">
+        <div id="eval-bar" class="eval-bar" hidden aria-hidden="true">
+          <div id="eval-fill" class="eval-fill"></div>
+          <span id="eval-label" class="eval-label"></span>
+        </div>
         <div class="board-wrap">
           <div id="board"></div>
           <div id="promo" class="promo" hidden></div>
@@ -142,6 +146,22 @@
           </div>
         </div>
         <p id="rep-error" class="panel-error" hidden></p>
+      </section>
+
+      <section id="engine-panel" class="panel engine" aria-label="Engine analysis">
+        <div class="engine-head">
+          <button id="engine-toggle" type="button" class="switch" role="switch" aria-checked="false">Engine off</button>
+          <span id="engine-eval" class="engine-eval"></span>
+          <span id="engine-depth" class="meta engine-depth"></span>
+        </div>
+        <div id="engine-body" class="engine-body" hidden>
+          <div id="engine-lines" class="engine-lines" aria-live="off"></div>
+          <div class="engine-settings">
+            <label>Lines <select id="engine-multipv"></select></label>
+            <label>Depth <select id="engine-depth-limit"></select></label>
+          </div>
+          <p id="engine-status" class="meta engine-status"></p>
+        </div>
       </section>
 
       <section class="panel history" aria-label="Moves">

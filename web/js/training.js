@@ -253,6 +253,6 @@ export class TrainingController {
       : hint.type === 'piece'
         ? [{ orig: hint.from, brush: 'yellow' }]
         : [{ orig: hint.from, dest: hint.to, brush: 'red' }];
-    this.board.setShapes(this.hintShapes);
+    this.board.setLayer('hint', this.hintShapes);
   }
 }

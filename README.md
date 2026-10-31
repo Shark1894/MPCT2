@@ -24,7 +24,8 @@ The full plan, decisions and data model are in the project's
 | 4 | Opening trainer: spaced repetition, hints, practice retries | Done |
 | 5 | Review dashboard | Done |
 | 6 | Legacy data import (openings, lines, comments) | Done |
-| 7 | Engine (Stockfish in the browser) | Next |
+| 7 | Engine analysis (Stockfish 19 Lite in the browser) | Done |
+| 7b | Play against the engine | Next |
 | 8 | Games | Planned |
 
 ## Using the board
@@ -71,6 +72,19 @@ en passant square that allows no capture are ignored, so transpositions match.
 
 Lines always start from the initial position. Extending a line makes it due for review today,
 since it now has moves you haven't trained.
+
+## Engine analysis
+
+Stockfish 19 Lite runs in the browser (a Web Worker), so the server does no work. The multi-threaded build is
+used because the app is cross-origin isolated (falls back to single-threaded otherwise); phones use at most 2
+threads and a smaller hash.
+
+- **Engine on/off** in the engine panel (setting remembered). Shows the evaluation (from White's side, `#3` = mate
+  in 3), depth, and the best 1–5 lines; **Lines** and **Depth** (12–30 or no limit) are adjustable.
+- Click any move in a line to play the line up to that move.
+- Blue arrow = engine's best move, pale blue = the other lines (repertoire arrows stay green). An evaluation bar
+  sits beside the board and flips with it.
+- Analysis pauses during training (and is hidden), on the dashboard, and while the tab is in the background.
 
 ## Branch tags
 
@@ -177,6 +191,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/repertoire.e2e.cjs   # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/training.e2e.cjs     # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/dashboard.e2e.cjs    # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/tags.e2e.cjs         # empty database
+MPCT_URL=http://localhost:8010/ node tests/e2e/engine.e2e.cjs       # runs the real engine
 ```
 
 ## Deploy on the home server
@@ -257,6 +272,8 @@ web/              frontend served as-is
   js/trainer.js   training session rules (pure logic, unit tested)
   js/training.js  training mode: board, auto replies, hints, results
   js/dashboard.js dashboard view: stats, lines with history, resets
+  js/engine.js    Stockfish worker client + UCI parsing (helpers unit tested)
+  js/analysis.js  engine panel, evaluation bar, engine arrows
   js/api.js       JSON API client
   js/ui.js        dialogs, toast, local storage
   js/main.js      page wiring, keyboard, FEN tools
@@ -271,6 +288,7 @@ tests/            pytest (backend), tests/js (Node), tests/e2e (Playwright)
 | --- | --- | --- | --- |
 | chessground | 9.2.1 | GPL-3.0-or-later | `web/vendor/chessground/` |
 | chess.js | 1.4.0 | BSD-2-Clause | `web/vendor/chess.js/` |
+| Stockfish.js (Lite builds) | 19.0.1 | GPL-3.0 | `web/vendor/stockfish/` |
 | python-chess | 1.11.2 | GPL-3.0-or-later | `requirements.txt` |
 
 The cburnett piece set and brown board theme ship with chessground. Because chessground and python-chess are GPL-3.0, keep this
