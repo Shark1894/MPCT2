@@ -9,7 +9,9 @@ client = TestClient(app)
 def test_health():
     r = client.get("/api/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok", "version": __version__}
+    body = r.json()
+    assert (body["status"], body["version"]) == ("ok", __version__)
+    assert body["database"] in {"ok", "not configured", "unavailable"}
 
 
 def test_index_served_with_isolation_headers():

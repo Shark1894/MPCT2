@@ -19,8 +19,9 @@ The full plan, decisions and data model are in the project's
 | --- | --- | --- |
 | 0 | FastAPI skeleton, Docker, health check | Done |
 | 1 | Board: legal moves, move list, navigation, promotion, flip, FEN | Done |
-| 2 | Postgres + repertoire API | Next |
-| 3–8 | Repertoire UI, trainer, dashboard, data import, engine, games | Planned |
+| 2 | Postgres + repertoire API | Done |
+| 3 | Repertoire UI | Next |
+| 4–8 | Repertoire UI, trainer, dashboard, data import, engine, games | Planned |
 
 ## Using the board
 
@@ -32,21 +33,60 @@ The full plan, decisions and data model are in the project's
 - Paste a FEN and press **Load FEN** (or Enter) to set up a position; **Copy FEN** copies the current one.
 - Right-click drag draws arrows; right-click a square draws a circle.
 
+## API
+
+Interactive docs: `/api/docs` (Swagger UI). Positions are sent as FEN; move counters and an
+en passant square that allows no capture are ignored, so transpositions match.
+
+| Method + path | Purpose |
+| --- | --- |
+| `GET/POST /api/repertoires` | List / create repertoires |
+| `PATCH/DELETE /api/repertoires/{id}` | Rename / delete (cascades to everything in it) |
+| `GET/POST /api/repertoires/{id}/openings` | List (with line, due and next-review counts) / create openings |
+| `GET/PATCH/DELETE /api/openings/{id}` | One opening: summary / rename or recolour / delete |
+| `GET /api/openings/{id}/lines` | Lines with their moves (SAN + UCI) |
+| `POST /api/openings/{id}/lines` | Save moves `{"moves": ["e2e4", ...]}`: `created`, `extended` or `exists` |
+| `GET/DELETE /api/openings/{id}/lines/through?fen=` | Count / delete the lines passing through a position |
+| `DELETE /api/lines/{id}` | Delete one line |
+| `GET /api/openings/{id}/explorer?fen=` | Repertoire moves from a position, with line counts |
+| `GET/PUT /api/repertoires/{id}/comment` | Read / save a position comment (empty comment deletes it) |
+
+Lines always start from the initial position. Extending a line makes it due for review today,
+since it now has moves you haven't trained.
+
 ## Run locally
 
 ```bash
 python -m venv .venv && source .venv/bin/activate   # fish: source .venv/bin/activate.fish
 pip install -r requirements-dev.txt
+export DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/mpct   # fish: set -x DATABASE_URL ...
+alembic upgrade head
 uvicorn app.main:app --reload --port 8010
 # open http://localhost:8010
 ```
 
+Without `DATABASE_URL` the board still works; the repertoire API answers 503.
+
+## Database changes
+
+Models live in `app/db/models.py`. After changing them:
+
+```bash
+alembic revision --autogenerate -m "describe the change"   # review the generated file in app/db/migrations/versions/
+alembic upgrade head
+```
+
+The container runs `alembic upgrade head` on every start, so deploying a new version applies its migrations.
+
 ## Tests
 
 ```bash
-pytest           # backend
+TEST_DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/mpct_test pytest   # backend
 npm test         # frontend game-state logic (Node 20+, no npm install needed)
 ```
+
+The database tests drop and rebuild the schema of `TEST_DATABASE_URL`, so they refuse to run unless its
+database name contains `test`. Without it set, they're skipped.
 
 Browser checks (drag/tap moves, promotion, navigation, phone layout) against a running copy:
 
@@ -57,39 +97,80 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/board.e2e.cjs
 
 ## Deploy on the home server
 
-1. **Clone and start**
+The server runs Postgres, Caddy and cloudflared from the Compose project in `~/docker`; MPCT is a
+separate Compose project in `~/docker/mpct` that joins the same Docker network.
+
+1. **Clone** (read-only deploy key on the server)
 
    ```bash
-   git clone https://github.com/Shark1894/MPCT2.git mpct && cd mpct
-   cp .env.example .env            # set MPCT_PORT if 8010 is taken
-   docker compose up -d --build
-   curl -s localhost:8010/api/health   # {"status":"ok",...}
+   cd ~/docker && git clone git@github.com:Shark1894/MPCT2.git mpct && cd mpct
+   cp .env.example .env
    ```
 
-   The port is bound to `127.0.0.1` only, so nothing outside the server can reach it except through the tunnel.
+2. **Join the shared network.** Create `docker-compose.override.yml` (git-ignored) with the network
+   cloudflared/Caddy/Postgres use (`docker inspect cloudflared` shows it):
 
-2. **Add the subdomain to the Cloudflare tunnel.** Add a public hostname (e.g. `chess.sharkeyhome.co.uk`)
-   pointing at `http://localhost:8010`. If cloudflared runs in a container on a Docker network instead, attach
-   the `mpct` service to that network and use `http://mpct:8000`.
+   ```yaml
+   services:
+     mpct:
+       networks: [default, homeserver]
+   networks:
+     homeserver:
+       external: true
+       name: docker_default
+   ```
 
-3. **Protect it with Cloudflare Access.** In the Zero Trust dashboard, add a *self-hosted* Access application
-   for the same hostname with an **Allow** policy that includes only your email address. Access then asks for a
-   one-time code sent to that email before any page loads. The app itself has no login.
+3. **Create the database** (once). Postgres runs in the `postgres` container:
 
-4. **Update later:** `git pull && docker compose up -d --build`. Static files are served with
-   `Cache-Control: no-cache`, so phones pick up new versions on the next load.
+   ```bash
+   MPCT_DB_PASSWORD=$(openssl rand -hex 24)
+   docker exec -i postgres psql -U jason -d postgres -v pw="$MPCT_DB_PASSWORD" < scripts/create_database.sql
+   echo "DATABASE_URL=postgresql+psycopg://mpct:$MPCT_DB_PASSWORD@postgres:5432/mpct" >> .env
+   ```
+
+4. **Start**
+
+   ```bash
+   docker compose up -d --build
+   curl -s localhost:8010/api/health   # {"status":"ok","version":...,"database":"ok"}
+   ```
+
+   Tables are created and migrated automatically on start. The published port is bound to
+   `127.0.0.1` only.
+
+5. **Route the subdomain.** Caddy (`~/docker/Caddyfile`):
+
+   ```
+   http://chess.sharkeyhome.co.uk {
+   	reverse_proxy mpct:8000
+   }
+   ```
+
+   Cloudflare tunnel: a published-application route `chess.sharkeyhome.co.uk` → `http://caddy:80`.
+   Cloudflare Access: a self-hosted application for the hostname with an Allow policy for your email only
+   (one-time PIN login). The app itself has no login.
+
+6. **Update later:** `cd ~/docker/mpct && git pull && docker compose up -d --build`. Static files are served
+   with `Cache-Control: no-cache`, so phones pick up new versions on the next load.
 
 ## Layout
 
 ```
-app/            FastAPI app (main.py: routes, static files, headers)
-web/            frontend served as-is
+app/
+  main.py         app factory: routes, error mapping, headers, static files
+  config.py       settings from environment / .env
+  core/           pure chess logic (position keys, add-line rules), no web or DB imports
+  db/             SQLAlchemy models, session, Alembic migrations
+  repositories/   database queries (replaces the legacy DBFunctions.py)
+  api/            FastAPI routers + request/response schemas
+web/              frontend served as-is
   js/game.js      game state + rules wrapper (pure logic, unit tested)
   js/board.js     chessground wrapper + promotion picker
   js/movelist.js  move list rendering
   js/main.js      page wiring, keyboard, FEN tools
   vendor/         pinned third-party libraries (see below)
-tests/          pytest (backend) and tests/js (Node test runner)
+scripts/          one-off server scripts (database setup)
+tests/            pytest (backend), tests/js (Node), tests/e2e (Playwright)
 ```
 
 ## Third-party code
@@ -98,8 +179,9 @@ tests/          pytest (backend) and tests/js (Node test runner)
 | --- | --- | --- | --- |
 | chessground | 9.2.1 | GPL-3.0-or-later | `web/vendor/chessground/` |
 | chess.js | 1.4.0 | BSD-2-Clause | `web/vendor/chess.js/` |
+| python-chess | 1.11.2 | GPL-3.0-or-later | `requirements.txt` |
 
-The cburnett piece set and brown board theme ship with chessground. Because chessground is GPL-3.0, keep this
+The cburnett piece set and brown board theme ship with chessground. Because chessground and python-chess are GPL-3.0, keep this
 repository private or license it under the GPL if you ever publish it.
 
 To update a vendored library: `npm install <pkg>@<version>` in a scratch folder and copy the files listed above.
