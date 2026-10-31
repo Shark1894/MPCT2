@@ -1,0 +1,358 @@
+/* MPCT web: layout and theme. Colours follow the MPCT icon (charcoal, blue, copper). */
+
+:root {
+  --bg: #14171d;
+  --surface: #1b1f27;
+  --surface-2: #232934;
+  --border: #323a48;
+  --text: #e3e6eb;
+  --text-dim: #9aa3b2;
+  --blue: #3c7fd6;
+  --blue-soft: rgba(60, 127, 214, 0.22);
+  --copper: #c98a4e;
+  --error: #e06c6c;
+  --ok: #7cc47f;
+  --topbar-h: 48px;
+  --gap: 16px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  min-height: 40px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--blue);
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
+button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ---- top bar ---- */
+
+.topbar {
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.mode {
+  color: var(--text-dim);
+}
+
+/* ---- layout ---- */
+
+.layout {
+  --panel-w: 320px;
+  display: grid;
+  grid-template-columns: auto var(--panel-w);
+  justify-content: center;
+  gap: var(--gap);
+  padding: var(--gap);
+  align-items: start;
+}
+
+/* Square board, as large as fits beside the panel and under the top bar. */
+.board-wrap {
+  position: relative;
+  width: min(
+    calc(100vw - var(--panel-w) - 3 * var(--gap) - 16px),
+    calc(100dvh - var(--topbar-h) - 2 * var(--gap))
+  );
+  aspect-ratio: 1;
+}
+
+#board {
+  width: 100%;
+  height: 100%;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  max-height: calc(100dvh - var(--topbar-h) - 2 * var(--gap));
+}
+
+/* ---- status + navigation ---- */
+
+.status {
+  margin: 0;
+  font-weight: 600;
+  min-height: 1.4em;
+}
+
+.status.over {
+  color: var(--copper);
+}
+
+.nav {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.nav button {
+  display: grid;
+  place-items: center;
+  padding: 6px;
+}
+
+.nav svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+/* ---- move list ---- */
+
+.moves {
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px;
+  position: relative;
+}
+
+.moves-empty {
+  margin: 8px;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.move-row {
+  display: grid;
+  grid-template-columns: 2.6em 1fr 1fr;
+  align-items: center;
+}
+
+.move-num {
+  color: var(--text-dim);
+  text-align: right;
+  padding-right: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.move {
+  min-height: 30px;
+  padding: 3px 8px;
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+button.move:hover {
+  background: var(--surface-2);
+  border-color: transparent;
+}
+
+.move.current {
+  background: var(--blue-soft);
+  border-color: var(--blue);
+}
+
+.move-blank {
+  color: var(--text-dim);
+}
+
+/* ---- tools + FEN ---- */
+
+.tools,
+.fen-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.fen-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fen-box label {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.fen-box input {
+  width: 100%;
+  font: 13px/1.3 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.fen-msg {
+  margin: 0;
+  min-height: 1.3em;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.fen-msg.error {
+  color: var(--error);
+}
+
+.fen-msg.ok {
+  color: var(--ok);
+}
+
+/* ---- board details ---- */
+
+/* Coordinates drawn inside the edge squares (ranks top-left of the left file,
+   files bottom-right of the bottom rank). Chessground's defaults offset them
+   outside the board, which overflows the page on phones. */
+.cg-wrap coords {
+  font-size: clamp(9px, 1.5vmin, 12px);
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.9;
+}
+
+.cg-wrap coords.ranks {
+  left: 0;
+  top: 0;
+  width: auto;
+  height: 100%;
+}
+
+.cg-wrap coords.ranks coord {
+  flex: 1 1 0;
+  padding: 3px 0 0 3px;
+  transform: none;
+}
+
+.cg-wrap coords.files {
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: auto;
+  text-transform: none;
+}
+
+.cg-wrap coords.files coord {
+  flex: 1 1 0;
+  padding: 0 3px 2px 0;
+  text-align: right;
+}
+
+/* Promotion picker overlays the board. */
+.promo {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 12, 16, 0.6);
+}
+
+.promo[hidden] {
+  display: none;
+}
+
+.promo-box {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.promo-choice {
+  width: clamp(56px, 16%, 96px);
+  aspect-ratio: 1;
+  height: auto;
+  padding: 0;
+  background: var(--surface-2);
+}
+
+.promo-choice piece {
+  position: static;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- phones and narrow windows: board on top, panel below ---- */
+
+@media (max-width: 860px) {
+  .layout {
+    grid-template-columns: 1fr;
+    padding: 8px;
+    gap: 10px;
+  }
+
+  .board-wrap {
+    width: min(calc(100vw - 16px), calc(100dvh - var(--topbar-h) - 140px));
+    margin: 0 auto;
+  }
+
+  .panel {
+    max-height: none;
+  }
+
+  .moves {
+    max-height: 32vh;
+  }
+
+  .promo-choice {
+    width: 20vw;
+  }
+}

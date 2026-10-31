@@ -1,0 +1,9 @@
+{
+  "name": "mpct-web",
+  "private": true,
+  "type": "module",
+  "description": "Frontend tests for MPCT. The app itself needs no Node build step.",
+  "scripts": {
+    "test": "node --test \"tests/js/*.test.js\""
+  }
+}
