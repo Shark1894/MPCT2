@@ -18,7 +18,9 @@ export class BoardView {
    * @param {(from: string, to: string) => void} onMove  called after the user drops a piece
    */
   constructor(el, promoEl, onMove) {
+    this.el = el;
     this.promoEl = promoEl;
+    this.shapes = [];
     this.cg = Chessground(el, {
       orientation: 'white',
       coordinates: true,
@@ -53,7 +55,15 @@ export class BoardView {
 
   /** Arrows drawn by the app (e.g. repertoire moves): [{orig, dest, brush}] */
   setShapes(shapes) {
-    this.cg.setAutoShapes(shapes);
+    this.shapes = shapes;
+    // A hidden board has no size; drawing then produces NaN coordinates. Draw when shown.
+    if (this.el.offsetParent !== null) this.cg.setAutoShapes(shapes);
+  }
+
+  /** Call after the board becomes visible again (e.g. leaving the dashboard). */
+  redraw() {
+    this.cg.redrawAll();
+    this.cg.setAutoShapes(this.shapes);
   }
 
   orientation() {

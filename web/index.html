@@ -19,7 +19,11 @@
         <img src="__ASSETS__/img/icon-32.png" alt="" width="24" height="24" />
         <span>MPCT</span>
       </a>
-      <span class="mode">Repertoire</span>
+      <nav class="views" aria-label="View">
+        <button id="view-board" type="button" class="view-tab" aria-pressed="true">Board</button>
+        <button id="view-dashboard" type="button" class="view-tab" aria-pressed="false">Dashboard</button>
+      </nav>
+      <span id="mode-badge" class="mode-badge" hidden>Training</span>
     </header>
 
     <!-- Order matters on phones (single column): board, controls, repertoire, moves, tools.
@@ -141,6 +145,44 @@
           <p id="fen-msg" class="fen-msg" aria-live="polite"></p>
         </div>
       </section>
+    </main>
+
+    <main id="dashboard" class="dashboard" hidden>
+      <div class="dash-head">
+        <div class="dash-title">
+          <label for="dash-opening" class="sr-only">Opening</label>
+          <select id="dash-opening"></select>
+          <span id="dash-color" class="meta"></span>
+        </div>
+        <div class="dash-buttons">
+          <button id="dash-train-due" type="button" class="primary">Train due</button>
+          <button id="dash-train-all" type="button">Train all</button>
+          <details id="dash-menu" class="menu">
+            <summary>More</summary>
+            <div class="menu-list">
+              <button id="dash-reset-all" type="button">Reset all lines</button>
+              <button id="dash-delete-all" type="button" class="danger-outline">Delete all lines</button>
+              <button id="dash-delete-opening" type="button" class="danger-outline">Delete opening</button>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="dash-stats">
+        <div class="stat"><span class="stat-label">Lines</span><span id="stat-lines" class="stat-value">—</span></div>
+        <div class="stat"><span class="stat-label">Due now</span><span id="stat-due" class="stat-value">—</span></div>
+        <div class="stat"><span class="stat-label">Next review</span><span id="stat-next" class="stat-value">—</span></div>
+        <div class="stat"><span class="stat-label">Reviews</span><span id="stat-reviews" class="stat-value">—</span></div>
+        <div class="stat"><span class="stat-label">Accuracy</span><span id="stat-accuracy" class="stat-value">—</span></div>
+      </div>
+
+      <div class="dash-table">
+        <div class="dash-line dash-header" aria-hidden="true">
+          <div>Line</div><div>Next review</div><div>Streak</div><div>Last 5</div><div></div>
+        </div>
+        <div id="dash-lines"></div>
+        <p id="dash-empty" class="dash-empty" hidden></p>
+      </div>
     </main>
   </body>
 </html>

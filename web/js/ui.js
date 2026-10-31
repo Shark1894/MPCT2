@@ -94,6 +94,31 @@ export function isModalOpen() {
   return Boolean(dialogEl?.open);
 }
 
+// ---- dates ----------------------------------------------------------------
+
+function localIsoToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Whole days from today (local) to an ISO date (YYYY-MM-DD); negative = in the past. */
+export function daysFromToday(isoDate) {
+  return Math.round((Date.parse(isoDate) - Date.parse(localIsoToday())) / 864e5);
+}
+
+/** 'Today', 'Tomorrow', 'In 5 days', 'Overdue 2 days' for a review date. */
+export function describeDue(isoDate) {
+  const days = daysFromToday(isoDate);
+  if (days < 0) return `Overdue ${-days} day${days === -1 ? '' : 's'}`;
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  return `In ${days} days`;
+}
+
+export function plural(n, word) {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
 // ---- toast ----------------------------------------------------------------
 
 let toastTimer;

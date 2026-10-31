@@ -22,8 +22,9 @@ The full plan, decisions and data model are in the project's
 | 2 | Postgres + repertoire API | Done |
 | 3 | Repertoire UI: pickers, explorer, add/delete line, comments | Done |
 | 4 | Opening trainer: spaced repetition, hints, practice retries | Done |
-| 5 | Review dashboard | Next |
-| 6–8 | Legacy data import, engine, games | Planned |
+| 5 | Review dashboard | Done |
+| 6 | Legacy data import | Next |
+| 7–8 | Engine, games | Planned |
 
 ## Using the board
 
@@ -82,7 +83,17 @@ since it now has moves you haven't trained.
 - **Retry** after a line is practice: recorded, but doesn't change the schedule. Stopping half-way records nothing.
 - Every move tried is stored (`move_attempts`), including the wrong move actually played.
 
-API: `GET /api/openings/{id}/training?mode=due|all` (or `line_id=`) returns the lines to train;
+## Dashboard
+
+The **Dashboard** tab (top bar) shows the selected opening: lines, due now, next review, total reviews and accuracy
+(share of reviews without mistakes; practice retries excluded). Each line shows its next review, streak and last 5
+results, with **Train** (just that line), **Show** (plays it on the board), **Reset** (clears its history, due
+today) and **Delete**. **More** has Reset all lines, Delete all lines and Delete opening. On phones lines are cards.
+
+API: `GET /api/openings/{id}/dashboard`, `POST /api/lines/{id}/reset`, `POST /api/openings/{id}/reset`,
+`DELETE /api/openings/{id}/lines`.
+
+Training API: `GET /api/openings/{id}/training?mode=due|all` (or `line_id=`) returns the lines to train;
 `POST /api/lines/{id}/reviews` with `{"practice": false, "attempts": [{"ply": 2, "uci": "c7c6"}, ...]}` records a
 finished line (the server checks each move against the line and updates the schedule).
 
@@ -127,6 +138,7 @@ npm i --no-save playwright && npx playwright install chromium
 MPCT_URL=http://localhost:8010/ node tests/e2e/board.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/repertoire.e2e.cjs   # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/training.e2e.cjs     # empty database
+MPCT_URL=http://localhost:8010/ node tests/e2e/dashboard.e2e.cjs    # empty database
 ```
 
 ## Deploy on the home server
@@ -205,6 +217,7 @@ web/              frontend served as-is
   js/repertoire.js repertoire panel: pickers, explorer, lines, comments
   js/trainer.js   training session rules (pure logic, unit tested)
   js/training.js  training mode: board, auto replies, hints, results
+  js/dashboard.js dashboard view: stats, lines with history, resets
   js/api.js       JSON API client
   js/ui.js        dialogs, toast, local storage
   js/main.js      page wiring, keyboard, FEN tools

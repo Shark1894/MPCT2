@@ -157,8 +157,41 @@ textarea[readonly] {
   letter-spacing: 0.08em;
 }
 
-.mode {
+.views {
+  display: flex;
+  gap: 4px;
+}
+
+.view-tab {
+  min-height: 32px;
+  padding: 4px 12px;
+  background: none;
+  border-color: transparent;
   color: var(--text-dim);
+}
+
+.view-tab[aria-pressed='true'] {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.mode-badge {
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  border: 1px solid var(--blue);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 
 /* ---- layout ----
@@ -694,6 +727,273 @@ button.move:hover {
 
 .toast.error {
   border-left-color: var(--error);
+}
+
+/* ---- dashboard ---- */
+
+.dashboard {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.dash-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.dash-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.dash-title select {
+  width: auto;
+  max-width: 100%;
+  font-size: 20px;
+  font-weight: 700;
+  background: var(--surface);
+}
+
+.dash-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.menu {
+  position: relative;
+}
+
+.menu summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 8px 14px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.menu-list button {
+  text-align: left;
+}
+
+.dash-stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom: 3px solid var(--blue);
+  border-radius: 10px;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.dash-table {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.dash-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 90px 150px 290px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.dash-header {
+  border-top: none;
+  font-size: 13px;
+  color: var(--text-dim);
+  background: var(--surface-2);
+}
+
+.dash-moves {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.dash-due.is-due {
+  color: var(--copper);
+  font-weight: 600;
+}
+
+.dash-streak {
+  color: var(--text-dim);
+}
+
+.dash-recent {
+  display: flex;
+  gap: 4px;
+}
+
+.dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.dot.good {
+  background: rgba(124, 196, 127, 0.18);
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.dot.bad {
+  background: rgba(224, 108, 108, 0.18);
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.dash-actions-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.dash-empty {
+  margin: 0;
+  padding: 20px 16px;
+  color: var(--text-dim);
+}
+
+.modal-message {
+  white-space: pre-line;
+}
+
+@media (max-width: 1000px) {
+  .dash-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Lines become cards: moves on top, details and buttons below. */
+  .dash-header {
+    display: none;
+  }
+
+  .dash-line {
+    grid-template-columns: auto auto 1fr;
+    grid-template-areas:
+      'moves moves moves'
+      'due streak recent'
+      'actions actions actions';
+    row-gap: 8px;
+  }
+
+  .dash-moves {
+    grid-area: moves;
+  }
+
+  .dash-due {
+    grid-area: due;
+  }
+
+  .dash-streak {
+    grid-area: streak;
+  }
+
+  .dash-recent {
+    grid-area: recent;
+    justify-content: flex-end;
+  }
+
+  .dash-actions-row {
+    grid-area: actions;
+  }
+}
+
+@media (max-width: 520px) {
+  .dashboard {
+    padding: 8px;
+    gap: 10px;
+  }
+
+  .dash-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .dash-stats .stat:last-child {
+    grid-column: span 2;
+  }
+
+  .dash-buttons {
+    width: 100%;
+  }
+
+  .dash-buttons > button {
+    flex: 1;
+  }
+
+  .dash-title select {
+    font-size: 17px;
+  }
+
+  .topbar {
+    gap: 10px;
+    padding: 0 10px;
+  }
+
+  .brand span {
+    display: none;
+  }
 }
 
 /* ---- tablet / small laptop: board left, everything else in one column ---- */

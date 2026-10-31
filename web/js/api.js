@@ -55,6 +55,12 @@ export const api = {
   recordReview: (lineId, practice, attempts) =>
     request('POST', `/lines/${lineId}/reviews`, { body: { practice, attempts } }),
 
+  dashboard: (openingId) => request('GET', `/openings/${openingId}/dashboard`),
+  resetLine: (lineId) => request('POST', `/lines/${lineId}/reset`),
+  resetOpening: (openingId) => request('POST', `/openings/${openingId}/reset`),
+  deleteAllLines: (openingId) => request('DELETE', `/openings/${openingId}/lines`),
+  deleteLine: (lineId) => request('DELETE', `/lines/${lineId}`),
+
   comment: (repId, fen) => request('GET', `/repertoires/${repId}/comment`, { params: { fen } }),
   saveComment: (repId, fen, comment) => request('PUT', `/repertoires/${repId}/comment`, { body: { fen, comment } }),
 };

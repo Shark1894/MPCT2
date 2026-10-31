@@ -57,7 +57,7 @@ const text = (page, sel) => page.textContent(sel);
   check(await page.isVisible('#training'), 'training panel shown');
   check(await page.isHidden('#rep-build'), 'explorer and editing tools hidden during training');
   check(await page.isHidden('.tools'), 'board tools hidden during training');
-  check((await text(page, '.mode')) === 'Training', 'header shows Training');
+  check(await page.isVisible('#mode-badge'), 'header shows Training badge');
   check((await page.evaluate(() => mpct.board.orientation())) === 'black', 'board oriented to Black');
   check((await sans(page)) === 'e4', 'opponent move 1.e4 auto-played');
   check((await text(page, '#train-progress')) === 'Line 1 of 2', 'progress shown');
@@ -160,6 +160,7 @@ const text = (page, sel) => page.textContent(sel);
   await mp.touchscreen.tap(a.x, a.y);
   await mp.waitForTimeout(150);
   await mp.touchscreen.tap(b.x, b.y);
+  await mp.waitForTimeout(200); // let the tap register before waiting for the reply
   await waitUserTurn(mp);
   const phoneSans = await sans(mp);
   check(phoneSans === 'e4 c6 d4', 'phone: tap move accepted in training: ' + phoneSans + ' | ' + (await text(mp, '#train-message')));

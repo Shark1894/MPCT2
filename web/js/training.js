@@ -4,19 +4,13 @@
 import { api } from './api.js';
 import { START_FEN } from './game.js';
 import { TrainingSession } from './trainer.js';
-import { toast } from './ui.js';
+import { daysFromToday, plural, toast } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const OPPONENT_DELAY_MS = 450;
 
-function plural(n, word) {
-  return `${n} ${word}${n === 1 ? '' : 's'}`;
-}
-
 function describeReviewDate(isoDate) {
-  const today = new Date();
-  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  const days = Math.round((Date.parse(isoDate) - Date.parse(todayIso)) / 864e5);
+  const days = daysFromToday(isoDate);
   if (days <= 0) return 'due again today';
   if (days === 1) return 'next review tomorrow';
   return `next review in ${days} days (${isoDate})`;

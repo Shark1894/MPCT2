@@ -6,6 +6,7 @@ import { BoardView } from './board.js';
 import { renderMoveList } from './movelist.js';
 import { RepertoirePanel } from './repertoire.js';
 import { TrainingController } from './training.js';
+import { DashboardView } from './dashboard.js';
 import { isModalOpen, store } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -24,6 +25,20 @@ const repertoire = new RepertoirePanel({
   onTrain: (opening, mode) => trainer.start(opening, mode),
 });
 
+const dashboard = new DashboardView({
+  repertoire,
+  onTrain: (opening, mode, lineId) => {
+    setView('board');
+    trainer.start(opening, mode, lineId);
+  },
+  onShowLine: (sans) => {
+    game.load(START_FEN);
+    for (const san of sans) if (!game.playSan(san)) break;
+    setView('board');
+    render();
+  },
+});
+
 const trainer = new TrainingController({
   game,
   board,
@@ -31,10 +46,31 @@ const trainer = new TrainingController({
   render: () => render(),
   onModeChange: (active) => {
     document.body.classList.toggle('training', active);
-    document.querySelector('.mode').textContent = active ? 'Training' : 'Repertoire';
+    $('mode-badge').hidden = !active;
+    $('view-dashboard').disabled = active;
     repertoire.setTraining(active);
   },
 });
+
+// ---- views: Board | Dashboard ---------------------------------------------
+
+let view = 'board';
+
+function setView(next) {
+  if (next === 'dashboard' && trainer.active) return;
+  view = next;
+  document.querySelector('main.layout').hidden = view !== 'board';
+  $('dashboard').hidden = view !== 'dashboard';
+  $('view-board').setAttribute('aria-pressed', String(view === 'board'));
+  $('view-dashboard').setAttribute('aria-pressed', String(view === 'dashboard'));
+  store.set('view', view);
+  if (view === 'dashboard') dashboard.refresh();
+  else board.redraw();
+  window.scrollTo(0, 0);
+}
+
+$('view-board').addEventListener('click', () => setView('board'));
+$('view-dashboard').addEventListener('click', () => setView('dashboard'));
 
 const ui = {
   status: $('status'),
@@ -126,7 +162,7 @@ ui.nav.end.addEventListener('click', () => step(() => game.toEnd()));
 // Same keys as the desktop app: Left/Right step, Up = end, Down = start.
 document.addEventListener('keydown', (e) => {
   const tag = document.activeElement?.tagName;
-  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || !$('promo').hidden || isModalOpen()) return;
+  if (view !== 'board' || ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || !$('promo').hidden || isModalOpen()) return;
   const actions = {
     ArrowLeft: () => game.back(),
     ArrowRight: () => game.forward(),
@@ -206,7 +242,9 @@ $('btn-fen-copy').addEventListener('click', async () => {
 });
 
 render();
-repertoire.init();
+repertoire.init().then(() => {
+  if (store.get('view') === 'dashboard') setView('dashboard');
+});
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, repertoire, trainer };
+window.mpct = { game, board, repertoire, trainer, dashboard, setView };
