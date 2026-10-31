@@ -17,7 +17,12 @@ const check = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); if
   page.on('console', m => m.type() === 'error' && errors.push(m.text()));
   page.on('pageerror', e => errors.push(String(e)));
   await page.goto(URL);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
   await page.waitForSelector('cg-board piece');
+  // The repertoire panel may orient the board to the selected opening; these checks assume White.
+  await page.waitForTimeout(600);
+  await page.evaluate(() => { mpct.board.setOrientation('white'); document.getElementById('btn-new').click(); });
   check(await page.evaluate(() => crossOriginIsolated), 'page is cross-origin isolated (needed for threaded Stockfish later)');
   await page.screenshot({ path: SHOTS ? `${SHOTS}/desktop-start.png` : undefined });
   check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'desktop: no horizontal overflow');
@@ -87,6 +92,8 @@ const check = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); if
   mp.on('pageerror', e => errors.push('mobile: ' + e));
   await mp.goto(URL);
   await mp.waitForSelector('cg-board piece');
+  await mp.waitForTimeout(600);
+  await mp.evaluate(() => { mpct.board.setOrientation('white'); document.getElementById('btn-new').click(); });
   const mb = await mp.locator('cg-board').boundingBox();
   check(mb.width > 350, 'phone: board fills width (' + Math.round(mb.width) + 'px)');
   const tap = async (s) => { const pt = sq(mb, s); await mp.touchscreen.tap(pt.x, pt.y); await mp.waitForTimeout(150); };

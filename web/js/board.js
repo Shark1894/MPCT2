@@ -50,8 +50,17 @@ export class BoardView {
     });
   }
 
+  /** Arrows drawn by the app (e.g. repertoire moves): [{orig, dest, brush}] */
+  setShapes(shapes) {
+    this.cg.setAutoShapes(shapes);
+  }
+
   orientation() {
     return this.cg.state.orientation;
+  }
+
+  setOrientation(color) {
+    if (this.orientation() !== color) this.cg.toggleOrientation();
   }
 
   flip() {

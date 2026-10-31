@@ -1,14 +1,26 @@
-// Page wiring for the analysis board: connects Game (rules/state), BoardView
-// (chessground) and the side panel controls.
+// Page wiring: connects Game (rules/state), BoardView (chessground), the side
+// panels and the repertoire panel.
 
 import { Game, START_FEN } from './game.js';
 import { BoardView } from './board.js';
 import { renderMoveList } from './movelist.js';
+import { RepertoirePanel } from './repertoire.js';
+import { isModalOpen, store } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 
 const game = new Game();
+restoreGame();
 const board = new BoardView($('board'), $('promo'), onBoardMove);
+
+const repertoire = new RepertoirePanel({
+  game,
+  onPlaySan: (san) => {
+    if (game.playSan(san)) render();
+  },
+  onShapes: (shapes) => board.setShapes(shapes),
+  onOrientation: (color) => board.setOrientation(color),
+});
 
 const ui = {
   status: $('status'),
@@ -22,6 +34,8 @@ const ui = {
     end: $('nav-end'),
   },
 };
+
+let shownFen = null;
 
 function render() {
   board.show(game);
@@ -39,6 +53,32 @@ function render() {
   ui.nav.back.disabled = atStart;
   ui.nav.forward.disabled = atEnd;
   ui.nav.end.disabled = atEnd;
+
+  saveGame();
+  if (game.fen() !== shownFen) {
+    shownFen = game.fen();
+    repertoire.positionChanged();
+  }
+}
+
+// ---- keep the current game across reloads (phones drop background tabs) ----
+
+function saveGame() {
+  store.set('game', { startFen: game.startFen, moves: game.moves.map((m) => m.uci), ply: game.ply });
+}
+
+function restoreGame() {
+  const saved = store.get('game');
+  if (!saved) return;
+  try {
+    game.load(saved.startFen);
+    for (const uci of saved.moves) {
+      if (!game.play(uci.slice(0, 2), uci.slice(2, 4), uci[4])) break;
+    }
+    game.goTo(saved.ply);
+  } catch {
+    game.load(START_FEN);
+  }
 }
 
 async function onBoardMove(from, to) {
@@ -66,7 +106,7 @@ ui.nav.end.addEventListener('click', () => step(() => game.toEnd()));
 // Same keys as the desktop app: Left/Right step, Up = end, Down = start.
 document.addEventListener('keydown', (e) => {
   const tag = document.activeElement?.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || !$('promo').hidden) return;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || !$('promo').hidden || isModalOpen()) return;
   const actions = {
     ArrowLeft: () => game.back(),
     ArrowRight: () => game.forward(),
@@ -139,12 +179,13 @@ $('btn-fen-copy').addEventListener('click', async () => {
     await navigator.clipboard.writeText(game.fen());
     setFenMessage('FEN copied.', 'ok');
   } catch {
-    ui.fen.select(); // clipboard API blocked (e.g. plain http): leave it selected to copy by hand
+    ui.fen.select(); // clipboard API blocked: leave it selected to copy by hand
     setFenMessage('Copy blocked by the browser; the FEN is selected.', 'error');
   }
 });
 
 render();
+repertoire.init();
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board };
+window.mpct = { game, board, repertoire };

@@ -19,9 +19,11 @@
         <img src="img/icon-32.png" alt="" width="24" height="24" />
         <span>MPCT</span>
       </a>
-      <span class="mode">Analysis board</span>
+      <span class="mode">Repertoire</span>
     </header>
 
+    <!-- Order matters on phones (single column): board, controls, repertoire, moves, tools.
+         Wider screens place the same sections with CSS grid areas. -->
     <main class="layout">
       <section class="board-area" aria-label="Chess board">
         <div class="board-wrap">
@@ -30,9 +32,8 @@
         </div>
       </section>
 
-      <aside class="panel">
+      <section class="panel controls" aria-label="Position and navigation">
         <p id="status" class="status" role="status" aria-live="polite"></p>
-
         <div class="nav" role="group" aria-label="Move navigation">
           <button id="nav-start" type="button" title="Start (Down / Home)" aria-label="Go to start">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
@@ -47,14 +48,63 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
           </button>
         </div>
+      </section>
 
-        <div id="moves" class="moves" aria-label="Moves"></div>
+      <section class="panel repertoire" aria-label="Repertoire">
+        <div class="picker">
+          <label for="rep-select">Repertoire</label>
+          <div class="select-row">
+            <select id="rep-select"></select>
+            <button id="rep-new" type="button" class="icon-btn" title="New repertoire" aria-label="New repertoire">+</button>
+          </div>
+        </div>
+        <div class="picker">
+          <label for="opening-select">Opening</label>
+          <div class="select-row">
+            <select id="opening-select"></select>
+            <button id="opening-new" type="button" class="icon-btn" title="New opening" aria-label="New opening">+</button>
+          </div>
+          <p id="opening-info" class="meta"></p>
+        </div>
+        <details class="manage">
+          <summary>Manage repertoire and opening</summary>
+          <div class="manage-grid">
+            <button id="rep-rename" type="button">Rename repertoire</button>
+            <button id="rep-delete" type="button" class="danger-outline">Delete repertoire</button>
+            <button id="opening-edit" type="button">Edit opening</button>
+            <button id="opening-delete" type="button" class="danger-outline">Delete opening</button>
+          </div>
+        </details>
 
-        <div class="tools">
+        <div class="explorer-box">
+          <h2>Repertoire moves</h2>
+          <div id="explorer" class="explorer"></div>
+          <div class="line-actions">
+            <button id="line-add" type="button" class="primary" title="Save the moves up to this position as a line">Add line</button>
+            <button id="line-delete" type="button" title="Delete every line through this position">Delete line</button>
+          </div>
+        </div>
+
+        <div class="comments">
+          <label for="comment-current">Comment <span id="comment-status" class="comment-status"></span></label>
+          <textarea id="comment-current" rows="3" placeholder="Notes on this position"></textarea>
+          <div id="comment-previous-box" hidden>
+            <label for="comment-previous">Previous position</label>
+            <textarea id="comment-previous" rows="2" readonly placeholder="No comment"></textarea>
+          </div>
+        </div>
+        <p id="rep-error" class="panel-error" hidden></p>
+      </section>
+
+      <section class="panel history" aria-label="Moves">
+        <div id="moves" class="moves"></div>
+      </section>
+
+      <section class="panel tools" aria-label="Board tools">
+        <div class="tool-buttons">
           <button id="btn-new" type="button">New board</button>
           <button id="btn-flip" type="button" title="Flip board (F)">Flip board</button>
         </div>
-
         <div class="fen-box">
           <label for="fen">FEN</label>
           <input id="fen" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" />
@@ -64,7 +114,7 @@
           </div>
           <p id="fen-msg" class="fen-msg" aria-live="polite"></p>
         </div>
-      </aside>
+      </section>
     </main>
   </body>
 </html>

@@ -20,7 +20,8 @@ The full plan, decisions and data model are in the project's
 | 0 | FastAPI skeleton, Docker, health check | Done |
 | 1 | Board: legal moves, move list, navigation, promotion, flip, FEN | Done |
 | 2 | Postgres + repertoire API | Done |
-| 3 | Repertoire UI | Next |
+| 3 | Repertoire UI: pickers, explorer, add/delete line, comments | Done |
+| 4 | Opening trainer | Next |
 | 4–8 | Repertoire UI, trainer, dashboard, data import, engine, games | Planned |
 
 ## Using the board
@@ -32,6 +33,20 @@ The full plan, decisions and data model are in the project's
 - Stepping back and playing a different move replaces the moves after it; replaying the same move keeps them.
 - Paste a FEN and press **Load FEN** (or Enter) to set up a position; **Copy FEN** copies the current one.
 - Right-click drag draws arrows; right-click a square draws a circle.
+- The current game is kept in the browser, so reloading the page (or a phone dropping the tab) doesn't lose it.
+
+## Building a repertoire
+
+- Pick a repertoire and opening at the top of the repertoire panel (**+** creates one; **Manage** renames or
+  deletes). Choosing an opening turns the board to your side.
+- **Repertoire moves** lists the opening's moves from the current position with how many lines use each, and
+  draws them as green arrows. Tap one to play it.
+- **Add line** saves the moves up to the current position. It reports whether that created a new line, extended
+  an existing one, or was already covered.
+- **Delete line** deletes every line in the opening that passes through the current position, after confirming
+  how many.
+- **Comment** notes are saved automatically as you type, per repertoire. The previous position's comment is
+  shown underneath.
 
 ## API
 
@@ -88,11 +103,12 @@ npm test         # frontend game-state logic (Node 20+, no npm install needed)
 The database tests drop and rebuild the schema of `TEST_DATABASE_URL`, so they refuse to run unless its
 database name contains `test`. Without it set, they're skipped.
 
-Browser checks (drag/tap moves, promotion, navigation, phone layout) against a running copy:
+Browser checks against a running copy (the repertoire suite needs an empty database):
 
 ```bash
 npm i --no-save playwright && npx playwright install chromium
 MPCT_URL=http://localhost:8010/ node tests/e2e/board.e2e.cjs
+MPCT_URL=http://localhost:8010/ node tests/e2e/repertoire.e2e.cjs
 ```
 
 ## Deploy on the home server
@@ -167,6 +183,9 @@ web/              frontend served as-is
   js/game.js      game state + rules wrapper (pure logic, unit tested)
   js/board.js     chessground wrapper + promotion picker
   js/movelist.js  move list rendering
+  js/repertoire.js repertoire panel: pickers, explorer, lines, comments
+  js/api.js       JSON API client
+  js/ui.js        dialogs, toast, local storage
   js/main.js      page wiring, keyboard, FEN tools
   vendor/         pinned third-party libraries (see below)
 scripts/          one-off server scripts (database setup)
