@@ -36,10 +36,16 @@ def current_streaks(s: Session, line_ids: list[int]) -> dict[int, int]:
 
 
 def training_lines(
-    s: Session, opening_id: int, mode: str = "due", line_id: int | None = None, tag_id: int | None = None
+    s: Session,
+    opening_id: int,
+    mode: str = "due",
+    line_id: int | None = None,
+    tag_id: int | None = None,
+    line_ids: list[int] | None = None,
 ) -> dict:
     """Lines to train, most overdue first. mode: 'due' (next review today or earlier) or 'all'.
-    tag_id restricts to the lines in that branch."""
+    tag_id restricts to the lines in that branch. line_ids picks exact lines (e.g. the
+    weakest, or those through a problem position), trained in the order given."""
     from app.repositories.tags import lines_with_tag
 
     opening = get_opening(s, opening_id)
@@ -48,9 +54,14 @@ def training_lines(
         q = q.where(Line.id.in_(lines_with_tag(s, opening_id, tag_id) or {-1}))
     if line_id is not None:
         q = q.where(Line.id == line_id)
+    elif line_ids is not None:
+        q = q.where(Line.id.in_(line_ids or [-1]))
     elif mode == "due":
         q = q.where(Line.next_review_on <= date.today())
     lines = s.scalars(q.order_by(Line.next_review_on, Line.id)).all()
+    if line_ids:
+        order = {line_id: i for i, line_id in enumerate(line_ids)}
+        lines = sorted(lines, key=lambda line: order[line.id])
     if line_id is not None and not lines:
         raise NotFound(f"Line {line_id} not found in this opening")
 

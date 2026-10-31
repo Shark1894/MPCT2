@@ -52,13 +52,20 @@ export const api = {
 
   training: (openingId, mode = 'due', lineId = null, tagId = null) =>
     request('GET', `/openings/${openingId}/training`, {
-      params: lineId ? { line_id: lineId } : { mode, ...(tagId ? { tag_id: tagId } : {}) },
+      params: Array.isArray(lineId)
+        ? { line_ids: lineId.join(',') }
+        : lineId
+          ? { line_id: lineId }
+          : { mode, ...(tagId ? { tag_id: tagId } : {}) },
     }),
   recordReview: (lineId, practice, attempts) =>
     request('POST', `/lines/${lineId}/reviews`, { body: { practice, attempts } }),
 
   dashboard: (openingId, tagId = null) =>
     request('GET', `/openings/${openingId}/dashboard`, { params: tagId ? { tag_id: tagId } : {} }),
+
+  overview: (repertoireId) => request('GET', `/repertoires/${repertoireId}/overview`),
+  activity: (tz, days = 182) => request('GET', '/activity', { params: { tz, days } }),
 
   tags: (openingId) => request('GET', `/openings/${openingId}/tags`),
   createTag: (openingId, name, fen) => request('POST', `/openings/${openingId}/tags`, { body: { name, fen } }),

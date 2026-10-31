@@ -34,7 +34,8 @@ def test_dashboard_empty_history(client, setup):
     o, a, b = setup
     d = client.get(f"/api/openings/{o['id']}/dashboard").json()
     assert d["opening"]["name"] == "Caro"
-    assert d["stats"] == {"lines": 2, "due": 2, "next_review_on": TODAY.isoformat(), "reviews": 0, "accuracy": None}
+    assert d["stats"] == {"lines": 2, "due": 2, "next_review_on": TODAY.isoformat(), "reviews": 0, "accuracy": None,
+                          "mastery": {"new": 2, "learning": 0, "known": 0, "mastered": 0}}
     line = d["lines"][0]
     assert line["moves"] == ["e4", "c6", "d4", "d5", "e5", "Bf5"]
     assert (line["streak"], line["recent"], line["reviews"], line["last_reviewed_at"]) == (0, [], 0, None)

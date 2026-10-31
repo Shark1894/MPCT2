@@ -45,7 +45,10 @@ def dashboard(s: Session, opening_id: int, tag_id: int | None = None) -> dict:
         for line_id, correct, reviewed_at in rows:
             history[line_id].append((correct, reviewed_at))
 
+    from app.repositories.insights import forecast, mastery, problem_positions, reviewed_line_ids
+
     today = date.today()
+    reviewed = reviewed_line_ids(s, ids)
     total_reviews = sum(len(h) for h in history.values())
     total_correct = sum(1 for h in history.values() for correct, _ in h if correct)
     return {
@@ -57,7 +60,10 @@ def dashboard(s: Session, opening_id: int, tag_id: int | None = None) -> dict:
             "next_review_on": min((line.next_review_on for line in lines), default=None),
             "reviews": total_reviews,
             "accuracy": round(total_correct / total_reviews, 3) if total_reviews else None,
+            "mastery": mastery(ids, streaks, reviewed),
         },
+        "forecast": forecast([line.next_review_on for line in lines], today),
+        "problems": problem_positions(s, ids, moves),
         "lines": [
             {
                 "id": line.id,

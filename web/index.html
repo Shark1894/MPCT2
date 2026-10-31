@@ -228,6 +228,27 @@
     </main>
 
     <main id="dashboard" class="dashboard" hidden>
+      <div class="dash-band">
+        <section class="dash-card" aria-labelledby="ov-title">
+          <h2 id="ov-title" class="dash-h">Openings <span id="ov-rep" class="meta"></span></h2>
+          <div id="ov-list" class="ov-list"></div>
+          <div class="mastery-legend" aria-hidden="true">
+            <span><i class="sw m-mastered"></i>Mastered (streak 5+)</span>
+            <span><i class="sw m-known"></i>Known (2–4)</span>
+            <span><i class="sw m-learning"></i>Learning (0–1)</span>
+            <span><i class="sw m-new"></i>New</span>
+          </div>
+        </section>
+        <section class="dash-card" aria-labelledby="act-title">
+          <h2 id="act-title" class="dash-h">Training activity <span class="meta">last 26 weeks</span></h2>
+          <div class="act-scroll"><div id="act-grid" class="act-grid" role="img"></div></div>
+          <div class="act-foot">
+            <p id="act-summary" class="act-summary"></p>
+            <span class="act-legend" aria-hidden="true">Less <i class="cell l0"></i><i class="cell l1"></i><i class="cell l2"></i><i class="cell l3"></i><i class="cell l4"></i> More</span>
+          </div>
+        </section>
+      </div>
+
       <div class="dash-head">
         <div class="dash-title">
           <label for="dash-opening" class="sr-only">Opening</label>
@@ -238,6 +259,7 @@
         </div>
         <div class="dash-buttons">
           <button id="dash-train-due" type="button" class="primary">Train due</button>
+          <button id="dash-train-weak" type="button" title="Lines with mistakes in their last 5 reviews, weakest first (up to 15)">Train weakest</button>
           <button id="dash-train-all" type="button">Train all</button>
           <details id="dash-menu" class="menu">
             <summary>More</summary>
@@ -256,6 +278,46 @@
         <div class="stat"><span class="stat-label">Next review</span><span id="stat-next" class="stat-value">—</span></div>
         <div class="stat"><span class="stat-label">Reviews</span><span id="stat-reviews" class="stat-value">—</span></div>
         <div class="stat"><span class="stat-label">Accuracy</span><span id="stat-accuracy" class="stat-value">—</span></div>
+      </div>
+
+      <section class="dash-card" aria-label="Learning progress">
+        <div id="dash-mastery" class="dash-mastery"></div>
+      </section>
+
+      <div class="dash-two">
+        <section class="dash-card" aria-labelledby="fc-title">
+          <h2 id="fc-title" class="dash-h">Due over the next 2 weeks</h2>
+          <div id="fc-chart" class="fc-chart"></div>
+          <p id="fc-note" class="meta fc-note"></p>
+        </section>
+        <section class="dash-card" aria-labelledby="pp-title">
+          <h2 id="pp-title" class="dash-h">Problem positions <span class="meta">last 90 days</span></h2>
+          <ol id="pp-list" class="pp-list"></ol>
+          <p id="pp-empty" class="meta" hidden></p>
+        </section>
+      </div>
+
+      <div class="dash-toolbar">
+        <label>Sort
+          <select id="dash-sort">
+            <option value="due">Next review</option>
+            <option value="weak">Weakest first</option>
+            <option value="streak">Lowest streak</option>
+            <option value="moves">Move order</option>
+          </select>
+        </label>
+        <label>Show
+          <select id="dash-filter">
+            <option value="all">All lines</option>
+            <option value="due">Due now</option>
+            <option value="new">Not reviewed yet</option>
+            <option value="mistakes">Recent mistakes</option>
+          </select>
+        </label>
+        <label class="dash-search">Move
+          <input id="dash-search" type="search" placeholder="e.g. Bf5 or 3.e5" autocomplete="off" spellcheck="false" />
+        </label>
+        <span id="dash-showing" class="meta"></span>
       </div>
 
       <div class="dash-table">

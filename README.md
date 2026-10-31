@@ -139,15 +139,34 @@ API: `GET/POST /api/openings/{id}/tags` (`{"name", "fen"}`), `PATCH/DELETE /api/
 
 ## Dashboard
 
-The **Dashboard** tab (top bar) shows the selected opening: lines, due now, next review, total reviews and accuracy
-(share of reviews without mistakes; practice retries excluded). Each line shows its next review, streak and last 5
-results, with **Train** (just that line), **Show** (plays it on the board), **Reset** (clears its history, due
-today) and **Delete**. **More** has Reset all lines, Delete all lines and Delete opening. On phones lines are cards.
+The **Dashboard** tab (top bar), from top to bottom:
 
-API: `GET /api/openings/{id}/dashboard`, `POST /api/lines/{id}/reset`, `POST /api/openings/{id}/reset`,
+- **Openings**: every opening in the repertoire (White first) with lines, due, accuracy and a learning-progress bar.
+  Click one to select it. **Training activity**: a grid of the last 26 weeks (shade = reviews that day), your
+  current and longest run of consecutive training days, and how many days you trained.
+- The selected opening (or one branch of it): **Train due**, **Train weakest** (lines with a mistake in their last
+  5 reviews, weakest first, up to 15), **Train all**, and **More** (Reset all lines, Delete all lines, Delete opening).
+  Stats: lines, due now, next review, total reviews and accuracy (share of reviews without mistakes).
+- **Learning progress**: lines by stage. New (never reviewed), learning (streak 0–1), known (2–4, comments hidden in
+  training), mastered (5+, next review a month or more away).
+- **Due over the next 2 weeks**: lines due each day (overdue lines count as today), plus how many are due later.
+- **Problem positions**: your moves you get wrong most often in the last 90 days, grouped by position so a move
+  shared by several lines counts once. Each shows the moves leading there, what you played instead, how often, and
+  **Show** (puts the position on the board) / **Train** (the lines through that move). A position drops off once
+  you get it right 3 reviews in a row.
+- **Lines**: sort (next review, weakest, lowest streak, move order), show (all, due, not reviewed yet, recent
+  mistakes) and search by move (`Bf5`, `3.e5`). Choices are remembered. Each line shows its next review, streak and
+  last 5 results, with **Train**, **Show**, **Reset** (clears its history, due today) and **Delete**. On phones lines
+  are cards.
+
+Practice retries (of a line already played correctly) are left out of everything here. Hover or tap a bar, segment
+or day for its numbers.
+
+API: `GET /api/openings/{id}/dashboard` (stats, stages, forecast, problem positions, lines),
+`GET /api/repertoires/{id}/overview`, `GET /api/activity?tz=Europe/London&days=182`, `POST /api/lines/{id}/reset`, `POST /api/openings/{id}/reset`,
 `DELETE /api/openings/{id}/lines`.
 
-Training API: `GET /api/openings/{id}/training?mode=due|all` (or `line_id=`) returns the lines to train;
+Training API: `GET /api/openings/{id}/training?mode=due|all` (or `line_id=`, or `line_ids=3,1,7` in that order) returns the lines to train;
 `POST /api/lines/{id}/reviews` with `{"practice": false, "attempts": [{"ply": 2, "uci": "c7c6"}, ...]}` records a
 finished line (the server checks each move against the line and updates the schedule).
 
@@ -243,6 +262,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/tags.e2e.cjs         # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/engine.e2e.cjs       # runs the real engine
 MPCT_URL=http://localhost:8010/ node tests/e2e/games.e2e.cjs        # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/play.e2e.cjs         # empty database, real engine
+MPCT_URL=http://localhost:8010/ node tests/e2e/insights.e2e.cjs     # empty database
 ```
 
 ## Deploy on the home server
@@ -323,6 +343,7 @@ web/              frontend served as-is
   js/trainer.js   training session rules (pure logic, unit tested)
   js/training.js  training mode: board, auto replies, hints, results
   js/dashboard.js dashboard view: stats, lines with history, resets
+  js/insights.js  dashboard insights: progress bars, forecast, activity, problems, line sort/filter
   js/engine.js    Stockfish worker client + UCI parsing (helpers unit tested)
   js/analysis.js  engine panel, evaluation bar, engine arrows
   js/games.js     games list view + open-game panel (save, compare, PGN)

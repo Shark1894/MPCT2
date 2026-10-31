@@ -68,7 +68,7 @@ export class TrainingController {
 
   // ---- session lifecycle ------------------------------------------------
 
-  async start(opening, mode, lineId = null, tag = null) {
+  async start(opening, mode, lineId = null, tag = null, label = null) {
     let data;
     try {
       data = await api.training(opening.id, mode, lineId, tag?.id ?? null);
@@ -83,7 +83,7 @@ export class TrainingController {
     }
     this.session = new TrainingSession(data);
     this.board.setOrientation(data.opening.color);
-    this.el.title.textContent = `Training: ${data.opening.name}${tag && !lineId ? ` › ${tag.name}` : ''}`;
+    this.el.title.textContent = `Training: ${data.opening.name}${label ? ` › ${label}` : tag && !lineId ? ` › ${tag.name}` : ''}`;
     this.el.box.hidden = false;
     this.el.summary.hidden = true;
     this.onModeChange(true);

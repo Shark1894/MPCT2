@@ -49,9 +49,9 @@ repertoire.onTagsChanged = () => {
 
 const dashboard = new DashboardView({
   repertoire,
-  onTrain: (opening, mode, lineId, tag) => {
+  onTrain: (opening, mode, lineId, tag, label) => {
     setView('board');
-    startTraining(opening, mode, lineId, tag);
+    startTraining(opening, mode, lineId, tag, label);
   },
   onShowLine: async (sans) => {
     if (!(await play.confirmStop())) return;
@@ -116,10 +116,10 @@ const play = new PlayController({
 });
 
 /** Training replaces the board's moves, so an open game is closed first (asking if unsaved). */
-async function startTraining(opening, mode, lineId, tag) {
+async function startTraining(opening, mode, lineId, tag, label) {
   if (!(await play.confirmStop())) return;
   if (!(await gamePanel.confirmLeave())) return;
-  trainer.start(opening, mode, lineId, tag);
+  trainer.start(opening, mode, lineId, tag, label);
 }
 
 // ---- views: Board | Dashboard | Games -----------------------------------------------

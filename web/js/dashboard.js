@@ -2,7 +2,17 @@
 // per-line and per-opening actions. Follows the repertoire panel's selected opening.
 
 import { api } from './api.js';
-import { confirmDialog, describeDue, daysFromToday, fillOpeningSelect, plural, toast } from './ui.js';
+import { confirmDialog, describeDue, daysFromToday, fillOpeningSelect, plural, store, toast } from './ui.js';
+import {
+  enableTips,
+  masteryBar,
+  renderActivity,
+  renderForecast,
+  renderOverview,
+  renderProblems,
+  viewLines,
+  weakestLines,
+} from './insights.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -17,12 +27,13 @@ export class DashboardView {
   /**
    * @param {object} deps
    * @param {import('./repertoire.js').RepertoirePanel} deps.repertoire
-   * @param {(opening, mode: 'due'|'all', lineId?: number) => void} deps.onTrain
+   * @param {(opening, mode: 'due'|'all', lineId?: number|number[], tag?, label?: string) => void} deps.onTrain
    * @param {(sans: string[]) => void} deps.onShowLine
    */
   constructor({ repertoire, onTrain, onShowLine }) {
     Object.assign(this, { repertoire, onTrain, onShowLine });
     this.data = null;
+    this.view = { sort: 'due', filter: 'all', search: '', ...store.get('dashView', {}) };
     this.el = {
       opening: $('dash-opening'),
       tag: $('dash-tag'),
@@ -42,6 +53,20 @@ export class DashboardView {
       lines: $('dash-lines'),
       empty: $('dash-empty'),
       menu: $('dash-menu'),
+      trainWeak: $('dash-train-weak'),
+      mastery: $('dash-mastery'),
+      fcChart: $('fc-chart'),
+      fcNote: $('fc-note'),
+      ppList: $('pp-list'),
+      ppEmpty: $('pp-empty'),
+      ovList: $('ov-list'),
+      ovRep: $('ov-rep'),
+      actGrid: $('act-grid'),
+      actSummary: $('act-summary'),
+      sort: $('dash-sort'),
+      filter: $('dash-filter'),
+      search: $('dash-search'),
+      showing: $('dash-showing'),
     };
     const e = this.el;
     e.opening.addEventListener('change', async () => {
@@ -52,6 +77,22 @@ export class DashboardView {
     const tag = () => this.repertoire.currentTag();
     e.trainDue.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'due', null, tag()));
     e.trainAll.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'all', null, tag()));
+    e.trainWeak.addEventListener('click', () => {
+      const weak = weakestLines(this.data?.lines ?? []);
+      if (weak.length) this.onTrain(this._opening(), 'all', weak.map((l) => l.id), null, 'weakest lines');
+    });
+    e.sort.value = this.view.sort;
+    e.filter.value = this.view.filter;
+    e.search.value = this.view.search;
+    const changeView = () => {
+      this.view = { sort: e.sort.value, filter: e.filter.value, search: e.search.value };
+      store.set('dashView', this.view);
+      if (this.data) this._renderLines();
+    };
+    e.sort.addEventListener('change', changeView);
+    e.filter.addEventListener('change', changeView);
+    e.search.addEventListener('input', changeView);
+    enableTips(document.getElementById('dashboard'));
     e.resetAll.addEventListener('click', () => this._closeMenu() || this.resetAll());
     e.deleteAll.addEventListener('click', () => this._closeMenu() || this.deleteAll());
     e.deleteOpening.addEventListener('click', () => this._closeMenu() || this.deleteOpening());
@@ -66,6 +107,7 @@ export class DashboardView {
   }
 
   async refresh() {
+    this._refreshBand(); // overview + activity load alongside the opening
     const openings = this.repertoire.openings;
     const sel = this.el.opening;
     fillOpeningSelect(sel, openings);
@@ -104,11 +146,44 @@ export class DashboardView {
     this._render();
   }
 
+  async _refreshBand() {
+    const repId = this.repertoire.repId;
+    const rep = this.repertoire.repertoires?.find?.((r) => r.id === repId);
+    this.el.ovRep.textContent = rep ? `· ${rep.name}` : '';
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const [ov, act] = await Promise.all([
+      repId ? api.overview(repId).catch(() => null) : null,
+      api.activity(tz).catch(() => null),
+    ]);
+    if (repId !== this.repertoire.repId) return;
+    this.overview = ov?.openings ?? [];
+    this._renderOverview();
+    if (act) {
+      renderActivity(this.el.actGrid, this.el.actSummary, act);
+      const scroller = this.el.actGrid.parentElement;
+      scroller.scrollLeft = scroller.scrollWidth; // most recent weeks in view on narrow screens
+    }
+  }
+
+  _renderOverview() {
+    renderOverview(this.el.ovList, this.overview ?? [], this._opening()?.id, async (id) => {
+      this.repertoire.selectOpening(id, true);
+      await this.refresh();
+    });
+  }
+
   _renderEmpty(text) {
     this.el.color.textContent = '';
     this.el.trainDue.textContent = 'Train due';
     this.el.trainDue.disabled = true;
     for (const v of Object.values(this.el.stats)) v.textContent = '—';
+    this.el.trainWeak.disabled = true;
+    this.el.mastery.innerHTML = '';
+    this.el.fcChart.innerHTML = '';
+    this.el.fcNote.textContent = '';
+    this.el.ppList.innerHTML = '';
+    this.el.ppEmpty.hidden = true;
+    this.el.showing.textContent = '';
     this.el.lines.innerHTML = '';
     this.el.empty.textContent = text;
     this.el.empty.hidden = false;
@@ -127,12 +202,34 @@ export class DashboardView {
     e.stats.reviews.textContent = stats.reviews;
     e.stats.accuracy.textContent = stats.accuracy === null ? '—' : `${Math.round(stats.accuracy * 100)}%`;
 
+    const weak = weakestLines(lines);
+    e.trainWeak.textContent = `Train weakest (${weak.length})`;
+    e.trainWeak.disabled = weak.length === 0;
+    e.mastery.innerHTML = '';
+    e.mastery.appendChild(masteryBar(stats.mastery));
+    renderForecast(e.fcChart, e.fcNote, this.data.forecast);
+    renderProblems(e.ppList, e.ppEmpty, this.data.problems, {
+      hasHistory: stats.reviews > 0,
+      onShow: (sans) => this.onShowLine(sans),
+      onTrain: (p) => this.onTrain(this._opening(), 'all', p.line_ids, null, `${p.expected} problem`),
+    });
+    this._renderOverview();
+    this._renderLines();
+  }
+
+  _renderLines() {
+    const e = this.el;
+    const all = this.data.lines;
+    const shown = viewLines(all, this.view);
     e.lines.innerHTML = '';
-    e.empty.hidden = lines.length > 0;
-    e.empty.textContent = this.data.tag_id
-      ? 'No lines pass through this branch’s position.'
-      : 'No lines yet. Add some from the Board view with Add line.';
-    for (const line of lines) e.lines.appendChild(this._lineRow(line));
+    e.showing.textContent = all.length ? `Showing ${shown.length} of ${plural(all.length, 'line')}` : '';
+    e.empty.hidden = shown.length > 0;
+    e.empty.textContent = !all.length
+      ? this.data.tag_id
+        ? 'No lines pass through this branch’s position.'
+        : 'No lines yet. Add some from the Board view with Add line.'
+      : 'No lines match. Change Show or clear the move search.';
+    for (const line of shown) e.lines.appendChild(this._lineRow(line));
   }
 
   _lineRow(line) {
