@@ -22,7 +22,7 @@ The full plan, decisions and data model are in the project's
 | 2 | Postgres + repertoire API | Done |
 | 3 | Repertoire UI: pickers, explorer, add/delete line, comments | Done |
 | 4 | Opening trainer | Next |
-| 4–8 | Repertoire UI, trainer, dashboard, data import, engine, games | Planned |
+| 5–8 | Review dashboard, data import, engine, games | Planned |
 
 ## Using the board
 
