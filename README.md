@@ -91,7 +91,11 @@ API: `GET/POST /api/openings/{id}/tags` (`{"name", "fen"}`), `PATCH/DELETE /api/
 
 - **Train due (n)** reviews the opening's lines that are due, most overdue first; **Train all** drills every line.
 - The app plays the opponent's moves; you play yours. The explorer is hidden and navigation is locked so nothing
-  gives the answer away. Comments show while a line is still being learned (streak under 2) or after a mistake.
+  gives the answer away.
+- Comments show while a line is still being learned (streak under 2). Once you've played a line correctly 2 or
+  more times in a row they're hidden, and the training panel says so ("Comments hidden: you've played this line
+  correctly 3 times in a row") with a **Show comments** button to peek (not counted as a mistake). After a mistake
+  they come back, and stay visible for that line for the rest of the session, including retries.
 - Wrong move: it snaps back. After 2 wrong tries on a move the piece to move is highlighted; after 3 the move is
   shown as an arrow.
 - A line with no mistakes adds 1 to its streak; any mistake resets the streak to 0 and makes it due again today.

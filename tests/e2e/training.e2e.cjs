@@ -143,12 +143,50 @@ const text = (page, sel) => page.textContent(sel);
   });
   check(stillDue === 1, 'abandoned line not recorded (still due)');
 
+  // ---- well-known line: comments hidden, and it says so ---------------------
+  await page.evaluate(async () => {
+    const post = (url, body) =>
+      fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+    const o = await post('/api/repertoires/1/openings', { name: 'Known', color: 'white' });
+    const line = (await post(`/api/openings/${o.id}/lines`, { moves: ['g1f3', 'd7d5', 'g2g3'] })).line_id;
+    const perfect = [{ ply: 1, uci: 'g1f3' }, { ply: 3, uci: 'g2g3' }];
+    await post(`/api/lines/${line}/reviews`, { attempts: perfect });
+    await post(`/api/lines/${line}/reviews`, { attempts: perfect });
+    await fetch('/api/repertoires/1/comment', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', comment: 'Start with Nf3' }),
+    });
+  });
+  await page.reload();
+  await page.waitForTimeout(700);
+  await page.selectOption('#opening-select', { label: 'Known' });
+  await page.waitForTimeout(500);
+  await page.click('#train-all');
+  await waitUserTurn(page);
+  check(await page.isHidden('#comments'), 'well-known line: comments hidden');
+  check(
+    (await page.isVisible('#train-comments-note')) && (await text(page, '#train-comments-note-text')).includes('correctly 2 times in a row'),
+    'well-known line: note says comments are hidden and why',
+  );
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/p4-comments-hidden.png` });
+  await page.click('#train-comments-show');
+  check(await page.isVisible('#comments') && (await page.inputValue('#comment-current')) === 'Start with Nf3', 'Show comments reveals them');
+  check(await page.isHidden('#train-comments-note'), 'note goes away once revealed');
+  await move(page, 'e2e4'); // wrong
+  check(await page.isVisible('#comments'), 'comments visible after a mistake');
+  check((await text(page, '#train-comments-note-text')).includes('after a mistake'), 'note explains comments are back after a mistake');
+  await page.click('#train-stop');
+  await page.waitForTimeout(300);
+
   // ---- phone: training box sits right under the controls --------------------
   const ctx = await browser.newContext({ ...devices['iPhone 13'] });
   const mp = await ctx.newPage();
   mp.on('pageerror', (e) => errors.push('phone: ' + e));
   await mp.goto(URL);
   await mp.waitForTimeout(600);
+  await mp.selectOption('#opening-select', { label: 'Caro-Kann' });
+  await mp.waitForTimeout(500);
   await mp.click('#train-all');
   await waitUserTurn(mp);
   await mp.waitForTimeout(800); // let the smooth scroll to the board finish

@@ -518,6 +518,26 @@ button.small {
   color: var(--error);
 }
 
+.train-comments-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 14px;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.train-comments-note.after-mistake {
+  border-color: var(--copper);
+  color: var(--copper);
+}
+
 .train-end,
 .train-summary {
   display: flex;

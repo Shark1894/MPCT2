@@ -132,3 +132,32 @@ test('empty session is finished immediately', () => {
   assert.equal(s.line, null);
   assert.equal(s.expected(), null);
 });
+
+test('comment state says why comments are shown or hidden', () => {
+  const s = new TrainingSession({
+    opening: { id: 1, name: 'K', color: 'white' },
+    lines: [
+      { id: 1, streak: 0, moves: RUY },
+      { id: 2, streak: 2, moves: RUY },
+      { id: 3, streak: 5, moves: RUY },
+    ],
+  });
+  assert.deepEqual(s.commentState(), { show: true, reason: 'learning', streak: 0 });
+  s.nextLine();
+  assert.deepEqual(s.commentState(), { show: false, reason: 'known', streak: 2 });
+  s.nextLine();
+  assert.deepEqual(s.commentState(), { show: false, reason: 'known', streak: 5 });
+});
+
+test('a line failed this session keeps its comments on retry', () => {
+  const known = new TrainingSession({
+    opening: { id: 1, name: 'K', color: 'white' },
+    lines: [{ id: 7, streak: 4, moves: RUY }],
+  });
+  assert.equal(known.showComments(), false);
+  known.tryMove('d2d4'); // mistake
+  assert.deepEqual(known.commentState(), { show: true, reason: 'mistake' });
+  known.retryLine(); // mistakes reset to 0 for the practice run...
+  assert.equal(known.mistakes, 0);
+  assert.deepEqual(known.commentState(), { show: true, reason: 'mistake' }); // ...but comments stay visible
+});

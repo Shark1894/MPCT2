@@ -25,6 +25,7 @@ export class TrainingSession {
     this.lines = data.lines;
     this.index = 0; // which line
     this.results = []; // { lineId, correct, mistakes } for each line's first (non-practice) attempt
+    this.failedLines = new Set(); // lines with a mistake this session: keep their comments visible
     this.startLine(false);
   }
 
@@ -62,9 +63,20 @@ export class TrainingSession {
     return Boolean(m) && (m.ply % 2 === 1) === (this.color === 'white');
   }
 
-  /** Comments are shown while the line is being learned, or once a mistake has been made. */
+  /**
+   * Whether comments are shown for the current line, and why:
+   *   'learning' (streak below SHOW_COMMENTS_BELOW_STREAK), 'mistake' (a mistake on this line
+   *   this session), or 'known' (hidden: the line has been played correctly often enough).
+   */
+  commentState() {
+    if (this.mistakes > 0 || this.failedLines.has(this.line?.id)) return { show: true, reason: 'mistake' };
+    const streak = this.line?.streak ?? 0;
+    if (streak < SHOW_COMMENTS_BELOW_STREAK) return { show: true, reason: 'learning', streak };
+    return { show: false, reason: 'known', streak };
+  }
+
   showComments() {
-    return this.mistakes > 0 || (this.line?.streak ?? 0) < SHOW_COMMENTS_BELOW_STREAK;
+    return this.commentState().show;
   }
 
   /** Advance past the opponent's move; returns it so the page can play it. */
@@ -91,6 +103,7 @@ export class TrainingSession {
     }
     this.wrongHere += 1;
     this.mistakes += 1;
+    this.failedLines.add(this.line.id);
     return { correct: false, hint: this.hint() };
   }
 

@@ -42,11 +42,19 @@ export class TrainingController {
       stop: $('train-stop'),
       summary: $('train-summary'),
       done: $('train-done'),
+      commentsNote: $('train-comments-note'),
+      commentsNoteText: $('train-comments-note-text'),
+      commentsShow: $('train-comments-show'),
     };
+    this.commentsRevealed = false;
     this.el.next.addEventListener('click', () => this.nextLine());
     this.el.retry.addEventListener('click', () => this.retryLine());
     this.el.stop.addEventListener('click', () => this.stop());
     this.el.done.addEventListener('click', () => this.stop());
+    this.el.commentsShow.addEventListener('click', () => {
+      this.commentsRevealed = true; // a peek, not counted as a mistake
+      this._applyComments();
+    });
   }
 
   get active() {
@@ -87,6 +95,7 @@ export class TrainingController {
 
   stop() {
     clearTimeout(this.timer);
+    this.el.commentsNote.hidden = true;
     this.session = null;
     this._setHint(null);
     this.el.box.hidden = true;
@@ -102,7 +111,8 @@ export class TrainingController {
     this._setHint(null);
     this.game.load(START_FEN);
     this._message('');
-    this.panel.setCommentsVisible(s.showComments());
+    this.commentsRevealed = false;
+    this._applyComments();
     this.render();
     this._continue();
   }
@@ -146,7 +156,7 @@ export class TrainingController {
       return;
     }
     this.render(); // snap the piece back
-    this.panel.setCommentsVisible(true);
+    this._applyComments();
     this._setHint(result.hint);
     const tip =
       result.hint?.type === 'move'
@@ -211,6 +221,26 @@ export class TrainingController {
   }
 
   // ---- display helpers ----------------------------------------------------
+
+  /** Show or hide the comments for the current line, and say clearly when they're hidden. */
+  _applyComments() {
+    const state = this.session.commentState();
+    const visible = state.show || this.commentsRevealed;
+    this.panel.setCommentsVisible(visible);
+    const note = this.el.commentsNote;
+    note.classList.toggle('after-mistake', state.reason === 'mistake');
+    if (!state.show && !this.commentsRevealed) {
+      this.el.commentsNoteText.textContent = `Comments hidden: you've played this line correctly ${state.streak} times in a row.`;
+      this.el.commentsShow.hidden = false;
+      note.hidden = false;
+    } else if (state.reason === 'mistake' && this.session.line?.streak >= 2) {
+      this.el.commentsNoteText.textContent = 'Comments shown again after a mistake on this line.';
+      this.el.commentsShow.hidden = true;
+      note.hidden = false;
+    } else {
+      note.hidden = true;
+    }
+  }
 
   _message(text, kind = '') {
     this.el.message.textContent = text;
