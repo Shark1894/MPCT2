@@ -23,8 +23,9 @@ The full plan, decisions and data model are in the project's
 | 3 | Repertoire UI: pickers, explorer, add/delete line, comments | Done |
 | 4 | Opening trainer: spaced repetition, hints, practice retries | Done |
 | 5 | Review dashboard | Done |
-| 6 | Legacy data import | Next |
-| 7–8 | Engine, games | Planned |
+| 6 | Legacy data import (openings, lines, comments) | Done |
+| 7 | Engine (Stockfish in the browser) | Next |
+| 8 | Games | Planned |
 
 ## Using the board
 
@@ -96,6 +97,23 @@ API: `GET /api/openings/{id}/dashboard`, `POST /api/lines/{id}/reset`, `POST /ap
 Training API: `GET /api/openings/{id}/training?mode=due|all` (or `line_id=`) returns the lines to train;
 `POST /api/lines/{id}/reviews` with `{"practice": false, "attempts": [{"ply": 2, "uci": "c7c6"}, ...]}` records a
 finished line (the server checks each move against the line and updates the schedule).
+
+## Importing from the desktop app
+
+`app/tools/import_legacy.py` copies the openings, lines and position comments from a PyQt MPCT repertoire file
+into a new repertoire. Review history isn't imported: every line starts fresh and is due today. Move names are
+regenerated from the moves (fixing the legacy extension bug), positions are re-keyed (fixing the en passant
+bug), duplicate or overlapping lines are merged and illegal ones reported.
+
+On the server, copy the file into the container and run it (dry run first):
+
+```bash
+docker cp Main.db mpct:/tmp/Main.db
+docker compose exec mpct python -m app.tools.import_legacy /tmp/Main.db --repertoire Main --dry-run
+docker compose exec mpct python -m app.tools.import_legacy /tmp/Main.db --repertoire Main
+```
+
+`--replace` overwrites an existing repertoire of that name; `--no-comments` skips comments.
 
 ## Run locally
 
@@ -210,6 +228,7 @@ app/
   db/             SQLAlchemy models, session, Alembic migrations
   repositories/   database queries (replaces the legacy DBFunctions.py)
   api/            FastAPI routers + request/response schemas
+  tools/          command-line tools (legacy import)
 web/              frontend served as-is
   js/game.js      game state + rules wrapper (pure logic, unit tested)
   js/board.js     chessground wrapper + promotion picker
