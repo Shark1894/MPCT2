@@ -73,45 +73,68 @@ test('opponent/user turn guards', () => {
   assert.throws(() => s.tryMove('e7e5'));
 });
 
-test('results count first attempts only; retry is practice', () => {
+const playRuy = (s) => {
+  s.tryMove('e2e4');
+  s.opponentMove();
+  s.tryMove('g1f3');
+  s.opponentMove();
+  s.tryMove('f1b5');
+};
+
+test('retry after a failure is a real review that replaces the failed result', () => {
   const s = session('white', RUY, mv('d2d4', 'd7d5'));
   s.tryMove('d2d4'); // wrong
-  s.tryMove('e2e4');
-  s.opponentMove();
-  s.tryMove('g1f3');
-  s.opponentMove();
-  s.tryMove('f1b5');
+  playRuy(s);
   s.recordResult();
   assert.equal(s.review().practice, false);
+  assert.deepEqual(s.summary(), { reviewed: 1, correct: 0, fixed: 0, failed: 1, total: 2 });
 
   s.retryLine();
-  assert.equal(s.practice, true);
+  assert.equal(s.practice, false);
+  assert.equal(s.retry, true);
   assert.equal(s.ply, 0);
   assert.equal(s.mistakes, 0);
-  s.tryMove('e2e4');
-  s.opponentMove();
-  s.tryMove('g1f3');
-  s.opponentMove();
-  s.tryMove('f1b5');
-  assert.equal(s.review().practice, true);
-  s.recordResult(); // practice: not counted
+  playRuy(s);
+  assert.equal(s.review().practice, false, 'sent as a normal review: correct moves the streak on');
+  s.recordResult();
+  assert.deepEqual(s.summary(), { reviewed: 1, correct: 1, fixed: 1, failed: 0, total: 2 });
+
+  // Retrying again after getting it right is practice: no streak farming.
+  s.retryLine();
+  assert.equal(s.practice, true);
+  s.tryMove('d2d4'); // even a mistake in practice...
+  playRuy(s);
+  s.recordResult();
+  assert.deepEqual(s.summary(), { reviewed: 1, correct: 1, fixed: 1, failed: 0, total: 2 }, '...changes nothing');
 
   s.nextLine();
   assert.equal(s.line.id, 2);
   assert.equal(s.practice, false);
+  assert.equal(s.retry, false);
   s.tryMove('d2d4');
   s.opponentMove();
   s.recordResult();
-  s.nextLine();
-  assert.equal(s.finished, true);
-  assert.deepEqual(s.summary(), { reviewed: 2, correct: 1, failed: 1, total: 2 });
-  assert.deepEqual(
-    s.results.map((r) => [r.lineId, r.correct, r.mistakes]),
-    [
-      [1, false, 1],
-      [2, true, 0],
-    ],
-  );
+  assert.deepEqual(s.summary(), { reviewed: 2, correct: 2, fixed: 1, failed: 0, total: 2 });
+});
+
+test('a failed retry stays failed; a clean first run retried is practice', () => {
+  const s = session('white', RUY);
+  s.tryMove('d2d4');
+  playRuy(s);
+  s.recordResult();
+  s.retryLine();
+  s.tryMove('d2d4'); // wrong again
+  playRuy(s);
+  s.recordResult();
+  assert.deepEqual(s.summary(), { reviewed: 1, correct: 0, fixed: 0, failed: 1, total: 1 });
+  s.retryLine(); // still failed: another real review
+  assert.equal(s.practice, false);
+
+  const clean = session('white', RUY);
+  playRuy(clean);
+  clean.recordResult();
+  clean.retryLine();
+  assert.equal(clean.practice, true);
 });
 
 test('comments shown while learning or after a mistake', () => {
@@ -157,7 +180,8 @@ test('a line failed this session keeps its comments on retry', () => {
   assert.equal(known.showComments(), false);
   known.tryMove('d2d4'); // mistake
   assert.deepEqual(known.commentState(), { show: true, reason: 'mistake' });
-  known.retryLine(); // mistakes reset to 0 for the practice run...
+  known.recordResult();
+  known.retryLine(); // mistakes reset to 0 for the retry...
   assert.equal(known.mistakes, 0);
   assert.deepEqual(known.commentState(), { show: true, reason: 'mistake' }); // ...but comments stay visible
 });

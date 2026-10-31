@@ -7,8 +7,9 @@
 //   2 wrong                -> hint: highlight the piece to move
 //   3 or more wrong        -> hint: show the whole move
 //
-// Any mistake makes the line count as failed. Retrying a line straight away is
-// practice: it's recorded, but doesn't change the schedule.
+// Any mistake makes the line count as failed. Retrying a failed line is a real
+// review: get it right and it counts as correct. Retrying a line you got right
+// is practice: recorded, but it doesn't change the schedule.
 
 export const HINT_PIECE_AFTER = 2;
 export const HINT_MOVE_AFTER = 3;
@@ -24,7 +25,7 @@ export class TrainingSession {
     this.color = data.opening.color;
     this.lines = data.lines;
     this.index = 0; // which line
-    this.results = []; // { lineId, correct, mistakes } for each line's first (non-practice) attempt
+    this.results = []; // { lineId, correct, mistakes, retried } latest real (non-practice) result per line
     this.failedLines = new Set(); // lines with a mistake this session: keep their comments visible
     this.startLine(false);
   }
@@ -41,8 +42,9 @@ export class TrainingSession {
     return this.index >= this.lines.length;
   }
 
-  startLine(practice) {
+  startLine(practice, retry = false) {
     this.practice = practice;
+    this.retry = retry; // a real review of a line failed just before
     this.ply = 0; // moves played so far in this line
     this.attempts = []; // { ply, uci } for every user move tried
     this.wrongHere = 0; // wrong tries on the current move
@@ -122,24 +124,31 @@ export class TrainingSession {
     return { lineId: this.line.id, practice: this.practice, attempts: this.attempts };
   }
 
-  /** Record the outcome of the line just finished (first attempts only count). */
+  /** Record the outcome of the line just finished. A retry replaces the failed result. */
   recordResult() {
-    if (!this.practice) {
-      this.results.push({ lineId: this.line.id, correct: this.mistakes === 0, mistakes: this.mistakes });
-    }
+    this.lastCorrect = this.mistakes === 0;
+    if (this.practice) return;
+    const result = { lineId: this.line.id, correct: this.lastCorrect, mistakes: this.mistakes, retried: this.retry };
+    const i = this.results.findIndex((r) => r.lineId === result.lineId);
+    if (i >= 0) this.results[i] = result;
+    else this.results.push(result);
   }
 
+  /** Play the line again: a real review after a failure, practice after a clean run. */
   retryLine() {
-    this.startLine(true);
+    const failed = this.lastCorrect === false;
+    this.startLine(!failed, failed);
   }
 
   nextLine() {
+    this.lastCorrect = undefined;
     this.index += 1;
     this.startLine(false);
   }
 
   summary() {
     const correct = this.results.filter((r) => r.correct).length;
-    return { reviewed: this.results.length, correct, failed: this.results.length - correct, total: this.total };
+    const fixed = this.results.filter((r) => r.correct && r.retried).length;
+    return { reviewed: this.results.length, correct, fixed, failed: this.results.length - correct, total: this.total };
   }
 }

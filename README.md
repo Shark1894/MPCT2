@@ -132,7 +132,9 @@ API: `GET/POST /api/openings/{id}/tags` (`{"name", "fen"}`), `PATCH/DELETE /api/
   shown as an arrow.
 - A line with no mistakes adds 1 to its streak; any mistake resets the streak to 0 and makes it due again today.
   Next review after a streak of 0–6+: 0, 1, 3, 7, 14, 30, 60 days (capped at 60).
-- **Retry** after a line is practice: recorded, but doesn't change the schedule. Stopping half-way records nothing.
+- **Retry** after a failed line is a real review: get it right and it counts as correct (streak 0 → 1, due tomorrow);
+  a mistake keeps it at 0, due today. The session summary counts the line as correct. Retrying a line you got right
+  is practice: recorded, but doesn't change the schedule. Stopping half-way records nothing.
 - Every move tried is stored (`move_attempts`), including the wrong move actually played.
 
 ## Dashboard

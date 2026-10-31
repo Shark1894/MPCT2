@@ -107,7 +107,7 @@ export class TrainingController {
     clearTimeout(this.timer);
     const s = this.session;
     this.el.end.hidden = true;
-    this.el.progress.textContent = `Line ${s.index + 1} of ${s.total}${s.practice ? ' · practice' : ''}`;
+    this.el.progress.textContent = `Line ${s.index + 1} of ${s.total}${s.practice ? ' · practice' : s.retry ? ' · retry' : ''}`;
     this._setHint(null);
     this.game.load(START_FEN);
     this._message('');
@@ -216,6 +216,7 @@ export class TrainingController {
     this.el.summary.hidden = false;
     $('train-summary-text').textContent =
       `${plural(sum.reviewed, 'line')} reviewed: ${sum.correct} correct` +
+      (sum.fixed ? ` (${sum.fixed} on a retry)` : '') +
       (sum.failed ? `, ${sum.failed} to repeat (due again today).` : '.');
     this.el.done.focus();
   }

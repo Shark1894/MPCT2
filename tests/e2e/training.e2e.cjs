@@ -105,10 +105,23 @@ const text = (page, sel) => page.textContent(sel);
   check(r2.includes('3 mistakes') && r2.includes('due again today'), 'line 2 result: ' + r2);
   check((await text(page, '#train-next')) === 'Finish', 'last line offers Finish');
 
-  // ---- retry is practice ---------------------------------------------------
+  // ---- retry after a failure is a real review ----------------------------------
   await page.click('#train-retry');
   await waitUserTurn(page);
-  check((await text(page, '#train-progress')) === 'Line 2 of 2 · practice', 'retry marked as practice');
+  check((await text(page, '#train-progress')) === 'Line 2 of 2 · retry', 'retry of a failed line marked as a retry');
+  await move(page, 'c7c6');
+  await waitUserTurn(page);
+  await move(page, 'd7d5');
+  await waitUserTurn(page);
+  await move(page, 'd5e4');
+  await waitLineEnd(page);
+  const r3 = await text(page, '#train-result');
+  check(r3.includes('no mistakes') && r3.includes('Streak 1') && r3.includes('tomorrow'), 'correct retry counts: ' + r3);
+
+  // ---- retrying a line you got right is practice ----------------------------------
+  await page.click('#train-retry');
+  await waitUserTurn(page);
+  check((await text(page, '#train-progress')) === 'Line 2 of 2 · practice', 'retry after a clean run is practice');
   await move(page, 'c7c6');
   await waitUserTurn(page);
   await move(page, 'd7d5');
@@ -121,18 +134,18 @@ const text = (page, sel) => page.textContent(sel);
   await page.click('#train-next');
   await page.waitForSelector('#train-summary:not([hidden])');
   const summary = await text(page, '#train-summary-text');
-  check(summary.includes('2 lines reviewed') && summary.includes('1 correct') && summary.includes('1 to repeat'), 'summary: ' + summary);
+  check(summary === '2 lines reviewed: 2 correct (1 on a retry).', 'summary: ' + summary);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/p4-summary.png` });
   await page.click('#train-done');
   await page.waitForTimeout(500);
   check(await page.isHidden('#training') && (await page.isVisible('#rep-build')), 'back to repertoire mode');
-  check((await text(page, '#train-due')) === 'Train due (1)', 'due count updated: failed line still due');
+  check((await text(page, '#train-due')) === 'Train due (0)', 'due count updated: the line fixed on a retry is no longer due');
   check(!(await page.isDisabled('#nav-back')), 'navigation unlocked');
 
-  // ---- train again: only the failed line ------------------------------------
-  await page.click('#train-due');
+  // ---- train again (all lines), stop half-way --------------------------------
+  await page.click('#train-all');
   await waitUserTurn(page);
-  check((await text(page, '#train-progress')) === 'Line 1 of 1', 'only the failed line is due');
+  check((await text(page, '#train-progress')) === 'Line 1 of 2', 'Train all includes lines not due');
   check(await page.isVisible('#comments'), 'comments shown for a line still being learned');
   await page.click('#train-stop');
   await page.waitForTimeout(300);
@@ -141,7 +154,7 @@ const text = (page, sel) => page.textContent(sel);
     const openings = await fetch('/api/repertoires/1/openings').then((r) => r.json());
     return openings[0].due;
   });
-  check(stillDue === 1, 'abandoned line not recorded (still due)');
+  check(stillDue === 0, 'abandoned line not recorded');
 
   // ---- well-known line: comments hidden, and it says so ---------------------
   await page.evaluate(async () => {
