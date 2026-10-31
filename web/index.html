@@ -91,6 +91,10 @@
             </div>
             <p id="opening-info" class="meta"></p>
           </div>
+          <div id="train-tag-box" class="picker" hidden>
+            <label for="train-tag">Lines</label>
+            <select id="train-tag"></select>
+          </div>
           <div class="train-actions">
             <button id="train-due" type="button" class="primary">Train due</button>
             <button id="train-all" type="button">Train all</button>
@@ -111,6 +115,16 @@
             <div class="line-actions">
               <button id="line-add" type="button" title="Save the moves up to this position as a line">Add line</button>
               <button id="line-delete" type="button" title="Delete every line through this position">Delete line</button>
+            </div>
+          </div>
+
+          <div class="branches-box">
+            <h2>Branches</h2>
+            <div id="branch-path" class="branch-path"></div>
+            <div class="branch-actions">
+              <button id="tag-add" type="button" class="small">Tag this position</button>
+              <button id="tag-rename" type="button" class="small" hidden>Rename tag</button>
+              <button id="tag-delete" type="button" class="small danger-outline" hidden>Remove tag</button>
             </div>
           </div>
         </div>
@@ -152,6 +166,8 @@
         <div class="dash-title">
           <label for="dash-opening" class="sr-only">Opening</label>
           <select id="dash-opening"></select>
+          <label for="dash-tag" class="sr-only">Branch</label>
+          <select id="dash-tag" class="dash-tag" hidden></select>
           <span id="dash-color" class="meta"></span>
         </div>
         <div class="dash-buttons">

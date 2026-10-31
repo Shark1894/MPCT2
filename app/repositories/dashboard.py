@@ -16,10 +16,22 @@ from app.repositories.training import current_streaks
 RECENT = 5  # results shown per line
 
 
-def dashboard(s: Session, opening_id: int) -> dict:
+def dashboard(s: Session, opening_id: int, tag_id: int | None = None) -> dict:
+    """Stats and lines for an opening, or for one branch of it when tag_id is given."""
+    from app.repositories.tags import tag_in_opening, tagged_line_ids
+
     summary = opening_summary(s, opening_id)
-    lines = s.scalars(select(Line).where(Line.opening_id == opening_id).order_by(Line.next_review_on, Line.id)).all()
+    tag_lines = tagged_line_ids(s, opening_id)
+    q = select(Line).where(Line.opening_id == opening_id)
+    if tag_id is not None:
+        tag_in_opening(s, opening_id, tag_id)
+        q = q.where(Line.id.in_(tag_lines[tag_id] or {-1}))
+    lines = s.scalars(q.order_by(Line.next_review_on, Line.id)).all()
     ids = [line.id for line in lines]
+    line_tags: dict[int, list[int]] = {line_id: [] for line_id in ids}
+    for t_id, members in tag_lines.items():
+        for line_id in members & set(ids):
+            line_tags[line_id].append(t_id)
     moves = _opening_lines_moves(s, opening_id)
     streaks = current_streaks(s, ids)
 
@@ -33,14 +45,16 @@ def dashboard(s: Session, opening_id: int) -> dict:
         for line_id, correct, reviewed_at in rows:
             history[line_id].append((correct, reviewed_at))
 
+    today = date.today()
     total_reviews = sum(len(h) for h in history.values())
     total_correct = sum(1 for h in history.values() for correct, _ in h if correct)
     return {
         "opening": summary,
+        "tag_id": tag_id,
         "stats": {
-            "lines": summary["lines"],
-            "due": summary["due"],
-            "next_review_on": summary["next_review_on"],
+            "lines": len(lines),
+            "due": sum(1 for line in lines if line.next_review_on <= today),
+            "next_review_on": min((line.next_review_on for line in lines), default=None),
             "reviews": total_reviews,
             "accuracy": round(total_correct / total_reviews, 3) if total_reviews else None,
         },
@@ -54,6 +68,7 @@ def dashboard(s: Session, opening_id: int) -> dict:
                 "reviews": len(history[line.id]),
                 "correct": sum(1 for correct, _ in history[line.id] if correct),
                 "last_reviewed_at": history[line.id][-1][1] if history[line.id] else None,
+                "tags": sorted(line_tags[line.id]),
             }
             for line in lines
         ],

@@ -19,13 +19,16 @@ export class RepertoirePanel {
    * @param {(shapes: object[]) => void} opts.onShapes  draw arrows on the board
    * @param {(color: 'white'|'black') => void} opts.onOrientation
    */
-  constructor({ game, onPlaySan, onShapes, onOrientation, onTrain }) {
+  constructor({ game, onPlaySan, onShapes, onOrientation, onTrain, onJump }) {
     this.game = game;
     this.onPlaySan = onPlaySan;
     this.onShapes = onShapes;
     this.onOrientation = onOrientation;
-    this.onTrain = onTrain; // (opening, 'due' | 'all') => void
+    this.onTrain = onTrain; // (opening, 'due' | 'all', tag | null) => void
+    this.onJump = onJump; // (ply) => void: jump the board to a move
     this.training = false;
+    this.tags = []; // branch tags of the selected opening
+    this.tagId = null; // training/dashboard filter: null = all lines
 
     this.repertoires = [];
     this.openings = [];
@@ -59,6 +62,12 @@ export class RepertoirePanel {
       trainDue: $('train-due'),
       trainAll: $('train-all'),
       comments: $('comments'),
+      tagFilter: $('train-tag'),
+      tagFilterBox: $('train-tag-box'),
+      branchPath: $('branch-path'),
+      tagAdd: $('tag-add'),
+      tagRename: $('tag-rename'),
+      tagDelete: $('tag-delete'),
     };
     this._bind();
   }
@@ -77,8 +86,12 @@ export class RepertoirePanel {
     e.openingDelete.addEventListener('click', () => this.deleteOpening());
     e.lineAdd.addEventListener('click', () => this.addLine());
     e.lineDelete.addEventListener('click', () => this.deleteLines());
-    e.trainDue.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'due'));
-    e.trainAll.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'all'));
+    e.trainDue.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'due', this.currentTag()));
+    e.trainAll.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'all', this.currentTag()));
+    e.tagFilter.addEventListener('change', () => this.setTagFilter(e.tagFilter.value ? Number(e.tagFilter.value) : null));
+    e.tagAdd.addEventListener('click', () => this.addTag());
+    e.tagRename.addEventListener('click', () => this.renameTag());
+    e.tagDelete.addEventListener('click', () => this.deleteTag());
 
     e.commentCurrent.addEventListener('input', () => this._commentEdited());
     e.commentCurrent.addEventListener('blur', () => this.flushComment());
@@ -213,6 +226,11 @@ export class RepertoirePanel {
   selectOpening(id, userChose) {
     const changed = id !== this.openingId;
     this.openingId = id;
+    if (changed) {
+      this.tagId = null;
+      this.tags = [];
+      this.loadTags();
+    }
     this.el.openingSelect.value = String(id);
     store.set('openingId', id);
     this._renderInfo();
@@ -228,6 +246,7 @@ export class RepertoirePanel {
 
   async _reloadOpenings() {
     if (!this.repId) return;
+    this.loadTags(); // line and due counts per branch may have changed
     this.openings = await api.openings(this.repId);
     const rep = this.repertoires.find((r) => r.id === this.repId);
     if (rep) rep.openings = this.openings.length;
@@ -236,9 +255,12 @@ export class RepertoirePanel {
 
   _renderInfo() {
     const o = this._opening();
-    this.el.trainDue.textContent = o ? `Train due (${o.due})` : 'Train due';
-    this.el.trainDue.disabled = !o || o.due === 0;
-    this.el.trainAll.disabled = !o || o.lines === 0;
+    const tag = this.currentTag();
+    const due = tag ? tag.due : o?.due;
+    const lines = tag ? tag.lines : o?.lines;
+    this.el.trainDue.textContent = o ? `Train due (${due})` : 'Train due';
+    this.el.trainDue.disabled = !o || due === 0;
+    this.el.trainAll.disabled = !o || lines === 0;
     if (!o) {
       this.el.openingInfo.textContent = '';
       return;
@@ -372,6 +394,146 @@ export class RepertoirePanel {
     }
   }
 
+  // ---- branch tags --------------------------------------------------------
+
+  currentTag() {
+    return this.tags.find((t) => t.id === this.tagId) ?? null;
+  }
+
+  async loadTags() {
+    const openingId = this.openingId;
+    if (!openingId) {
+      this.tags = [];
+    } else {
+      try {
+        const tags = await api.tags(openingId);
+        if (openingId !== this.openingId) return; // opening changed meanwhile
+        this.tags = tags;
+      } catch {
+        this.tags = [];
+      }
+    }
+    if (!this.currentTag()) this.tagId = null;
+    this._renderTagFilter();
+    this._renderInfo();
+    this._renderBranches();
+    this.onTagsChanged?.();
+  }
+
+  setTagFilter(tagId) {
+    this.tagId = tagId;
+    this._renderTagFilter();
+    this._renderInfo();
+    this.onTagsChanged?.();
+  }
+
+  _renderTagFilter() {
+    const sel = this.el.tagFilter;
+    sel.innerHTML = '';
+    sel.appendChild(new Option('All lines', ''));
+    for (const t of this.tags) sel.appendChild(new Option(`${t.name} (${t.lines})`, t.id));
+    sel.value = this.tagId ? String(this.tagId) : '';
+    this.el.tagFilterBox.hidden = this.tags.length === 0;
+  }
+
+  /** Position keys along the current moves: FEN without move counters (matches the server's keys). */
+  _pathKeys() {
+    const keys = [];
+    for (let i = 0; i < this.game.ply; i++) keys.push(this.game.moves[i].fen.split(' ').slice(0, 4).join(' '));
+    return keys;
+  }
+
+  _tagHere() {
+    const key = this.game.fen().split(' ').slice(0, 4).join(' ');
+    return this.game.ply > 0 ? (this.tags.find((t) => t.key === key) ?? null) : null;
+  }
+
+  _renderBranches() {
+    const box = this.el.branchPath;
+    box.innerHTML = '';
+    const keys = this._pathKeys();
+    const onPath = [];
+    keys.forEach((key, i) => {
+      const t = this.tags.find((tag) => tag.key === key);
+      if (t) onPath.push({ tag: t, ply: i + 1 });
+    });
+    if (onPath.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'explorer-empty';
+      p.textContent = this.openingId
+        ? 'No branch tags on these moves. Tag a position to name a branch.'
+        : 'Choose an opening to tag its branches.';
+      box.appendChild(p);
+    }
+    onPath.forEach(({ tag, ply }, i) => {
+      if (i > 0) {
+        const sep = document.createElement('span');
+        sep.className = 'branch-sep';
+        sep.textContent = '›';
+        box.appendChild(sep);
+      }
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'branch-chip';
+      if (ply === this.game.ply) chip.classList.add('here');
+      chip.textContent = tag.name;
+      chip.title = `${tag.lines} line${tag.lines === 1 ? '' : 's'}: jump to this position`;
+      chip.addEventListener('click', () => this.onJump(ply));
+      box.appendChild(chip);
+    });
+
+    const here = this._tagHere();
+    this.el.tagAdd.hidden = Boolean(here);
+    this.el.tagAdd.disabled = !this.openingId || this.game.ply === 0;
+    this.el.tagRename.hidden = this.el.tagDelete.hidden = !here;
+  }
+
+  async addTag() {
+    const o = this._opening();
+    if (!o) return;
+    const values = await formDialog({
+      title: 'Tag this position',
+      message: `Every line in ${o.name} that passes through this position will carry the tag, including lines added later.`,
+      fields: [{ name: 'name', label: 'Branch name (e.g. Queen’s Gambit Accepted)' }],
+      submit: 'Tag',
+    });
+    if (!values) return;
+    try {
+      const tag = await api.createTag(o.id, values.name, this.game.fen());
+      toast(`Tagged “${tag.name}” (${tag.lines} line${tag.lines === 1 ? '' : 's'})`);
+      await this.loadTags();
+    } catch (err) {
+      this._fail(err);
+    }
+  }
+
+  async renameTag() {
+    const tag = this._tagHere();
+    if (!tag) return;
+    const values = await formDialog({ title: 'Rename branch tag', fields: [{ name: 'name', label: 'Name', value: tag.name }] });
+    if (!values) return;
+    try {
+      await api.renameTag(tag.id, values.name);
+      await this.loadTags();
+    } catch (err) {
+      this._fail(err);
+    }
+  }
+
+  async deleteTag() {
+    const tag = this._tagHere();
+    if (!tag) return;
+    const ok = await confirmDialog(`Remove the tag “${tag.name}”?`, 'Only the tag is removed; the lines stay.', 'Remove tag');
+    if (!ok) return;
+    try {
+      await api.deleteTag(tag.id);
+      await this.loadTags();
+      toast(`Removed tag “${tag.name}”`);
+    } catch (err) {
+      this._fail(err);
+    }
+  }
+
   // ---- training mode ------------------------------------------------------
 
   /** In training the explorer (which would give away answers) and editing tools are hidden. */
@@ -404,6 +566,7 @@ export class RepertoirePanel {
   /** Call whenever the board position changes. */
   positionChanged() {
     if (!this.available) return;
+    this._renderBranches();
     this.flushComment();
     if (!this.training) this.onShapes([]);
     this.refresh(this.training); // no debounce in training: positions change one at a time

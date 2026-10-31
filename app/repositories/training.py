@@ -35,10 +35,17 @@ def current_streaks(s: Session, line_ids: list[int]) -> dict[int, int]:
     return streaks
 
 
-def training_lines(s: Session, opening_id: int, mode: str = "due", line_id: int | None = None) -> dict:
-    """Lines to train, most overdue first. mode: 'due' (next review today or earlier) or 'all'."""
+def training_lines(
+    s: Session, opening_id: int, mode: str = "due", line_id: int | None = None, tag_id: int | None = None
+) -> dict:
+    """Lines to train, most overdue first. mode: 'due' (next review today or earlier) or 'all'.
+    tag_id restricts to the lines in that branch."""
+    from app.repositories.tags import lines_with_tag
+
     opening = get_opening(s, opening_id)
     q = select(Line).where(Line.opening_id == opening_id)
+    if tag_id is not None:
+        q = q.where(Line.id.in_(lines_with_tag(s, opening_id, tag_id) or {-1}))
     if line_id is not None:
         q = q.where(Line.id == line_id)
     elif mode == "due":

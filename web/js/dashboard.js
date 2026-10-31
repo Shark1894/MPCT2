@@ -25,6 +25,7 @@ export class DashboardView {
     this.data = null;
     this.el = {
       opening: $('dash-opening'),
+      tag: $('dash-tag'),
       color: $('dash-color'),
       trainDue: $('dash-train-due'),
       trainAll: $('dash-train-all'),
@@ -47,8 +48,10 @@ export class DashboardView {
       this.repertoire.selectOpening(Number(e.opening.value), true);
       await this.refresh();
     });
-    e.trainDue.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'due'));
-    e.trainAll.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'all'));
+    e.tag.addEventListener('change', () => this.repertoire.setTagFilter(e.tag.value ? Number(e.tag.value) : null));
+    const tag = () => this.repertoire.currentTag();
+    e.trainDue.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'due', null, tag()));
+    e.trainAll.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'all', null, tag()));
     e.resetAll.addEventListener('click', () => this._closeMenu() || this.resetAll());
     e.deleteAll.addEventListener('click', () => this._closeMenu() || this.deleteAll());
     e.deleteOpening.addEventListener('click', () => this._closeMenu() || this.deleteOpening());
@@ -79,13 +82,25 @@ export class DashboardView {
       return;
     }
     sel.value = String(opening.id);
+
+    const tags = this.repertoire.tags;
+    const tagSel = this.el.tag;
+    tagSel.innerHTML = '';
+    tagSel.appendChild(new Option('All lines', ''));
+    for (const t of tags) tagSel.appendChild(new Option(t.name, t.id));
+    const tagId = this.repertoire.tagId;
+    tagSel.value = tagId ? String(tagId) : '';
+    tagSel.hidden = tags.length === 0;
+
+    let data;
     try {
-      this.data = await api.dashboard(opening.id);
+      data = await api.dashboard(opening.id, tagId);
     } catch (err) {
       this._renderEmpty(`Couldn't load the dashboard: ${err.message}`);
       return;
     }
-    if (this._opening()?.id !== this.data.opening.id) return; // selection changed meanwhile
+    if (this._opening()?.id !== data.opening.id || this.repertoire.tagId !== data.tag_id) return; // changed meanwhile
+    this.data = data;
     this._render();
   }
 
@@ -114,7 +129,9 @@ export class DashboardView {
 
     e.lines.innerHTML = '';
     e.empty.hidden = lines.length > 0;
-    e.empty.textContent = 'No lines yet. Add some from the Board view with Add line.';
+    e.empty.textContent = this.data.tag_id
+      ? 'No lines pass through this branch’s position.'
+      : 'No lines yet. Add some from the Board view with Add line.';
     for (const line of lines) e.lines.appendChild(this._lineRow(line));
   }
 
@@ -126,6 +143,18 @@ export class DashboardView {
     const moves = document.createElement('div');
     moves.className = 'dash-moves';
     moves.textContent = formatLine(line.moves);
+    const names = new Map(this.repertoire.tags.map((t) => [t.id, t.name]));
+    const chips = (line.tags ?? []).filter((id) => names.has(id));
+    if (chips.length) {
+      const tagRow = document.createElement('div');
+      for (const id of chips) {
+        const chip = document.createElement('span');
+        chip.className = 'line-tag';
+        chip.textContent = names.get(id);
+        tagRow.appendChild(chip);
+      }
+      moves.appendChild(tagRow);
+    }
 
     const due = document.createElement('div');
     due.className = 'dash-due';
@@ -146,7 +175,7 @@ export class DashboardView {
     const actions = document.createElement('div');
     actions.className = 'dash-actions-row';
     actions.append(
-      this._button('Train', () => this.onTrain(this._opening(), 'all', line.id), 'primary'),
+      this._button('Train', () => this.onTrain(this._opening(), 'all', line.id, null), 'primary'),
       this._button('Show', () => this.onShowLine(line.moves)),
       this._button('Reset', () => this.resetLine(line)),
       this._button('Delete', () => this.deleteLine(line), 'danger-outline'),

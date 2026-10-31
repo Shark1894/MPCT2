@@ -406,6 +406,67 @@ textarea[readonly] {
   font-size: 12px;
 }
 
+/* ---- branch tags ---- */
+
+.branches-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.branch-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.branch-chip {
+  min-height: 30px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  background: rgba(201, 138, 78, 0.12);
+  border-color: rgba(201, 138, 78, 0.5);
+}
+
+.branch-chip.here {
+  background: rgba(201, 138, 78, 0.3);
+  border-color: var(--copper);
+  font-weight: 600;
+}
+
+.branch-sep {
+  color: var(--text-dim);
+}
+
+.branch-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.line-tag {
+  display: inline-block;
+  margin: 4px 4px 0 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text);
+  background: rgba(201, 138, 78, 0.15);
+  border: 1px solid rgba(201, 138, 78, 0.45);
+}
+
+.dash-title select.dash-tag {
+  width: auto;
+  max-width: 260px;
+  font-size: 15px;
+  font-weight: 500;
+  background: var(--surface);
+}
+
 /* ---- training ---- */
 
 .rep-build {
@@ -750,6 +811,7 @@ button.move:hover {
 
 .dash-title {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   min-width: 0;

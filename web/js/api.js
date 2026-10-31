@@ -50,12 +50,20 @@ export const api = {
 
   explorer: (openingId, fen) => request('GET', `/openings/${openingId}/explorer`, { params: { fen } }),
 
-  training: (openingId, mode = 'due', lineId = null) =>
-    request('GET', `/openings/${openingId}/training`, { params: lineId ? { line_id: lineId } : { mode } }),
+  training: (openingId, mode = 'due', lineId = null, tagId = null) =>
+    request('GET', `/openings/${openingId}/training`, {
+      params: lineId ? { line_id: lineId } : { mode, ...(tagId ? { tag_id: tagId } : {}) },
+    }),
   recordReview: (lineId, practice, attempts) =>
     request('POST', `/lines/${lineId}/reviews`, { body: { practice, attempts } }),
 
-  dashboard: (openingId) => request('GET', `/openings/${openingId}/dashboard`),
+  dashboard: (openingId, tagId = null) =>
+    request('GET', `/openings/${openingId}/dashboard`, { params: tagId ? { tag_id: tagId } : {} }),
+
+  tags: (openingId) => request('GET', `/openings/${openingId}/tags`),
+  createTag: (openingId, name, fen) => request('POST', `/openings/${openingId}/tags`, { body: { name, fen } }),
+  renameTag: (tagId, name) => request('PATCH', `/tags/${tagId}`, { body: { name } }),
+  deleteTag: (tagId) => request('DELETE', `/tags/${tagId}`),
   resetLine: (lineId) => request('POST', `/lines/${lineId}/reset`),
   resetOpening: (openingId) => request('POST', `/openings/${openingId}/reset`),
   deleteAllLines: (openingId) => request('DELETE', `/openings/${openingId}/lines`),

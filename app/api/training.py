@@ -58,8 +58,9 @@ def training_lines(
     s: Db,
     mode: Annotated[Literal["due", "all"], Query()] = "due",
     line_id: int | None = None,
+    tag_id: int | None = None,
 ):
-    return repo.training_lines(s, opening_id, mode, line_id)
+    return repo.training_lines(s, opening_id, mode, line_id, tag_id)
 
 
 @router.post("/lines/{line_id}/reviews", response_model=ReviewOut, status_code=201)

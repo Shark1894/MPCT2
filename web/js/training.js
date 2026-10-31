@@ -60,21 +60,22 @@ export class TrainingController {
 
   // ---- session lifecycle ------------------------------------------------
 
-  async start(opening, mode, lineId = null) {
+  async start(opening, mode, lineId = null, tag = null) {
     let data;
     try {
-      data = await api.training(opening.id, mode, lineId);
+      data = await api.training(opening.id, mode, lineId, tag?.id ?? null);
     } catch (err) {
       toast(err.message, 'error');
       return;
     }
     if (data.lines.length === 0) {
-      toast(mode === 'due' ? `Nothing due in ${opening.name}.` : `${opening.name} has no lines yet.`);
+      const where = tag ? `${opening.name} › ${tag.name}` : opening.name;
+      toast(mode === 'due' ? `Nothing due in ${where}.` : `${where} has no lines yet.`);
       return;
     }
     this.session = new TrainingSession(data);
     this.board.setOrientation(data.opening.color);
-    this.el.title.textContent = `Training: ${data.opening.name}`;
+    this.el.title.textContent = `Training: ${data.opening.name}${tag && !lineId ? ` › ${tag.name}` : ''}`;
     this.el.box.hidden = false;
     this.el.summary.hidden = true;
     this.onModeChange(true);

@@ -32,17 +32,19 @@ class DashboardLine(BaseModel):
     reviews: int
     correct: int
     last_reviewed_at: datetime | None
+    tags: list[int]  # ids of the branch tags this line passes through
 
 
 class DashboardOut(BaseModel):
     opening: OpeningOut
+    tag_id: int | None
     stats: DashboardStats
     lines: list[DashboardLine]
 
 
 @router.get("/openings/{opening_id}/dashboard", response_model=DashboardOut)
-def dashboard(opening_id: int, s: Db):
-    return repo.dashboard(s, opening_id)
+def dashboard(opening_id: int, s: Db, tag_id: int | None = None):
+    return repo.dashboard(s, opening_id, tag_id)
 
 
 @router.post("/lines/{line_id}/reset", status_code=204)

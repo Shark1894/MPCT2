@@ -72,6 +72,21 @@ en passant square that allows no capture are ignored, so transpositions match.
 Lines always start from the initial position. Extending a line makes it due for review today,
 since it now has moves you haven't trained.
 
+## Branch tags
+
+A tag names a position within one opening, e.g. "Queen's Gambit Accepted" after 1.d4 d5 2.c4 dxc4. Every line in
+that opening passing through the position carries the tag (including transpositions and lines added later), and
+tags can nest (a line can be in "QGA" and "QGA 3.e4").
+
+- **Board:** the **Branches** section shows the tags along the current moves; tap one to jump there. **Tag this
+  position** names the current position (not the start, and only where a line in the opening goes);
+  **Rename tag** / **Remove tag** appear at a tagged position. Removing a tag keeps the lines.
+- **Training:** the **Lines** dropdown (shown once an opening has tags) limits Train due / Train all to one branch.
+- **Dashboard:** the same filter (stats then cover just that branch), and each line lists its tags.
+
+API: `GET/POST /api/openings/{id}/tags` (`{"name", "fen"}`), `PATCH/DELETE /api/tags/{id}`; `tag_id=` on
+`/api/openings/{id}/training` and `/api/openings/{id}/dashboard`.
+
 ## Training
 
 - **Train due (n)** reviews the opening's lines that are due, most overdue first; **Train all** drills every line.
@@ -157,6 +172,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/board.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/repertoire.e2e.cjs   # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/training.e2e.cjs     # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/dashboard.e2e.cjs    # empty database
+MPCT_URL=http://localhost:8010/ node tests/e2e/tags.e2e.cjs         # empty database
 ```
 
 ## Deploy on the home server

@@ -22,14 +22,23 @@ const repertoire = new RepertoirePanel({
   },
   onShapes: (shapes) => board.setShapes(shapes),
   onOrientation: (color) => board.setOrientation(color),
-  onTrain: (opening, mode) => trainer.start(opening, mode),
+  onTrain: (opening, mode, tag) => trainer.start(opening, mode, null, tag),
+  onJump: (ply) => {
+    if (trainer.active) return;
+    game.goTo(ply);
+    render();
+  },
 });
+// Branch tags or the branch filter changed: keep the dashboard in step when it's showing.
+repertoire.onTagsChanged = () => {
+  if (view === 'dashboard') dashboard.refresh();
+};
 
 const dashboard = new DashboardView({
   repertoire,
-  onTrain: (opening, mode, lineId) => {
+  onTrain: (opening, mode, lineId, tag) => {
     setView('board');
-    trainer.start(opening, mode, lineId);
+    trainer.start(opening, mode, lineId, tag);
   },
   onShowLine: (sans) => {
     game.load(START_FEN);
@@ -247,4 +256,4 @@ repertoire.init().then(() => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, repertoire, trainer, dashboard, setView };
+window.mpct = { game, board, repertoire, trainer, dashboard, setView, render };

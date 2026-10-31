@@ -154,3 +154,20 @@ class MoveAttempt(Base):
     correct: Mapped[bool] = mapped_column(Boolean)
 
     review: Mapped[LineReview] = relationship(back_populates="attempts")
+
+
+class OpeningTag(Base):
+    """A named branch of an opening: every line in the opening that passes through
+    the tagged position carries the tag (including lines added later)."""
+
+    __tablename__ = "opening_tags"
+    __table_args__ = (
+        UniqueConstraint("opening_id", "name", name="uq_opening_tags_name"),
+        UniqueConstraint("opening_id", "position_id", name="uq_opening_tags_position"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    opening_id: Mapped[int] = mapped_column(ForeignKey("openings.id", ondelete="CASCADE"), index=True)
+    position_id: Mapped[int] = mapped_column(ForeignKey("positions.id"))
+    name: Mapped[str] = mapped_column(String(60))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
