@@ -1322,7 +1322,7 @@ body.engine-on .history {
 @media (max-width: 760px) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'board' 'controls' 'repertoire' 'engine' 'history' 'tools';
+    grid-template-areas: 'board' 'controls' 'engine' 'repertoire' 'history' 'tools';
     padding: 8px;
     gap: 10px;
   }

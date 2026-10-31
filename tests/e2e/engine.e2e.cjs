@@ -134,9 +134,11 @@ const engineShapes = (p) => p.evaluate(() => mpct.board.layers.engine ?? []);
   await depthAtLeast(mp, 10);
   check(await mp.evaluate(() => mpct.analysis.engine.threads) <= 2, 'phone: at most 2 threads');
   const order = await mp.evaluate(() =>
-    ['.board-area', '.controls', '.repertoire', '.engine', '.history'].map((s) => document.querySelector(s).getBoundingClientRect().top),
+    ['.board-area', '.controls', '.engine', '.repertoire', '.history'].map((s) => document.querySelector(s).getBoundingClientRect().top),
   );
-  check(order.every((v, i) => i === 0 || v > order[i - 1]), 'phone order: board, controls, repertoire, engine, moves');
+  check(order.every((v, i) => i === 0 || v > order[i - 1]), 'phone order: board, controls, engine, repertoire, moves');
+  const gap = await mp.evaluate(() => document.querySelector('.engine').getBoundingClientRect().top - document.querySelector('.controls').getBoundingClientRect().bottom);
+  check(gap >= 0 && gap <= 12, 'phone: engine panel directly under the move buttons');
   check(await mp.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'phone: no horizontal overflow');
   if (SHOTS) await mp.screenshot({ path: `${SHOTS}/engine-phone.png`, fullPage: true });
 
