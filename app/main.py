@@ -14,10 +14,11 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
-from app.api import repertoires
+from app.api import repertoires, training
 from app.core.positions import InvalidLine, InvalidPosition
 from app.db.session import DatabaseNotConfigured, database_status
 from app.repositories.repertoire import Conflict, NotFound
+from app.repositories.training import InvalidReview
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(Conflict, _error(409))
     app.add_exception_handler(InvalidLine, _error(422))
     app.add_exception_handler(InvalidPosition, _error(422))
+    app.add_exception_handler(InvalidReview, _error(422))
     app.add_exception_handler(DatabaseNotConfigured, _error(503))
 
     @app.middleware("http")
@@ -75,6 +77,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "version": __version__, "build": BUILD_ID, "database": database_status()}
 
     app.include_router(repertoires.router)
+    app.include_router(training.router)
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     @app.get("/index.html", response_class=HTMLResponse, include_in_schema=False)

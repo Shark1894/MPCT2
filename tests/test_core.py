@@ -99,3 +99,36 @@ def test_exists_wins_over_extend():
 def test_empty_line_rejected():
     with pytest.raises(ValueError):
         plan_line([], {1: RUY})
+
+
+# ---- scheduling ---------------------------------------------------------
+
+from datetime import date as _date  # noqa: E402
+
+from app.core.scheduling import interval_days, next_review_on, next_streak, user_plays_ply  # noqa: E402
+
+
+@pytest.mark.parametrize("streak,days", [(0, 0), (1, 1), (2, 3), (3, 7), (4, 14), (5, 30), (6, 60)])
+def test_intervals_match_legacy_table(streak, days):
+    assert interval_days(streak) == days
+
+
+@pytest.mark.parametrize("streak", [7, 8, 50])
+def test_long_streaks_cap_at_60_days(streak):
+    # Regression: the legacy app fell back to 0 days (due again today) after 7 in a row.
+    assert interval_days(streak) == 60
+
+
+def test_streak_resets_on_mistake():
+    assert next_streak(5, correct=True) == 6
+    assert next_streak(5, correct=False) == 0
+
+
+def test_next_review_date():
+    assert next_review_on(0, _date(2026, 1, 31)) == _date(2026, 1, 31)
+    assert next_review_on(3, _date(2026, 1, 31)) == _date(2026, 2, 7)
+
+
+def test_user_plays_ply():
+    assert [p for p in range(1, 7) if user_plays_ply(p, "white")] == [1, 3, 5]
+    assert [p for p in range(1, 7) if user_plays_ply(p, "black")] == [2, 4, 6]

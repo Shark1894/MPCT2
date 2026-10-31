@@ -5,6 +5,7 @@ import { Game, START_FEN } from './game.js';
 import { BoardView } from './board.js';
 import { renderMoveList } from './movelist.js';
 import { RepertoirePanel } from './repertoire.js';
+import { TrainingController } from './training.js';
 import { isModalOpen, store } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -20,6 +21,19 @@ const repertoire = new RepertoirePanel({
   },
   onShapes: (shapes) => board.setShapes(shapes),
   onOrientation: (color) => board.setOrientation(color),
+  onTrain: (opening, mode) => trainer.start(opening, mode),
+});
+
+const trainer = new TrainingController({
+  game,
+  board,
+  panel: repertoire,
+  render: () => render(),
+  onModeChange: (active) => {
+    document.body.classList.toggle('training', active);
+    document.querySelector('.mode').textContent = active ? 'Training' : 'Repertoire';
+    repertoire.setTraining(active);
+  },
 });
 
 const ui = {
@@ -38,17 +52,18 @@ const ui = {
 let shownFen = null;
 
 function render() {
-  board.show(game);
+  board.show(game, { canMove: !trainer.active || trainer.canMove() });
   const status = game.status();
   ui.status.textContent = status.text;
   ui.status.classList.toggle('over', status.over);
   renderMoveList(ui.moves, game, (ply) => {
+    if (trainer.active) return; // no peeking ahead while training
     game.goTo(ply);
     render();
   });
   if (document.activeElement !== ui.fen) ui.fen.value = game.fen();
-  const atStart = game.ply === 0;
-  const atEnd = game.ply === game.moves.length;
+  const atStart = game.ply === 0 || trainer.active;
+  const atEnd = game.ply === game.moves.length || trainer.active;
   ui.nav.start.disabled = atStart;
   ui.nav.back.disabled = atStart;
   ui.nav.forward.disabled = atEnd;
@@ -87,11 +102,16 @@ async function onBoardMove(from, to) {
     promotion = await board.choosePromotion(game.turn());
     if (!promotion) return render(); // cancelled: put the pawn back
   }
+  if (trainer.active) {
+    trainer.onUserMove(from, to, promotion);
+    return;
+  }
   game.play(from, to, promotion);
   render();
 }
 
 function step(action) {
+  if (trainer.active) return; // navigation is locked while training
   action();
   render();
 }
@@ -116,7 +136,7 @@ document.addEventListener('keydown', (e) => {
     End: () => game.toEnd(),
     f: () => board.flip(),
   };
-  const action = actions[e.key];
+  const action = trainer.active && e.key !== 'f' ? null : actions[e.key];
   if (action && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     step(action);
@@ -132,6 +152,7 @@ $('board').addEventListener(
     const now = performance.now();
     if (now - lastWheel < 60) return;
     lastWheel = now;
+    if (trainer.active) return;
     step(() => (e.deltaY > 0 ? game.forward() : game.back()));
   },
   { passive: false },
@@ -188,4 +209,4 @@ render();
 repertoire.init();
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, repertoire };
+window.mpct = { game, board, repertoire, trainer };

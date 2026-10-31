@@ -51,41 +51,67 @@
       </section>
 
       <section class="panel repertoire" aria-label="Repertoire">
-        <div class="picker">
-          <label for="rep-select">Repertoire</label>
-          <div class="select-row">
-            <select id="rep-select"></select>
-            <button id="rep-new" type="button" class="icon-btn" title="New repertoire" aria-label="New repertoire">+</button>
+        <div id="training" class="training" hidden>
+          <div class="train-head">
+            <h2 id="train-title">Training</h2>
+            <button id="train-stop" type="button" class="small">Stop</button>
           </div>
-        </div>
-        <div class="picker">
-          <label for="opening-select">Opening</label>
-          <div class="select-row">
-            <select id="opening-select"></select>
-            <button id="opening-new" type="button" class="icon-btn" title="New opening" aria-label="New opening">+</button>
+          <p id="train-progress" class="meta"></p>
+          <p id="train-message" class="train-message" aria-live="polite"></p>
+          <div id="train-end" class="train-end" hidden>
+            <p id="train-result" class="train-result" aria-live="polite"></p>
+            <div class="train-end-actions">
+              <button id="train-next" type="button" class="primary">Next line</button>
+              <button id="train-retry" type="button" title="Practise this line again (doesn't change the schedule)">Retry</button>
+            </div>
           </div>
-          <p id="opening-info" class="meta"></p>
-        </div>
-        <details class="manage">
-          <summary>Manage repertoire and opening</summary>
-          <div class="manage-grid">
-            <button id="rep-rename" type="button">Rename repertoire</button>
-            <button id="rep-delete" type="button" class="danger-outline">Delete repertoire</button>
-            <button id="opening-edit" type="button">Edit opening</button>
-            <button id="opening-delete" type="button" class="danger-outline">Delete opening</button>
-          </div>
-        </details>
-
-        <div class="explorer-box">
-          <h2>Repertoire moves</h2>
-          <div id="explorer" class="explorer"></div>
-          <div class="line-actions">
-            <button id="line-add" type="button" class="primary" title="Save the moves up to this position as a line">Add line</button>
-            <button id="line-delete" type="button" title="Delete every line through this position">Delete line</button>
+          <div id="train-summary" class="train-summary" hidden>
+            <p id="train-summary-text"></p>
+            <button id="train-done" type="button" class="primary">Done</button>
           </div>
         </div>
 
-        <div class="comments">
+        <div id="rep-build" class="rep-build">
+          <div class="picker">
+            <label for="rep-select">Repertoire</label>
+            <div class="select-row">
+              <select id="rep-select"></select>
+              <button id="rep-new" type="button" class="icon-btn" title="New repertoire" aria-label="New repertoire">+</button>
+            </div>
+          </div>
+          <div class="picker">
+            <label for="opening-select">Opening</label>
+            <div class="select-row">
+              <select id="opening-select"></select>
+              <button id="opening-new" type="button" class="icon-btn" title="New opening" aria-label="New opening">+</button>
+            </div>
+            <p id="opening-info" class="meta"></p>
+          </div>
+          <div class="train-actions">
+            <button id="train-due" type="button" class="primary">Train due</button>
+            <button id="train-all" type="button">Train all</button>
+          </div>
+          <details class="manage">
+            <summary>Manage repertoire and opening</summary>
+            <div class="manage-grid">
+              <button id="rep-rename" type="button">Rename repertoire</button>
+              <button id="rep-delete" type="button" class="danger-outline">Delete repertoire</button>
+              <button id="opening-edit" type="button">Edit opening</button>
+              <button id="opening-delete" type="button" class="danger-outline">Delete opening</button>
+            </div>
+          </details>
+
+          <div class="explorer-box">
+            <h2>Repertoire moves</h2>
+            <div id="explorer" class="explorer"></div>
+            <div class="line-actions">
+              <button id="line-add" type="button" title="Save the moves up to this position as a line">Add line</button>
+              <button id="line-delete" type="button" title="Delete every line through this position">Delete line</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="comments" class="comments">
           <label for="comment-current">Comment <span id="comment-status" class="comment-status"></span></label>
           <textarea id="comment-current" rows="3" placeholder="Notes on this position"></textarea>
           <div id="comment-previous-box" hidden>

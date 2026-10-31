@@ -2,12 +2,14 @@
 linking a before-position to an after-position) with a repertoires table instead of
 one .db file per repertoire, enforced foreign keys and cascading deletes.
 
-Review history tables (line_reviews, move_attempts) arrive with the trainer in Phase 4.
+Review history: line_reviews (one row per finished training attempt at a line) and
+move_attempts (every move tried during it, including the wrong move actually played).
 """
 
 from datetime import date, datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -114,3 +116,41 @@ class PositionComment(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class LineReview(Base):
+    """One finished training attempt at a line.
+
+    `streak` is the line's consecutive-correct count after this review. Practice
+    reviews (retries straight after a mistake) are recorded but don't change the
+    streak or the schedule.
+    """
+
+    __tablename__ = "line_reviews"
+    __table_args__ = (Index("ix_line_reviews_line_time", "line_id", "reviewed_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    line_id: Mapped[int] = mapped_column(ForeignKey("lines.id", ondelete="CASCADE"))
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    correct: Mapped[bool] = mapped_column(Boolean)
+    practice: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    mistakes: Mapped[int] = mapped_column(server_default="0")
+    streak: Mapped[int] = mapped_column(server_default="0")
+
+    attempts: Mapped[list["MoveAttempt"]] = relationship(
+        back_populates="review", order_by="MoveAttempt.id", passive_deletes=True
+    )
+
+
+class MoveAttempt(Base):
+    """A move tried during a review: the expected move (move_id) and what was played."""
+
+    __tablename__ = "move_attempts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    line_review_id: Mapped[int] = mapped_column(ForeignKey("line_reviews.id", ondelete="CASCADE"), index=True)
+    move_id: Mapped[int] = mapped_column(ForeignKey("moves.id", ondelete="CASCADE"), index=True)
+    played_uci: Mapped[str] = mapped_column(String(5))
+    correct: Mapped[bool] = mapped_column(Boolean)
+
+    review: Mapped[LineReview] = relationship(back_populates="attempts")

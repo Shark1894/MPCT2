@@ -19,11 +19,13 @@ export class RepertoirePanel {
    * @param {(shapes: object[]) => void} opts.onShapes  draw arrows on the board
    * @param {(color: 'white'|'black') => void} opts.onOrientation
    */
-  constructor({ game, onPlaySan, onShapes, onOrientation }) {
+  constructor({ game, onPlaySan, onShapes, onOrientation, onTrain }) {
     this.game = game;
     this.onPlaySan = onPlaySan;
     this.onShapes = onShapes;
     this.onOrientation = onOrientation;
+    this.onTrain = onTrain; // (opening, 'due' | 'all') => void
+    this.training = false;
 
     this.repertoires = [];
     this.openings = [];
@@ -53,6 +55,10 @@ export class RepertoirePanel {
       commentPreviousBox: $('comment-previous-box'),
       commentStatus: $('comment-status'),
       error: $('rep-error'),
+      build: $('rep-build'),
+      trainDue: $('train-due'),
+      trainAll: $('train-all'),
+      comments: $('comments'),
     };
     this._bind();
   }
@@ -71,6 +77,8 @@ export class RepertoirePanel {
     e.openingDelete.addEventListener('click', () => this.deleteOpening());
     e.lineAdd.addEventListener('click', () => this.addLine());
     e.lineDelete.addEventListener('click', () => this.deleteLines());
+    e.trainDue.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'due'));
+    e.trainAll.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'all'));
 
     e.commentCurrent.addEventListener('input', () => this._commentEdited());
     e.commentCurrent.addEventListener('blur', () => this.flushComment());
@@ -228,6 +236,9 @@ export class RepertoirePanel {
 
   _renderInfo() {
     const o = this._opening();
+    this.el.trainDue.textContent = o ? `Train due (${o.due})` : 'Train due';
+    this.el.trainDue.disabled = !o || o.due === 0;
+    this.el.trainAll.disabled = !o || o.lines === 0;
     if (!o) {
       this.el.openingInfo.textContent = '';
       return;
@@ -361,14 +372,41 @@ export class RepertoirePanel {
     }
   }
 
+  // ---- training mode ------------------------------------------------------
+
+  /** In training the explorer (which would give away answers) and editing tools are hidden. */
+  async setTraining(active) {
+    this.training = active;
+    this.el.build.hidden = active;
+    this.onShapes([]);
+    if (!active) {
+      this.setCommentsVisible(true);
+      try {
+        await this._reloadOpenings(); // due counts changed
+      } catch {
+        /* shown on next action */
+      }
+      this.refresh(true);
+    }
+  }
+
+  setCommentsVisible(visible) {
+    this.el.comments.hidden = !visible;
+  }
+
+  /** Refresh opening counts (e.g. after training). */
+  async reloadOpenings() {
+    await this._reloadOpenings();
+  }
+
   // ---- position-dependent content -----------------------------------------
 
   /** Call whenever the board position changes. */
   positionChanged() {
     if (!this.available) return;
     this.flushComment();
-    this.onShapes([]);
-    this.refresh(false);
+    if (!this.training) this.onShapes([]);
+    this.refresh(this.training); // no debounce in training: positions change one at a time
   }
 
   refresh(immediate) {
@@ -387,13 +425,13 @@ export class RepertoirePanel {
     const openingId = this.openingId;
 
     const [explorer, current, previous] = await Promise.all([
-      openingId ? api.explorer(openingId, fen).catch((err) => err) : [],
+      openingId && !this.training ? api.explorer(openingId, fen).catch((err) => err) : [],
       repId ? api.comment(repId, fen).catch(() => null) : null,
       repId && prevFen ? api.comment(repId, prevFen).catch(() => null) : null,
     ]);
     if (token !== this.token) return; // the position moved on while we waited
 
-    this._renderExplorer(explorer, openingId);
+    if (!this.training) this._renderExplorer(explorer, openingId);
     // Don't overwrite text being typed for this position since the request went out.
     if (!(this.pendingComment && this.pendingComment.fen === fen)) {
       this.el.commentCurrent.value = current?.comment ?? '';

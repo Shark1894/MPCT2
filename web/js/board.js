@@ -35,17 +35,18 @@ export class BoardView {
     });
   }
 
-  /** Redraw from game state. */
-  show(game) {
+  /** Redraw from game state. canMove=false locks the pieces (e.g. during the trainer's reply). */
+  show(game, { canMove = true } = {}) {
     const turn = game.turn();
+    const movable = canMove && !game.isOver();
     this.cg.set({
       fen: game.fen(),
       turnColor: turn,
       lastMove: game.lastMove(),
       check: game.inCheck() ? turn : false,
       movable: {
-        color: game.isOver() ? undefined : turn,
-        dests: game.isOver() ? new Map() : game.dests(),
+        color: movable ? turn : undefined,
+        dests: movable ? game.dests() : new Map(),
       },
     });
   }

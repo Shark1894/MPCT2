@@ -50,6 +50,11 @@ export const api = {
 
   explorer: (openingId, fen) => request('GET', `/openings/${openingId}/explorer`, { params: { fen } }),
 
+  training: (openingId, mode = 'due', lineId = null) =>
+    request('GET', `/openings/${openingId}/training`, { params: lineId ? { line_id: lineId } : { mode } }),
+  recordReview: (lineId, practice, attempts) =>
+    request('POST', `/lines/${lineId}/reviews`, { body: { practice, attempts } }),
+
   comment: (repId, fen) => request('GET', `/repertoires/${repId}/comment`, { params: { fen } }),
   saveComment: (repId, fen, comment) => request('PUT', `/repertoires/${repId}/comment`, { body: { fen, comment } }),
 };

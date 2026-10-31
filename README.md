@@ -21,8 +21,9 @@ The full plan, decisions and data model are in the project's
 | 1 | Board: legal moves, move list, navigation, promotion, flip, FEN | Done |
 | 2 | Postgres + repertoire API | Done |
 | 3 | Repertoire UI: pickers, explorer, add/delete line, comments | Done |
-| 4 | Opening trainer | Next |
-| 5–8 | Review dashboard, data import, engine, games | Planned |
+| 4 | Opening trainer: spaced repetition, hints, practice retries | Done |
+| 5 | Review dashboard | Next |
+| 6–8 | Legacy data import, engine, games | Planned |
 
 ## Using the board
 
@@ -69,6 +70,22 @@ en passant square that allows no capture are ignored, so transpositions match.
 Lines always start from the initial position. Extending a line makes it due for review today,
 since it now has moves you haven't trained.
 
+## Training
+
+- **Train due (n)** reviews the opening's lines that are due, most overdue first; **Train all** drills every line.
+- The app plays the opponent's moves; you play yours. The explorer is hidden and navigation is locked so nothing
+  gives the answer away. Comments show while a line is still being learned (streak under 2) or after a mistake.
+- Wrong move: it snaps back. After 2 wrong tries on a move the piece to move is highlighted; after 3 the move is
+  shown as an arrow.
+- A line with no mistakes adds 1 to its streak; any mistake resets the streak to 0 and makes it due again today.
+  Next review after a streak of 0–6+: 0, 1, 3, 7, 14, 30, 60 days (capped at 60).
+- **Retry** after a line is practice: recorded, but doesn't change the schedule. Stopping half-way records nothing.
+- Every move tried is stored (`move_attempts`), including the wrong move actually played.
+
+API: `GET /api/openings/{id}/training?mode=due|all` (or `line_id=`) returns the lines to train;
+`POST /api/lines/{id}/reviews` with `{"practice": false, "attempts": [{"ply": 2, "uci": "c7c6"}, ...]}` records a
+finished line (the server checks each move against the line and updates the schedule).
+
 ## Run locally
 
 ```bash
@@ -108,7 +125,8 @@ Browser checks against a running copy (the repertoire suite needs an empty datab
 ```bash
 npm i --no-save playwright && npx playwright install chromium
 MPCT_URL=http://localhost:8010/ node tests/e2e/board.e2e.cjs
-MPCT_URL=http://localhost:8010/ node tests/e2e/repertoire.e2e.cjs
+MPCT_URL=http://localhost:8010/ node tests/e2e/repertoire.e2e.cjs   # empty database
+MPCT_URL=http://localhost:8010/ node tests/e2e/training.e2e.cjs     # empty database
 ```
 
 ## Deploy on the home server
@@ -185,6 +203,8 @@ web/              frontend served as-is
   js/board.js     chessground wrapper + promotion picker
   js/movelist.js  move list rendering
   js/repertoire.js repertoire panel: pickers, explorer, lines, comments
+  js/trainer.js   training session rules (pure logic, unit tested)
+  js/training.js  training mode: board, auto replies, hints, results
   js/api.js       JSON API client
   js/ui.js        dialogs, toast, local storage
   js/main.js      page wiring, keyboard, FEN tools
