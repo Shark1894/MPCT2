@@ -47,16 +47,21 @@ class LineMove:
     key_after: str
 
 
-def walk_line(ucis: list[str]) -> list[LineMove]:
-    """Play UCI moves from the initial position, returning SAN and position keys.
+def walk_line(ucis: list[str], start_fen: str | None = None, allow_empty: bool = False) -> list[LineMove]:
+    """Play UCI moves from the initial position (or start_fen), returning SAN and position keys.
 
     SAN is always generated here from the actual move, never trusted from the client
     (the legacy extension bug stored SAN from the wrong list index).
-    Raises InvalidLine for an empty list, malformed UCI or an illegal move.
+    Raises InvalidLine for an empty list (unless allow_empty), malformed UCI or an illegal move,
+    and InvalidPosition for a bad start_fen.
     """
-    if not ucis:
+    if not ucis and not allow_empty:
         raise InvalidLine("A line needs at least one move")
-    board = chess.Board()
+    if start_fen:
+        key_from_fen(start_fen)  # validates
+        board = chess.Board(start_fen.strip())
+    else:
+        board = chess.Board()
     out: list[LineMove] = []
     for ply, uci in enumerate(ucis, start=1):
         try:

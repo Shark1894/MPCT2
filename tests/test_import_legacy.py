@@ -153,3 +153,47 @@ def test_not_a_legacy_file(db, tmp_path):
         main([str(bogus)])
     with pytest.raises(SystemExit, match="Not found"):
         main([str(tmp_path / "missing.db")])
+
+
+@pytest.fixture
+def legacy_games_db(tmp_path):
+    path = tmp_path / "Games.db"
+    c = sqlite3.connect(path)
+    c.executescript(
+        """
+        CREATE TABLE games (game_id INTEGER PRIMARY KEY, player_white VARCHAR, player_black VARCHAR, team_white VARCHAR,
+                            team_black VARCHAR, competition VARCHAR, date DATE NOT NULL, result VARCHAR);
+        CREATE TABLE moves (move_id INTEGER PRIMARY KEY, game_id INTEGER, move_uci VARCHAR, move_san VARCHAR,
+                            move_number INTEGER, position_before_id INTEGER, position_after_id INTEGER);
+        CREATE TABLE positions (position_id INTEGER PRIMARY KEY, position_fen VARCHAR NOT NULL, comment VARCHAR);
+        """
+    )
+    c.execute("INSERT INTO games VALUES (1, 'Jason', 'Peter', 'Stepps', 'Paisley', 'GCL2', '2024-12-16', '1-0')")
+    c.execute("INSERT INTO games VALUES (2, 'Ruaridh', 'Jason', 'Montrose', 'Stepps', 'GCL2', '2024-10-31', '1-0')")  # no moves
+    c.execute("INSERT INTO games VALUES (3, 'Bad', 'Game', '', '', '', '2025-01-01', '*')")
+    for i, (uci, san) in enumerate([("e2e4", "e4"), ("c7c6", "c6"), ("d2d4", "d4")]):
+        c.execute("INSERT INTO moves (game_id, move_uci, move_san, move_number) VALUES (1, ?, ?, ?)", (uci, san, i + 1))
+    c.execute("INSERT INTO moves (game_id, move_uci, move_san, move_number) VALUES (3, 'e2e5', 'e5', 1)")
+    c.commit()
+    c.close()
+    return path
+
+
+def test_import_legacy_games(db, client, legacy_games_db, capsys):
+    assert main([str(legacy_games_db), "--dry-run"]) == 0
+    assert "imported:          2" in capsys.readouterr().out
+    assert count(db, "games") == 0
+
+    assert main([str(legacy_games_db)]) == 0
+    out = capsys.readouterr().out
+    assert "imported:          2" in out and "SKIPPED game 3" in out
+    games = {g["white"]: g for g in client.get("/api/games").json()}
+    assert set(games) == {"Jason", "Ruaridh"}
+    jason = client.get(f"/api/games/{games['Jason']['id']}").json()
+    assert [m["san"] for m in jason["moves"]] == ["e4", "c6", "d4"]
+    assert (jason["black_team"], jason["competition"], jason["played_on"], jason["result"]) == ("Paisley", "GCL2", "2024-12-16", "1-0")
+    assert games["Ruaridh"]["plies"] == 0
+
+    assert main([str(legacy_games_db)]) == 0  # re-running skips what's already there
+    assert "already in the app:   2" in capsys.readouterr().out
+    assert count(db, "games") == 2

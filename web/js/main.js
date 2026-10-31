@@ -8,6 +8,7 @@ import { RepertoirePanel } from './repertoire.js';
 import { TrainingController } from './training.js';
 import { DashboardView } from './dashboard.js';
 import { AnalysisPanel } from './analysis.js';
+import { GamePanel, GamesView } from './games.js';
 import { isModalOpen, store } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -32,7 +33,7 @@ const repertoire = new RepertoirePanel({
   },
   onShapes: (shapes) => board.setShapes(shapes),
   onOrientation: (color) => board.setOrientation(color),
-  onTrain: (opening, mode, tag) => trainer.start(opening, mode, null, tag),
+  onTrain: (opening, mode, tag) => startTraining(opening, mode, null, tag),
   onJump: (ply) => {
     if (trainer.active) return;
     game.goTo(ply);
@@ -48,7 +49,7 @@ const dashboard = new DashboardView({
   repertoire,
   onTrain: (opening, mode, lineId, tag) => {
     setView('board');
-    trainer.start(opening, mode, lineId, tag);
+    startTraining(opening, mode, lineId, tag);
   },
   onShowLine: (sans) => {
     game.load(START_FEN);
@@ -69,34 +70,61 @@ const trainer = new TrainingController({
     document.body.classList.toggle('training', active);
     $('mode-badge').hidden = !active;
     $('view-dashboard').disabled = active;
+    $('view-games').disabled = active;
     repertoire.setTraining(active);
   },
 });
 
-// ---- views: Board | Dashboard ---------------------------------------------
+// ---- games -------------------------------------------------------------------
 
+const gamePanel = new GamePanel({
+  game,
+  getOpening: () => repertoire._opening(),
+  render: () => render(),
+  onClosed: () => {
+    if (view === 'games') gamesView.refresh();
+  },
+});
+
+const gamesView = new GamesView({
+  panel: gamePanel,
+  game,
+  onOpen: async (id) => {
+    if (await gamePanel.open(id)) setView('board');
+  },
+});
+
+/** Training replaces the board's moves, so an open game is closed first (asking if unsaved). */
+async function startTraining(opening, mode, lineId, tag) {
+  if (!(await gamePanel.confirmLeave())) return;
+  trainer.start(opening, mode, lineId, tag);
+}
+
+// ---- views: Board | Dashboard | Games -----------------------------------------------
+
+const VIEWS = { board: 'main.layout', dashboard: '#dashboard', games: '#games-view' };
 let view = 'board';
 
 function setView(next) {
-  if (next === 'dashboard' && trainer.active) return;
+  if (next !== 'board' && trainer.active) return;
   view = next;
-  document.querySelector('main.layout').hidden = view !== 'board';
-  $('dashboard').hidden = view !== 'dashboard';
-  $('view-board').setAttribute('aria-pressed', String(view === 'board'));
-  $('view-dashboard').setAttribute('aria-pressed', String(view === 'dashboard'));
+  for (const [name, sel] of Object.entries(VIEWS)) {
+    document.querySelector(sel).hidden = view !== name;
+    $(`view-${name}`).setAttribute('aria-pressed', String(view === name));
+  }
   store.set('view', view);
-  if (view === 'dashboard') {
-    analysis.pause('dashboard');
-    dashboard.refresh();
-  } else {
+  if (view === 'board') {
     board.redraw();
-    analysis.resume('dashboard');
+    analysis.resume('away');
+  } else {
+    analysis.pause('away'); // the board isn't visible
+    if (view === 'dashboard') dashboard.refresh();
+    if (view === 'games') gamesView.refresh();
   }
   window.scrollTo(0, 0);
 }
 
-$('view-board').addEventListener('click', () => setView('board'));
-$('view-dashboard').addEventListener('click', () => setView('dashboard'));
+for (const name of Object.keys(VIEWS)) $(`view-${name}`).addEventListener('click', () => setView(name));
 
 const ui = {
   status: $('status'),
@@ -132,6 +160,7 @@ function render() {
   ui.nav.end.disabled = atEnd;
 
   saveGame();
+  gamePanel?.updateState();
   if (game.fen() !== shownFen) {
     shownFen = game.fen();
     repertoire.positionChanged();
@@ -269,9 +298,12 @@ $('btn-fen-copy').addEventListener('click', async () => {
 });
 
 render();
-repertoire.init().then(() => {
-  if (store.get('view') === 'dashboard') setView('dashboard');
+repertoire.init().then(async () => {
+  const openGameId = store.get('openGameId');
+  if (openGameId) await gamePanel.open(openGameId);
+  const saved = store.get('view');
+  if (saved && saved !== 'board' && VIEWS[saved]) setView(saved);
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, repertoire, trainer, dashboard, setView, render, analysis };
+window.mpct = { game, board, repertoire, trainer, dashboard, setView, render, analysis, gamePanel, gamesView };

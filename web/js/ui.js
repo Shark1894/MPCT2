@@ -12,8 +12,11 @@ function getDialog() {
 }
 
 /**
- * Show a modal form. fields: [{ name, label, type: 'text' | 'select', value, options: [[value, label]] }]
- * Resolves to { name: value, ... } or null if cancelled.
+ * Show a modal form. fields: [{ name, label, type, value, options, required, placeholder, file }]
+ *   type: 'text' (default), 'select' (options: [[value, label]]), 'date', 'textarea', 'checkbox'
+ *   required: text fields are required unless required: false
+ *   file: for a textarea, an accept string (e.g. '.pgn') adds a "Choose file" button that loads a file into it
+ * Resolves to { name: value, ... } (checkboxes give true/false) or null if cancelled.
  */
 export function formDialog({ title, message = '', fields = [], submit = 'Save', danger = false }) {
   const dlg = getDialog();
@@ -34,29 +37,48 @@ export function formDialog({ title, message = '', fields = [], submit = 'Save', 
 
   for (const f of fields) {
     const label = document.createElement('label');
-    label.className = 'modal-field';
+    label.className = f.type === 'checkbox' ? 'modal-field modal-check' : 'modal-field';
     const span = document.createElement('span');
     span.textContent = f.label;
-    label.appendChild(span);
     let input;
     if (f.type === 'select') {
       input = document.createElement('select');
-      for (const [value, text] of f.options) {
-        const opt = document.createElement('option');
-        opt.value = value;
-        opt.textContent = text;
-        input.appendChild(opt);
-      }
+      for (const [value, text] of f.options) input.appendChild(new Option(text, value));
+    } else if (f.type === 'textarea') {
+      input = document.createElement('textarea');
+      input.rows = 8;
+      input.spellcheck = false;
     } else {
       input = document.createElement('input');
-      input.type = 'text';
-      input.required = true;
-      input.maxLength = 100;
+      input.type = f.type === 'date' || f.type === 'checkbox' ? f.type : 'text';
+      if (input.type === 'text') input.maxLength = f.maxLength ?? 100;
       input.autocomplete = 'off';
     }
     input.name = f.name;
-    if (f.value !== undefined) input.value = f.value;
-    label.appendChild(input);
+    if (f.placeholder) input.placeholder = f.placeholder;
+    if ((f.type ?? 'text') === 'text' && f.required !== false) input.required = true;
+    if (f.type === 'textarea' && f.required) input.required = true;
+    if (f.type === 'checkbox') input.checked = Boolean(f.value);
+    else if (f.value !== undefined && f.value !== null) input.value = f.value;
+
+    if (f.type === 'checkbox') label.append(input, span);
+    else label.append(span, input);
+
+    if (f.type === 'textarea' && f.file) {
+      const picker = document.createElement('input');
+      picker.type = 'file';
+      picker.accept = f.file;
+      picker.hidden = true;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'small';
+      btn.textContent = 'Choose file…';
+      btn.addEventListener('click', () => picker.click());
+      picker.addEventListener('change', async () => {
+        if (picker.files[0]) input.value = await picker.files[0].text();
+      });
+      label.append(btn, picker);
+    }
     form.appendChild(label);
   }
 
@@ -77,12 +99,15 @@ export function formDialog({ title, message = '', fields = [], submit = 'Save', 
     let result = null;
     cancel.addEventListener('click', () => dlg.close());
     form.addEventListener('submit', () => {
-      result = Object.fromEntries(new FormData(form).entries());
-      for (const key of Object.keys(result)) result[key] = String(result[key]).trim();
+      result = {};
+      for (const f of fields) {
+        const el = form.elements.namedItem(f.name);
+        result[f.name] = f.type === 'checkbox' ? el.checked : String(el.value).trim();
+      }
     });
     dlg.addEventListener('close', () => resolve(result), { once: true });
     dlg.showModal();
-    (form.querySelector('input, select') ?? ok).focus();
+    (form.querySelector('input:not([type=file]), select, textarea') ?? ok).focus();
   });
 }
 

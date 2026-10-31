@@ -69,6 +69,16 @@ export const api = {
   deleteAllLines: (openingId) => request('DELETE', `/openings/${openingId}/lines`),
   deleteLine: (lineId) => request('DELETE', `/lines/${lineId}`),
 
+  games: (q = '') => request('GET', '/games', { params: q ? { q } : {} }),
+  game: (id) => request('GET', `/games/${id}`),
+  createGame: (data) => request('POST', '/games', { body: data }),
+  updateGame: (id, data) => request('PATCH', `/games/${id}`, { body: data }),
+  deleteGame: (id) => request('DELETE', `/games/${id}`),
+  importPgn: (pgn) => request('POST', '/games/import-pgn', { body: { pgn } }),
+  checkGame: (openingId, moves) => request('POST', `/openings/${openingId}/check`, { body: { moves } }),
+  gamePgnUrl: (id) => `/api/games/${id}/pgn`,
+  allGamesPgnUrl: (q = '') => `/api/pgn/games${q ? `?q=${encodeURIComponent(q)}` : ''}`,
+
   comment: (repId, fen) => request('GET', `/repertoires/${repId}/comment`, { params: { fen } }),
   saveComment: (repId, fen, comment) => request('PUT', `/repertoires/${repId}/comment`, { body: { fen, comment } }),
 };

@@ -26,7 +26,7 @@ The full plan, decisions and data model are in the project's
 | 6 | Legacy data import (openings, lines, comments) | Done |
 | 7 | Engine analysis (Stockfish 19 Lite in the browser) | Done |
 | 7b | Play against the engine | Next |
-| 8 | Games | Planned |
+| 8 | Games database: save, edit, PGN import/export, compare with repertoire | Done |
 
 ## Using the board
 
@@ -131,6 +131,26 @@ Training API: `GET /api/openings/{id}/training?mode=due|all` (or `line_id=`) ret
 `POST /api/lines/{id}/reviews` with `{"practice": false, "attempts": [{"ply": 2, "uci": "c7c6"}, ...]}` records a
 finished line (the server checks each move against the line and updates the schedule).
 
+## Games
+
+The **Games** tab lists your games newest first (date, players with teams, competition, opening moves, result),
+with a search box that matches players, teams and competition.
+
+- **New game** asks for the details (date defaults to today) and can keep the moves already on the board.
+- **Import PGN** takes pasted text or a `.pgn` file. Only the main line is kept; `WhiteTeam`/`BlackTeam`, `Event`
+  and `Date` tags are read. Games already in the app (same players, date and moves) are skipped, and games with
+  illegal moves are listed rather than imported.
+- **Export PGN** downloads every game matching the search; **PGN** on a row downloads one game.
+- **Open** loads a game on the board. A panel above the move buttons holds its details. Play or take back moves,
+  edit the details and **Save**; unsaved changes are marked, and closing the game, starting training or leaving
+  the page asks first. The open game is reopened after a reload.
+- **Compare with repertoire** checks the game against the selected opening and reports where it left the book,
+  whose move it was and what the repertoire plays, with **Show that position**.
+
+API: `GET/POST /api/games` (`?q=` search), `GET/PATCH/DELETE /api/games/{id}`, `GET /api/games/{id}/pgn`,
+`GET /api/pgn/games?q=` (all matching games), `POST /api/games/import-pgn` (`{"pgn": "..."}`),
+`POST /api/openings/{id}/check` (`{"moves": ["e2e4", ...]}`).
+
 ## Importing from the desktop app
 
 `app/tools/import_legacy.py` copies the openings, lines and position comments from a PyQt MPCT repertoire file
@@ -147,6 +167,15 @@ docker compose exec mpct python -m app.tools.import_legacy /tmp/Main.db --repert
 ```
 
 `--replace` overwrites an existing repertoire of that name; `--no-comments` skips comments.
+
+The same tool recognises the legacy games file and imports every game (players, teams, competition, date,
+result, moves). `--repertoire` isn't needed, and reruns skip games already imported:
+
+```bash
+docker cp Games.db mpct:/tmp/Games.db
+docker compose exec mpct python -m app.tools.import_legacy /tmp/Games.db --dry-run
+docker compose exec mpct python -m app.tools.import_legacy /tmp/Games.db
+```
 
 ## Run locally
 
@@ -192,6 +221,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/training.e2e.cjs     # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/dashboard.e2e.cjs    # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/tags.e2e.cjs         # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/engine.e2e.cjs       # runs the real engine
+MPCT_URL=http://localhost:8010/ node tests/e2e/games.e2e.cjs        # empty database
 ```
 
 ## Deploy on the home server
@@ -263,7 +293,7 @@ app/
   db/             SQLAlchemy models, session, Alembic migrations
   repositories/   database queries (replaces the legacy DBFunctions.py)
   api/            FastAPI routers + request/response schemas
-  tools/          command-line tools (legacy import)
+  tools/          command-line tools (legacy repertoire + games import)
 web/              frontend served as-is
   js/game.js      game state + rules wrapper (pure logic, unit tested)
   js/board.js     chessground wrapper + promotion picker
@@ -274,6 +304,7 @@ web/              frontend served as-is
   js/dashboard.js dashboard view: stats, lines with history, resets
   js/engine.js    Stockfish worker client + UCI parsing (helpers unit tested)
   js/analysis.js  engine panel, evaluation bar, engine arrows
+  js/games.js     games list view + open-game panel (save, compare, PGN)
   js/api.js       JSON API client
   js/ui.js        dialogs, toast, local storage
   js/main.js      page wiring, keyboard, FEN tools

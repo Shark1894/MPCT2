@@ -1,4 +1,5 @@
-"""Import openings, lines and position comments from a legacy PyQt MPCT repertoire (.db).
+"""Import from the legacy PyQt MPCT app: a repertoire file (openings, lines and position
+comments) or the games file (Games.db). The kind of file is detected automatically.
 
 Review history is not imported: every line starts fresh and is due today.
 
@@ -12,6 +13,9 @@ Usage (inside the container, which has DATABASE_URL set):
 
     python -m app.tools.import_legacy /tmp/Main.db --repertoire Main --dry-run
     python -m app.tools.import_legacy /tmp/Main.db --repertoire Main
+    python -m app.tools.import_legacy /tmp/Games.db --dry-run     # games: no --repertoire needed
+
+Games already in the app (same players, date and moves) are skipped, so re-running is safe.
 
 Options: --replace deletes an existing repertoire of that name first; --no-comments skips comments.
 """
@@ -30,6 +34,7 @@ from app.db.models import Repertoire
 from app.repositories import repertoire as repo
 
 REQUIRED_TABLES = {"openings", "lines", "moves", "positions"}
+GAMES_TABLES = {"games", "moves"}
 
 
 @dataclass
@@ -77,11 +82,21 @@ def legacy_fen(stored: str) -> str:
     return " ".join(parts[:4]) + " 0 1"
 
 
-def read_legacy(path: Path) -> sqlite3.Connection:
+def _open(path: Path) -> tuple[sqlite3.Connection, set[str]]:
     if not path.is_file():
         raise SystemExit(f"Not found: {path}")
     conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    return conn, {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+
+def is_games_file(path: Path) -> bool:
+    conn, tables = _open(path)
+    conn.close()
+    return GAMES_TABLES <= tables and "openings" not in tables
+
+
+def read_legacy(path: Path) -> sqlite3.Connection:
+    conn, tables = _open(path)
     missing = REQUIRED_TABLES - tables
     if missing:
         raise SystemExit(f"{path} doesn't look like a legacy MPCT repertoire (missing tables: {', '.join(sorted(missing))})")
@@ -163,6 +178,73 @@ def import_legacy(
     return report
 
 
+@dataclass
+class GamesReport:
+    read: int = 0
+    imported: int = 0
+    duplicates: int = 0
+    moves: int = 0
+    skipped: list[str] = field(default_factory=list)
+
+    def lines(self) -> list[str]:
+        out = [
+            f"Legacy games read:   {self.read}",
+            f"  imported:          {self.imported}",
+            f"  already in the app:{self.duplicates:>4}",
+            f"  skipped (invalid): {len(self.skipped)}",
+            f"Moves stored:        {self.moves}",
+        ]
+        return out + [f"  SKIPPED {x}" for x in self.skipped]
+
+
+def import_legacy_games(s: Session, path: Path) -> GamesReport:
+    """Import games (details + moves) from the legacy Games.db. The caller commits."""
+    from datetime import date as _date
+
+    from app.core.pgn import ParsedGame
+    from app.repositories import games as games_repo
+
+    conn, tables = _open(path)
+    if not GAMES_TABLES <= tables:
+        raise SystemExit(f"{path} doesn't look like a legacy MPCT games file")
+    report = GamesReport()
+    rows = conn.execute(
+        "SELECT game_id, player_white, player_black, team_white, team_black, competition, date, result FROM games ORDER BY game_id"
+    ).fetchall()
+    for game_id, white, black, team_w, team_b, comp, played, result in rows:
+        report.read += 1
+        ucis = [u for (u,) in conn.execute("SELECT move_uci FROM moves WHERE game_id = ? ORDER BY move_number, move_id", (game_id,))]
+        try:
+            played_on = _date.fromisoformat(str(played)[:10]) if played else None
+        except ValueError:
+            played_on = None
+        parsed = ParsedGame(
+            white=(white or "").strip()[:100],
+            black=(black or "").strip()[:100],
+            white_team=(team_w or "").strip()[:100],
+            black_team=(team_b or "").strip()[:100],
+            competition=(comp or "").strip()[:150],
+            played_on=played_on,
+            result=result if result in ("1-0", "0-1", "1/2-1/2", "*") else "*",
+            moves=ucis,
+        )
+        if games_repo._is_duplicate(s, parsed):
+            report.duplicates += 1
+            continue
+        try:
+            walk_line(ucis, allow_empty=True)
+        except InvalidLine as exc:
+            report.skipped.append(f"game {game_id} ({parsed.white} v {parsed.black}): {exc}")
+            continue
+        games_repo.create_game(
+            s, {f: getattr(parsed, f) for f in games_repo.META_FIELDS} | {"moves": ucis}
+        )
+        report.imported += 1
+        report.moves += len(ucis)
+    conn.close()
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("db", type=Path, help="legacy repertoire file, e.g. Main.db")
@@ -173,6 +255,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     from app.db.session import get_engine
+
+    if is_games_file(args.db):
+        with Session(get_engine()) as s:
+            games_report = import_legacy_games(s, args.db)
+            s.rollback() if args.dry_run else s.commit()
+        print(f"{'DRY RUN, nothing saved. ' if args.dry_run else ''}Imported games from {args.db.name}:")
+        print("\n".join(games_report.lines()))
+        return 0
 
     name = args.repertoire or args.db.stem
     with Session(get_engine()) as s:

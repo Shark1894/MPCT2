@@ -171,3 +171,41 @@ class OpeningTag(Base):
     position_id: Mapped[int] = mapped_column(ForeignKey("positions.id"))
     name: Mapped[str] = mapped_column(String(60))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Game(Base):
+    """A played game (over the board or online), shared across repertoires."""
+
+    __tablename__ = "games"
+    __table_args__ = (CheckConstraint("result IN ('1-0', '0-1', '1/2-1/2', '*')", name="result"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    white: Mapped[str] = mapped_column(String(100), server_default="")
+    black: Mapped[str] = mapped_column(String(100), server_default="")
+    white_team: Mapped[str] = mapped_column(String(100), server_default="")
+    black_team: Mapped[str] = mapped_column(String(100), server_default="")
+    competition: Mapped[str] = mapped_column(String(150), server_default="")
+    played_on: Mapped[date | None] = mapped_column(Date, index=True)
+    result: Mapped[str] = mapped_column(String(7), server_default="*")
+    start_fen: Mapped[str | None] = mapped_column(Text)  # null = the normal starting position
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    moves: Mapped[list["GameMove"]] = relationship(
+        back_populates="game", order_by="GameMove.ply", passive_deletes=True
+    )
+
+
+class GameMove(Base):
+    __tablename__ = "game_moves"
+    __table_args__ = (UniqueConstraint("game_id", "ply", name="uq_game_moves_game_ply"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"))
+    ply: Mapped[int]
+    uci: Mapped[str] = mapped_column(String(5))
+    san: Mapped[str] = mapped_column(String(10))
+
+    game: Mapped[Game] = relationship(back_populates="moves")

@@ -22,6 +22,7 @@
       <nav class="views" aria-label="View">
         <button id="view-board" type="button" class="view-tab" aria-pressed="true">Board</button>
         <button id="view-dashboard" type="button" class="view-tab" aria-pressed="false">Dashboard</button>
+        <button id="view-games" type="button" class="view-tab" aria-pressed="false">Games</button>
       </nav>
       <span id="mode-badge" class="mode-badge" hidden>Training</span>
     </header>
@@ -37,6 +38,34 @@
         <div class="board-wrap">
           <div id="board"></div>
           <div id="promo" class="promo" hidden></div>
+        </div>
+      </section>
+
+      <section id="game-panel" class="panel game" aria-label="Open game" hidden>
+        <div class="game-head">
+          <h2 id="game-title" class="game-title">Game</h2>
+          <span id="game-dirty" class="game-dirty" hidden>Unsaved</span>
+        </div>
+        <details class="game-details" open>
+          <summary>Details</summary>
+          <div class="game-fields">
+            <label>White <input id="game-white" maxlength="100" autocomplete="off" /></label>
+            <label>Team <input id="game-white-team" maxlength="100" autocomplete="off" /></label>
+            <label>Black <input id="game-black" maxlength="100" autocomplete="off" /></label>
+            <label>Team <input id="game-black-team" maxlength="100" autocomplete="off" /></label>
+            <label class="wide">Competition <input id="game-competition" maxlength="150" autocomplete="off" /></label>
+            <label>Date <input id="game-played-on" type="date" /></label>
+            <label>Result <select id="game-result"></select></label>
+          </div>
+        </details>
+        <div class="game-buttons">
+          <button id="game-save" type="button" class="primary" disabled>Save</button>
+          <a id="game-pgn" class="button" href="#">PGN</a>
+          <button id="game-close" type="button">Close</button>
+        </div>
+        <div class="game-compare">
+          <button id="game-compare" type="button" class="small" title="Uses the opening selected in the repertoire panel">Compare with repertoire</button>
+          <div id="game-compare-result" class="game-compare-result" aria-live="polite"></div>
         </div>
       </section>
 
@@ -223,6 +252,20 @@
         <div id="dash-lines"></div>
         <p id="dash-empty" class="dash-empty" hidden></p>
       </div>
+    </main>
+
+    <main id="games-view" class="games-view" hidden>
+      <div class="games-head">
+        <input id="games-search" type="search" placeholder="Search players, teams, competition" aria-label="Search games" />
+        <div class="games-buttons">
+          <button id="games-new" type="button" class="primary">New game</button>
+          <button id="games-import" type="button">Import PGN</button>
+          <a id="games-export" class="button" href="#">Export PGN</a>
+        </div>
+      </div>
+      <p id="games-count" class="meta"></p>
+      <div id="games-list" class="games-list"></div>
+      <p id="games-empty" class="dash-empty" hidden></p>
     </main>
   </body>
 </html>
