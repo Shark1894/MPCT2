@@ -167,7 +167,8 @@ separate Compose project in `~/docker/mpct` that joins the same Docker network.
    (one-time PIN login). The app itself has no login.
 
 6. **Update later:** `cd ~/docker/mpct && git pull && docker compose up -d --build`. Static files are served
-   with `Cache-Control: no-cache`, so phones pick up new versions on the next load.
+   from a URL containing a hash of their contents (`/assets/<build>/...`), so no browser or Cloudflare cache
+   can serve an old copy; the page itself is never cached. `/api/health` shows the current `build`.
 
 ## Layout
 
