@@ -94,6 +94,24 @@ export function isModalOpen() {
   return Boolean(dialogEl?.open);
 }
 
+// ---- opening picker -----------------------------------------------------------
+
+/** Fill a <select> with openings grouped under "White" and "Black" headings, A to Z within each. */
+export function fillOpeningSelect(select, openings) {
+  select.innerHTML = '';
+  for (const [color, label] of [
+    ['white', 'White'],
+    ['black', 'Black'],
+  ]) {
+    const group = openings.filter((o) => o.color === color).sort((a, b) => a.name.localeCompare(b.name));
+    if (group.length === 0) continue;
+    const optgroup = document.createElement('optgroup');
+    optgroup.label = label;
+    for (const o of group) optgroup.appendChild(new Option(o.name, o.id));
+    select.appendChild(optgroup);
+  }
+}
+
 // ---- dates ----------------------------------------------------------------
 
 function localIsoToday() {

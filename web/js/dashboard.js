@@ -2,7 +2,7 @@
 // per-line and per-opening actions. Follows the repertoire panel's selected opening.
 
 import { api } from './api.js';
-import { confirmDialog, describeDue, daysFromToday, plural, toast } from './ui.js';
+import { confirmDialog, describeDue, daysFromToday, fillOpeningSelect, plural, toast } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -65,8 +65,7 @@ export class DashboardView {
   async refresh() {
     const openings = this.repertoire.openings;
     const sel = this.el.opening;
-    sel.innerHTML = '';
-    for (const o of openings) sel.appendChild(new Option(o.name, o.id));
+    fillOpeningSelect(sel, openings);
     const opening = this._opening();
     const hasOpening = Boolean(opening);
     for (const b of [sel, this.el.trainAll, this.el.resetAll, this.el.deleteAll, this.el.deleteOpening]) b.disabled = !hasOpening;

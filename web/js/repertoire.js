@@ -3,7 +3,7 @@
 
 import { api } from './api.js';
 import { START_FEN } from './game.js';
-import { confirmDialog, formDialog, store, toast } from './ui.js';
+import { confirmDialog, fillOpeningSelect, formDialog, store, toast } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const COLORS = [
@@ -205,8 +205,8 @@ export class RepertoirePanel {
       return;
     }
     sel.disabled = false;
-    for (const o of openings) sel.appendChild(new Option(`${o.name} (${o.color === 'white' ? 'W' : 'B'})`, o.id));
-    const id = openings.some((o) => o.id === selectId) ? selectId : openings[0].id;
+    fillOpeningSelect(sel, openings);
+    const id = openings.some((o) => o.id === selectId) ? selectId : Number(sel.options[0].value); // top of the list
     this.selectOpening(id, false);
   }
 

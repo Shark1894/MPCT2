@@ -149,7 +149,8 @@ const settle = (page) => page.waitForTimeout(400);
   await settle(page);
   const restored = await page.evaluate(() => [mpct.game.ply, mpct.game.moves.map((m) => m.san).join(' ')]);
   check(restored[0] === 2 && restored[1].startsWith('e4 c6 d4'), 'game and position restored after reload: ' + restored);
-  check((await page.$eval('#opening-select option:checked', (o) => o.textContent)) === 'Caro-Kann (B)', 'opening selection restored');
+  check((await page.$eval('#opening-select option:checked', (o) => o.textContent)) === 'Caro-Kann', 'opening selection restored');
+  check((await page.$eval('#opening-select option:checked', (o) => o.parentElement.label)) === 'Black', 'opening listed under the Black heading');
   check(JSON.stringify(await explorerSans(page)) === '["d4"]', 'explorer works after reload');
 
   // Duplicate opening name is reported
