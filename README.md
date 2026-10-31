@@ -25,7 +25,7 @@ The full plan, decisions and data model are in the project's
 | 5 | Review dashboard | Done |
 | 6 | Legacy data import (openings, lines, comments) | Done |
 | 7 | Engine analysis (Stockfish 19 Lite in the browser) | Done |
-| 7b | Play against the engine | Next |
+| 7b | Play against the engine | Done |
 | 8 | Games database: save, edit, PGN import/export, compare with repertoire | Done |
 
 ## Using the board
@@ -85,6 +85,24 @@ threads and a smaller hash.
 - Blue arrow = engine's best move, pale blue = the other lines (repertoire arrows stay green). An evaluation bar
   sits beside the board and flips with it.
 - Analysis pauses during training (and is hidden), on the dashboard, and while the tab is in the background.
+
+## Play against the engine
+
+**Play vs engine** (in the engine panel) starts a game against Stockfish on the main board. Choose your side
+(White, Black or random), a strength, and whether to start from the initial position or the position on the board
+(handy for playing out a repertoire line). Your name is only used when saving.
+
+Strengths: **Beginner ~800**, **Novice ~1000**, **Casual ~1200** use Stockfish's Skill Level with a shallow search
+(ratings are rough); **1400–2500** use its built-in Elo limiter (UCI_LimitStrength); **Full strength** is unlimited.
+The engine thinks for 0.1–1.5 s a move and never replies in under half a second.
+
+While playing the engine panel and eval bar are hidden, and New board / Load FEN are unavailable. You can step back
+through the moves to look, but only move at the end. **Take back** removes your last move and the engine's reply;
+**Resign** and **Stop** (abandon, keeping the moves) ask first, as does starting training or opening a saved game.
+A game in progress survives a reload. When it ends: **Save to games** (stored as "Practice vs engine" and opened
+in the game panel), **Play again**, or **Analyse** (back to the normal board with the engine available).
+
+Play uses its own Stockfish worker, so analysis settings are untouched. Nothing runs on the server.
 
 ## Branch tags
 
@@ -222,6 +240,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/dashboard.e2e.cjs    # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/tags.e2e.cjs         # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/engine.e2e.cjs       # runs the real engine
 MPCT_URL=http://localhost:8010/ node tests/e2e/games.e2e.cjs        # empty database
+MPCT_URL=http://localhost:8010/ node tests/e2e/play.e2e.cjs         # empty database, real engine
 ```
 
 ## Deploy on the home server
@@ -305,6 +324,7 @@ web/              frontend served as-is
   js/engine.js    Stockfish worker client + UCI parsing (helpers unit tested)
   js/analysis.js  engine panel, evaluation bar, engine arrows
   js/games.js     games list view + open-game panel (save, compare, PGN)
+  js/play.js      play vs engine: levels, engine replies, takeback, resign, save
   js/api.js       JSON API client
   js/ui.js        dialogs, toast, local storage
   js/main.js      page wiring, keyboard, FEN tools

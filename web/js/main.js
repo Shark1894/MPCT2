@@ -9,6 +9,7 @@ import { TrainingController } from './training.js';
 import { DashboardView } from './dashboard.js';
 import { AnalysisPanel } from './analysis.js';
 import { GamePanel, GamesView } from './games.js';
+import { PlayController } from './play.js';
 import { isModalOpen, store } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -29,6 +30,7 @@ const analysis = new AnalysisPanel({
 const repertoire = new RepertoirePanel({
   game,
   onPlaySan: (san) => {
+    if (play.active && !play.canMove()) return;
     if (game.playSan(san)) render();
   },
   onShapes: (shapes) => board.setShapes(shapes),
@@ -51,7 +53,8 @@ const dashboard = new DashboardView({
     setView('board');
     startTraining(opening, mode, lineId, tag);
   },
-  onShowLine: (sans) => {
+  onShowLine: async (sans) => {
+    if (!(await play.confirmStop())) return;
     game.load(START_FEN);
     for (const san of sans) if (!game.playSan(san)) break;
     setView('board');
@@ -90,12 +93,31 @@ const gamesView = new GamesView({
   panel: gamePanel,
   game,
   onOpen: async (id) => {
+    if (!(await play.confirmStop())) return;
     if (await gamePanel.open(id)) setView('board');
+  },
+});
+
+// ---- play vs engine ------------------------------------------------------------
+
+const play = new PlayController({
+  game,
+  board,
+  render: () => render(),
+  beforeStart: () => gamePanel.confirmLeave(),
+  onModeChange: (active) => {
+    if (active) analysis.pause('play');
+    else analysis.resume('play');
+    document.body.classList.toggle('playing', active);
+  },
+  onSaved: async (id) => {
+    await gamePanel.open(id);
   },
 });
 
 /** Training replaces the board's moves, so an open game is closed first (asking if unsaved). */
 async function startTraining(opening, mode, lineId, tag) {
+  if (!(await play.confirmStop())) return;
   if (!(await gamePanel.confirmLeave())) return;
   trainer.start(opening, mode, lineId, tag);
 }
@@ -142,7 +164,7 @@ const ui = {
 let shownFen = null;
 
 function render() {
-  board.show(game, { canMove: !trainer.active || trainer.canMove() });
+  board.show(game, { canMove: trainer.active ? trainer.canMove() : play?.active ? play.canMove() : true });
   const status = game.status();
   ui.status.textContent = status.text;
   ui.status.classList.toggle('over', status.over);
@@ -161,6 +183,7 @@ function render() {
 
   saveGame();
   gamePanel?.updateState();
+  play?.update();
   if (game.fen() !== shownFen) {
     shownFen = game.fen();
     repertoire.positionChanged();
@@ -198,6 +221,7 @@ async function onBoardMove(from, to) {
     trainer.onUserMove(from, to, promotion);
     return;
   }
+  if (play.active && !play.canMove()) return render();
   game.play(from, to, promotion);
   render();
 }
@@ -254,6 +278,7 @@ $('board').addEventListener(
 
 $('btn-flip').addEventListener('click', () => board.flip());
 $('btn-new').addEventListener('click', () => {
+  if (play.active) return;
   game.load(START_FEN);
   setFenMessage('');
   render();
@@ -267,6 +292,7 @@ function setFenMessage(text, kind = '') {
 }
 
 function loadFen() {
+  if (play.active) return;
   try {
     game.load(ui.fen.value);
     setFenMessage('Position loaded.', 'ok');
@@ -298,6 +324,7 @@ $('btn-fen-copy').addEventListener('click', async () => {
 });
 
 render();
+play.restore();
 repertoire.init().then(async () => {
   const openGameId = store.get('openGameId');
   if (openGameId) await gamePanel.open(openGameId);
@@ -306,4 +333,4 @@ repertoire.init().then(async () => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, repertoire, trainer, dashboard, setView, render, analysis, gamePanel, gamesView };
+window.mpct = { game, board, repertoire, trainer, dashboard, setView, render, analysis, gamePanel, gamesView, play };

@@ -100,6 +100,7 @@ export class Engine {
     this.current = null; // { fen, whiteToMove, lines: Map<multipv, info>, depth }
     this.stopsPending = 0; // 'stop's sent whose bestmove hasn't come back yet
     this._waiters = [];
+    this._best = null; // resolver for a pending bestMove() search
   }
 
   /** Load the engine (once). */
@@ -140,6 +141,39 @@ export class Engine {
     this._send(depth ? `go depth ${depth}` : 'go infinite');
   }
 
+  /**
+   * Choose a move to play. The position is sent as start FEN + moves so the engine
+   * sees repetitions. Strength: `skill` (0-20, Stockfish's Skill Level) or `elo`
+   * (UCI_LimitStrength, 1320-3190); neither = full strength.
+   * Resolves to a UCI move, or null if cancelled.
+   */
+  async bestMove({ startFen, moves = [], skill = null, elo = null, movetime = 1000, depth = null }) {
+    await this.start();
+    this.cancelBestMove();
+    this._stopSearch();
+    this.current = null;
+    const limit = elo !== null && skill === null;
+    this._send(`setoption name MultiPV value 1`);
+    this._send(`setoption name Skill Level value ${skill ?? 20}`);
+    this._send(`setoption name UCI_LimitStrength value ${limit}`);
+    if (limit) this._send(`setoption name UCI_Elo value ${elo}`);
+    this._send(`position fen ${startFen}${moves.length ? ` moves ${moves.join(' ')}` : ''}`);
+    this._send(`go ${depth ? `depth ${depth} ` : ''}movetime ${movetime}`);
+    return new Promise((resolve) => {
+      this._best = resolve;
+    });
+  }
+
+  /** Abandon a bestMove() search; its promise resolves to null. */
+  cancelBestMove() {
+    if (!this._best) return;
+    const resolve = this._best;
+    this._best = null;
+    this.stopsPending += 1;
+    this._send('stop');
+    resolve(null);
+  }
+
   /** Stop searching (keeps the engine loaded). */
   stop() {
     this._stopSearch();
@@ -147,6 +181,7 @@ export class Engine {
   }
 
   terminate() {
+    this.cancelBestMove();
     this.worker?.terminate();
     this.worker = null;
     this.ready = null;
@@ -178,6 +213,13 @@ export class Engine {
     if (line.startsWith('bestmove')) {
       if (this.stopsPending > 0) {
         this.stopsPending -= 1; // end of a search we abandoned
+        return;
+      }
+      if (this._best) {
+        const resolve = this._best;
+        this._best = null;
+        const move = line.split(' ')[1];
+        resolve(move && move !== '(none)' ? move : null);
         return;
       }
       if (this.current) {

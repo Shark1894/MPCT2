@@ -69,6 +69,18 @@
         </div>
       </section>
 
+      <section id="play-panel" class="panel game play" aria-label="Game against the engine" hidden>
+        <h2 id="play-title" class="game-title"></h2>
+        <p id="play-status" class="play-status" aria-live="polite"></p>
+        <div class="game-buttons">
+          <button id="play-takeback" type="button">Take back</button>
+          <button id="play-resign" type="button">Resign</button>
+          <button id="play-save" type="button" class="primary" hidden>Save to games</button>
+          <button id="play-again" type="button" hidden>Play again</button>
+          <button id="play-stop" type="button">Stop</button>
+        </div>
+      </section>
+
       <section class="panel controls" aria-label="Position and navigation">
         <p id="status" class="status" role="status" aria-live="polite"></p>
         <div class="nav" role="group" aria-label="Move navigation">
@@ -182,6 +194,7 @@
           <button id="engine-toggle" type="button" class="switch" role="switch" aria-checked="false">Engine off</button>
           <span id="engine-eval" class="engine-eval"></span>
           <span id="engine-depth" class="meta engine-depth"></span>
+          <button id="play-start" type="button" class="small play-start">Play vs engine</button>
         </div>
         <div id="engine-body" class="engine-body" hidden>
           <div id="engine-lines" class="engine-lines" aria-live="off"></div>

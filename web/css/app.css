@@ -843,6 +843,33 @@ body.training .engine {
   display: none;
 }
 
+/* ---- play vs engine ---- */
+
+.play-start {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.play-status {
+  margin: 8px 0;
+  font-weight: 600;
+}
+
+.play-status.over {
+  color: var(--copper);
+}
+
+.play .game-buttons {
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+}
+
+/* While playing: no engine help, and the board can't be replaced mid-game. */
+body.playing .engine,
+body.playing #btn-new,
+body.playing .fen-actions #btn-fen-load {
+  display: none;
+}
+
 /* ---- branch tags ---- */
 
 .branches-box {

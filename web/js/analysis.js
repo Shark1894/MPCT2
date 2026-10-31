@@ -1,7 +1,8 @@
 // Analysis panel: Stockfish evaluation and best lines for the board position, an
 // evaluation bar beside the board and blue arrows for the engine's moves.
 //
-// The engine pauses (without forgetting it's switched on) during training, on the
+// The engine pauses (without forgetting it's switched on) during training, while
+// playing against the engine, on the
 // dashboard, and while the tab is in the background.
 
 import { Engine, formatScore, whiteShare } from './engine.js';
@@ -21,7 +22,7 @@ export class AnalysisPanel {
   constructor({ game, board, onPlayMoves }) {
     Object.assign(this, { game, board, onPlayMoves });
     this.settings = { ...DEFAULTS, ...store.get('engine', {}) };
-    this.paused = new Set(); // reasons: 'training', 'dashboard', 'hidden'
+    this.paused = new Set(); // reasons: 'training', 'play', 'away', 'hidden'
     this.engine = null;
     this.latest = null; // last update for the current position
     this.timer = null;
@@ -135,6 +136,11 @@ export class AnalysisPanel {
     this._renderBar();
   }
 
+  /** Training and play hide the engine entirely (not just pause it). */
+  _hiddenByMode() {
+    return this.paused.has('training') || this.paused.has('play');
+  }
+
   _engineLabel() {
     if (!this.engine?.ready) return '';
     return `Stockfish 19 Lite · ${this.engine.threads} thread${this.engine.threads === 1 ? '' : 's'}`;
@@ -157,7 +163,7 @@ export class AnalysisPanel {
     this.el.toggle.setAttribute('aria-checked', String(on));
     this.el.toggle.textContent = on ? 'Engine on' : 'Engine off';
     this.el.body.hidden = !on;
-    document.body.classList.toggle('engine-on', on && !this.paused.has('training'));
+    document.body.classList.toggle('engine-on', on && !this._hiddenByMode());
     if (!on) {
       this.el.eval.textContent = '';
       this.el.depth.textContent = '';
@@ -212,7 +218,7 @@ export class AnalysisPanel {
   }
 
   _renderBar() {
-    const show = this.settings.on && !this.paused.has('training');
+    const show = this.settings.on && !this._hiddenByMode();
     this.el.bar.hidden = !show;
     if (!show) return;
     const score = this.latest?.lines[0]?.score ?? null;

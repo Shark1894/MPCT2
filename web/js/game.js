@@ -115,6 +115,11 @@ export class Game {
     return legal ? this.play(legal.from, legal.to, legal.promotion) : null;
   }
 
+  /** Drop the moves after the shown position. */
+  truncate() {
+    this.moves.length = this.ply;
+  }
+
   // ---- navigation -------------------------------------------------------
 
   goTo(ply) {
