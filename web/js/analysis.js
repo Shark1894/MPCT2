@@ -64,6 +64,7 @@ export class AnalysisPanel {
   setOn(on) {
     this.settings.on = on;
     this._save();
+    this.onToggle?.(on);
     this._renderShell();
     if (this.running) this._analyse();
     else this._halt();

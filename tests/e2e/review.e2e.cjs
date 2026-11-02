@@ -161,6 +161,12 @@ const marks = (page) =>
   await page.click('#nav-start');
   await settle(page, 400);
   check(/^White's winning chances: 5\d% · \+0\.\d\d$/.test(await text(page, '#saved-eval')), 'start position: ' + (await text(page, '#saved-eval')));
+  await page.click('#engine-toggle');
+  await settle(page, 300);
+  check(await page.isHidden('#saved-eval'), 'hidden while the live engine is on (it shows its own score)');
+  await page.click('#engine-toggle');
+  await settle(page, 300);
+  check(await page.isVisible('#saved-eval'), 'back when the engine is switched off');
   await page.reload();
   await settle(page, 1000);
   await page.evaluate(() => { mpct.game.goTo(3); mpct.render(); });

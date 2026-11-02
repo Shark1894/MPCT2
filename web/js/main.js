@@ -120,6 +120,7 @@ const play = new PlayController({
 // ---- engine review --------------------------------------------------------------
 
 const savedEval = new SavedEval($('saved-eval'));
+analysis.onToggle = () => render(); // the saved evaluation line hides while the live engine is on
 
 const review = new ReviewController({
   game,
@@ -190,7 +191,8 @@ function render() {
   ui.status.textContent = status.text;
   ui.status.classList.toggle('over', status.over);
   review?.update();
-  savedEval?.update(game.fen(), Boolean(review?.open) || trainer.active || Boolean(play?.active));
+  // Hidden when something else already shows the evaluation (review panel, live engine) or it would give answers away.
+  savedEval?.update(game.fen(), Boolean(review?.open) || analysis.settings.on || trainer.active || Boolean(play?.active));
   renderMoveList(
     ui.moves,
     game,

@@ -866,8 +866,10 @@ body.training .engine {
 }
 
 .engine-actions {
-  margin-left: auto;
-  display: flex;
+  /* Always a full-width row of two equal buttons under the switch, so it lines up at any width. */
+  flex-basis: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
 
