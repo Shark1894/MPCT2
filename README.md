@@ -109,7 +109,8 @@ part of a game.
   longer thinking time. Positions already analysed at least that long are kept; the current results stay on screen
   until the better ones arrive, and the longer analysis replaces the shorter one on the server.
 - **How moves are judged**, the same for both sides, by the drop in the mover's winning chances (Lichess's curve):
-  10+ points `?!` inaccuracy, 20+ `?` mistake, 30+ `??` blunder. `!` = only move: the engine's best move, at least
+  4.5+ points `?!` inaccuracy (about half a pawn from a level position; Lichess uses 10), 20+ `?` mistake,
+  30+ `??` blunder. `!` = only move: the engine's best move, at least
   20 points better than the second best. Accuracy per move uses Lichess's formula; the side's figure is the average.
 - The review stays while you look through the moves and survives a reload; playing a different move closes it.
 

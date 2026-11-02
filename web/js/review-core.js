@@ -3,7 +3,8 @@
 //
 // Everything is measured in winning chances (0-100), not centipawns: losing a pawn
 // matters a lot in a level position and hardly at all when already a rook up.
-// Thresholds follow Lichess: a drop of 10 = inaccuracy, 20 = mistake, 30 = blunder.
+// Thresholds: a drop of 4.5 = inaccuracy (Jason's choice: about half a pawn from a level position;
+// Lichess uses 10), 20 = mistake, 30 = blunder.
 
 import { Chess } from '../vendor/chess.js/chess.js';
 
@@ -14,7 +15,7 @@ export const SPEEDS = {
 };
 export const OVERHEAD_MS = 80; // per position, on top of the thinking time (rough)
 
-export const THRESHOLDS = { inaccuracy: 10, mistake: 20, blunder: 30 };
+export const THRESHOLDS = { inaccuracy: 4.5, mistake: 20, blunder: 30 };
 export const ONLY_MOVE_GAP = 20; // best move this much better than the second best
 export const LABELS = {
   blunder: { symbol: '??', text: 'Blunder' },

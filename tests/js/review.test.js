@@ -33,7 +33,7 @@ const POSITIONS = reviewPositions(START, MOVES);
 const EVALS = [
   { lines: [line('e2e4', { cp: 30 }), line('d2d4', { cp: 25 })] },
   { lines: [line('e7e5', { cp: 30 }), line('c7c5', { cp: 35 })] },
-  { lines: [line('g1f3', { cp: 30 }), line('b1c3', { cp: 20 })] }, // 2.Qh5 is not best: small drop
+  { lines: [line('g1f3', { cp: 30 }), line('b1c3', { cp: 20 })] }, // 2.Qh5 is not best: +0.30 -> -0.20
   { lines: [line('b8c6', { cp: -20 }), line('g8f6', { cp: 60 })] },
   { lines: [line('f1c4', { cp: -10 }), line('b1c3', { cp: -15 })] },
   { lines: [line('g7g6', { cp: 0 }), line('d8e7', { cp: 50 })] }, // ...Nf6 is not best
@@ -72,14 +72,14 @@ test('terminalEval: checkmate, stalemate, ongoing', () => {
 test('judgeMoves labels both sides objectively', () => {
   const j = judgeMoves(POSITIONS, MOVES, EVALS);
   assert.equal(j.length, 7);
-  assert.deepEqual(j.map((m) => m.label), [null, null, null, null, null, 'blunder', 'only']);
+  assert.deepEqual(j.map((m) => m.label), [null, null, 'inaccuracy', null, null, 'blunder', 'only']);
   assert.deepEqual(j.map((m) => m.side), ['w', 'b', 'w', 'b', 'w', 'b', 'w']);
 
   const e4 = j[0];
   assert.ok(e4.isBest && e4.loss === 0 && e4.best === null);
 
   const qh5 = j[2];
-  assert.ok(!qh5.isBest && qh5.loss > 0 && qh5.loss < 10, 'small drop, no label: ' + qh5.loss);
+  assert.ok(!qh5.isBest && qh5.loss > 4.5 && qh5.loss < 5, 'half a pawn from about level: ' + qh5.loss);
   assert.equal(qh5.best.san, 'Nf3');
 
   const nf6 = j[5];
@@ -112,6 +112,7 @@ test('summarise counts per side', () => {
   assert.equal(s.b.moves, 3);
   assert.equal(s.b.blunder, 1);
   assert.equal(s.w.only, 1);
+  assert.equal(s.w.inaccuracy, 1);
   assert.ok(s.w.accuracy > s.b.accuracy);
   assert.equal(summarise([null]).w.accuracy, null);
 });
@@ -138,4 +139,19 @@ test('normaliseEval drops the null half of saved scores', () => {
   const ev = normaliseEval(saved);
   assert.deepEqual(ev.lines.map((l) => l.score), [{ cp: -27 }, { mate: 3 }]);
   assert.equal(normaliseEval(null), null);
+});
+
+test('inaccuracy starts at a 4.5-point drop: half a pawn from a level position', () => {
+  const moves = play(['e4', 'e5']);
+  const positions = reviewPositions(START, moves);
+  // Black's best keeps 50%; the move played leaves White ahead by `cp`.
+  const at = (cp) => judgeMoves(positions, moves, [
+    { lines: [line('e2e4', { cp: 0 })] },
+    { lines: [line('c7c5', { cp: 0 })] },
+    { lines: [line('g1f3', { cp })] },
+  ])[1];
+  assert.equal(at(40).label, null); // +0.40: a drop of ~3.7
+  assert.equal(at(50).label, 'inaccuracy'); // +0.50: ~4.6
+  assert.equal(at(210).label, 'inaccuracy'); // +2.10: ~18.4
+  assert.equal(at(280).label, 'mistake'); // +2.80: ~23.7
 });
