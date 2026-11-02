@@ -113,6 +113,9 @@ part of a game.
   30+ `??` blunder. `!` = only move: the engine's best move, at least
   20 points better than the second best. Accuracy per move uses Lichess's formula; the side's figure is the average.
 - The review stays while you look through the moves and survives a reload; playing a different move closes it.
+- **Saved evaluation**: whenever the board shows a position any review has analysed before (in any game or line,
+  however it was reached), the engine panel shows White's winning chances and the score, even with the review
+  closed and the engine off. Hidden while the review panel is open (it shows the same), in training and in play.
 
 Every analysed position is saved on the server (`position_evals`, keyed like repertoire positions, so transpositions
 share it); a longer analysis replaces a shorter one, never the reverse. API: `POST /api/evals/lookup`

@@ -861,6 +861,10 @@ body.training .engine {
 
 /* ---- play vs engine ---- */
 
+.saved-eval {
+  margin: 8px 0 0;
+}
+
 .engine-actions {
   margin-left: auto;
   display: flex;

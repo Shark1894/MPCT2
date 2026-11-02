@@ -37,9 +37,10 @@ export class ReviewController {
    * @param {() => boolean} deps.isBusy           training or playing: no review
    * @param {(ply: number) => void} deps.onJump
    * @param {() => void} deps.onChanged           results changed: redraw the move list
+   * @param {(fen: string, ev: object) => void} deps.onSaved  a position's analysis was saved
    */
-  constructor({ game, board, analysis, getOpening, isBusy, onJump, onChanged }) {
-    Object.assign(this, { game, board, analysis, getOpening, isBusy, onJump, onChanged });
+  constructor({ game, board, analysis, getOpening, isBusy, onJump, onChanged, onSaved }) {
+    Object.assign(this, { game, board, analysis, getOpening, isBusy, onJump, onChanged, onSaved });
     this.review = null;
     this.run = null;
     this.wakeLock = null;
@@ -61,12 +62,20 @@ export class ReviewController {
     this.el.start.addEventListener('click', () => this.start());
     this.el.again.addEventListener('click', () => this.start({ again: true }));
     this.el.cancel.addEventListener('click', () => this.cancel());
-    this.el.close.addEventListener('click', () => this.close());
+    this.el.close.addEventListener('click', () => {
+      this.close();
+      this.onChanged(); // marks off the move list; the saved evaluation line comes back
+    });
     this.el.graph.addEventListener('click', (e) => this._graphClick(e));
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && this.run) this._keepAwake(); // the lock is dropped when the tab hides
     });
     window.addEventListener('resize', () => this.review && this._renderGraph());
+  }
+
+  /** Whether the review panel is showing (it has its own winning-chances line). */
+  get open() {
+    return this.review !== null && !this.isBusy();
   }
 
   get running() {
@@ -233,7 +242,10 @@ export class ReviewController {
   _flush() {
     const batch = this.run?.pending.splice(0) ?? [];
     if (!batch.length) return;
-    api.saveEvals(batch).catch((err) => toast(`Analysis not saved: ${err.message}`, 'error'));
+    api
+      .saveEvals(batch)
+      .then(() => batch.forEach((ev) => this.onSaved?.(ev.fen, ev)))
+      .catch((err) => toast(`Analysis not saved: ${err.message}`, 'error'));
   }
 
   cancel() {

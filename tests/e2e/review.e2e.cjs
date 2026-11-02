@@ -149,6 +149,35 @@ const marks = (page) =>
   await waitDone(page, 5000);
   check(true, 'second review finished at once');
 
+  // ---- saved evaluation without the review open ------------------------------------------
+  check(await page.isHidden('#saved-eval'), 'saved-eval line hidden while the review panel is open');
+  await page.click('#review-close');
+  await settle(page, 400);
+  check(await page.isHidden('#review'), 'review closed');
+  check((await marks(page)).every((x) => !x.mark), 'close removes the move marks');
+  await page.click('#moves .move[data-ply="6"]');
+  await settle(page, 400);
+  check(/^White's winning chances: 100% · #1$/.test(await text(page, '#saved-eval')), 'saved evaluation shown with the review closed: ' + (await text(page, '#saved-eval')));
+  await page.click('#nav-start');
+  await settle(page, 400);
+  check(/^White's winning chances: 5\d% · \+0\.\d\d$/.test(await text(page, '#saved-eval')), 'start position: ' + (await text(page, '#saved-eval')));
+  await page.reload();
+  await settle(page, 1000);
+  await page.evaluate(() => { mpct.game.goTo(3); mpct.render(); });
+  await settle(page, 500);
+  check(await page.isVisible('#saved-eval'), 'after a reload, a reviewed position shows its saved evaluation');
+  await playSans(page, ['d4', 'd5']); // never analysed
+  await settle(page, 500);
+  check(await page.isHidden('#saved-eval'), 'nothing shown for a position never analysed');
+  await playSans(page, ['e4', 'e5', 'Qh5']);
+  await settle(page, 500);
+  check(await page.isVisible('#saved-eval'), 'same position reached again (new board): shown');
+
+  // Back to the reviewed game, review it again (instant) for the rest of the checks.
+  await playSans(page, SCHOLAR);
+  await startReview(page, 'quick');
+  await waitDone(page, 5000);
+
   // ---- survives a reload (no engine needed) ---------------------------------------------
   await page.reload();
   await settle(page, 1200);

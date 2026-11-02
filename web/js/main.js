@@ -11,6 +11,7 @@ import { AnalysisPanel } from './analysis.js';
 import { GamePanel, GamesView } from './games.js';
 import { PlayController } from './play.js';
 import { ReviewController } from './review.js';
+import { SavedEval } from './saved-eval.js';
 import { isModalOpen, store } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -118,6 +119,8 @@ const play = new PlayController({
 
 // ---- engine review --------------------------------------------------------------
 
+const savedEval = new SavedEval($('saved-eval'));
+
 const review = new ReviewController({
   game,
   board,
@@ -130,6 +133,7 @@ const review = new ReviewController({
     render();
   },
   onChanged: () => render(),
+  onSaved: (fen, ev) => savedEval.remember(fen, ev),
 });
 
 /** Training replaces the board's moves, so an open game is closed first (asking if unsaved). */
@@ -186,6 +190,7 @@ function render() {
   ui.status.textContent = status.text;
   ui.status.classList.toggle('over', status.over);
   review?.update();
+  savedEval?.update(game.fen(), Boolean(review?.open) || trainer.active || Boolean(play?.active));
   renderMoveList(
     ui.moves,
     game,
@@ -358,4 +363,4 @@ repertoire.init().then(async () => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, repertoire, trainer, dashboard, setView, render, analysis, gamePanel, gamesView, play, review };
+window.mpct = { game, board, repertoire, trainer, dashboard, setView, render, analysis, gamePanel, gamesView, play, review, savedEval };
