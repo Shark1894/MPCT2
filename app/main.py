@@ -7,6 +7,8 @@ rendered with those URLs and is never cached.
 """
 
 import hashlib
+import re
+from html import escape
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -15,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import __version__
 from app.api import dashboard, games, repertoires, tags, training
+from app.config import settings
 from app.core.positions import InvalidLine, InvalidPosition
 from app.db.session import DatabaseNotConfigured, database_status
 from app.repositories.repertoire import Conflict, NotFound
@@ -34,7 +37,23 @@ def build_id(web_dir: Path = WEB_DIR) -> str:
 
 BUILD_ID = build_id()
 ASSETS_PREFIX = f"/assets/{BUILD_ID}"
-INDEX_HTML = (WEB_DIR / "index.html").read_text(encoding="utf-8").replace("__ASSETS__", ASSETS_PREFIX)
+ENV_THEME_COLOR = "#b5651d"
+
+
+def render_index(template: str, assets_prefix: str, environment: str = "live") -> str:
+    """index.html with asset URLs filled in; non-live environments get a visible marker."""
+    html = template.replace("__ASSETS__", assets_prefix)
+    if environment == "live":
+        return html
+    label = escape(environment.upper())
+    html = html.replace("<title>MPCT</title>", f"<title>{label} · MPCT</title>", 1)
+    html = re.sub(r'(<meta name="theme-color" content=")[^"]*"', rf'\g<1>{ENV_THEME_COLOR}"', html, count=1)
+    html = html.replace("<body>", f'<body class="env-nonlive" data-env="{label.lower()}">', 1)
+    html = html.replace("<span>MPCT</span>", f'<span>MPCT</span>\n        <span class="env-badge">{label}</span>', 1)
+    return html
+
+
+INDEX_HTML = render_index((WEB_DIR / "index.html").read_text(encoding="utf-8"), ASSETS_PREFIX, settings.mpct_env)
 
 
 def _error(status: int):
@@ -76,7 +95,13 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     def health() -> dict:
-        return {"status": "ok", "version": __version__, "build": BUILD_ID, "database": database_status()}
+        return {
+            "status": "ok",
+            "version": __version__,
+            "build": BUILD_ID,
+            "environment": settings.mpct_env,
+            "database": database_status(),
+        }
 
     app.include_router(repertoires.router)
     app.include_router(training.router)

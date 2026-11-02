@@ -3,7 +3,7 @@ import re
 from fastapi.testclient import TestClient
 
 from app import __version__
-from app.main import BUILD_ID, app, build_id
+from app.main import BUILD_ID, WEB_DIR, app, build_id, render_index
 
 client = TestClient(app)
 
@@ -13,6 +13,7 @@ def test_health():
     assert r.status_code == 200
     body = r.json()
     assert (body["status"], body["version"], body["build"]) == ("ok", __version__, BUILD_ID)
+    assert body["environment"] == "live"
     assert body["database"] in {"ok", "not configured", "unavailable"}
     assert r.headers["cache-control"] == "no-store"
 
@@ -66,3 +67,27 @@ def test_stockfish_files_served_with_correct_types():
         assert js.status_code == 200 and "javascript" in js.headers["content-type"]
         assert wasm.status_code == 200 and wasm.headers["content-type"] == "application/wasm"
         assert wasm.content[:4] == b"\0asm"
+
+
+TEMPLATE = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+
+
+def test_live_index_has_no_environment_marker():
+    html = render_index(TEMPLATE, "/assets/abc")
+    assert "env-badge" not in html and "env-nonlive" not in html
+    assert "<title>MPCT</title>" in html
+    assert html == TEMPLATE.replace("__ASSETS__", "/assets/abc")
+
+
+def test_test_index_is_clearly_marked():
+    html = render_index(TEMPLATE, "/assets/abc", "test")
+    assert "<title>TEST · MPCT</title>" in html
+    assert '<body class="env-nonlive" data-env="test">' in html
+    assert '<span class="env-badge">TEST</span>' in html
+    assert '<meta name="theme-color" content="#b5651d"' in html
+    assert "__ASSETS__" not in html
+
+
+def test_environment_label_is_escaped():
+    html = render_index(TEMPLATE, "/assets/abc", "<x>")
+    assert "<X>" not in html and "&lt;X&gt;" in html

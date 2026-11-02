@@ -180,6 +180,20 @@ textarea[readonly] {
   letter-spacing: 0.08em;
 }
 
+/* Test instance marker (added by the server when MPCT_ENV isn't "live"). */
+.env-badge {
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: #b5651d;
+  color: #fff;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+
+body.env-nonlive .topbar {
+  border-bottom: 3px solid #b5651d;
+}
+
 .views {
   display: flex;
   gap: 4px;
@@ -1561,7 +1575,7 @@ body.engine-on .history {
     padding: 0 10px;
   }
 
-  .brand span {
+  .brand span:not(.env-badge) {
     display: none;
   }
 }

@@ -1,0 +1,25 @@
+# Test instance (chess-test.sharkeyhome.co.uk), deployed from the dev branch.
+#
+# It lives in its own clone (~/docker/mpct-test) whose .env selects this file with
+#   COMPOSE_FILE=docker-compose.test.yml:docker-compose.override.yml
+# The service, container, image and Compose project all differ from live on purpose: Compose
+# registers the service name as a DNS alias on the shared network, so if both were called
+# "mpct", Caddy's `reverse_proxy mpct:8000` could reach the test copy.
+# See "Test environment" in the README.
+
+name: mpct-test
+
+services:
+  mpct-test:
+    build: .
+    image: mpct:test
+    container_name: mpct-test
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Always marked as test, whatever .env says (orange top bar + TEST badge).
+      MPCT_ENV: test
+    ports:
+      - "127.0.0.1:${MPCT_PORT:-8011}:8000"

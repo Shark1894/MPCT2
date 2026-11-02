@@ -324,6 +324,93 @@ separate Compose project in `~/docker/mpct` that joins the same Docker network.
    from a URL containing a hash of their contents (`/assets/<build>/...`), so no browser or Cloudflare cache
    can serve an old copy; the page itself is never cached. `/api/health` shows the current `build`.
 
+## Test environment
+
+A second copy of the app at `chess-test.sharkeyhome.co.uk` for trying new work before it reaches the live
+site. It runs the `dev` branch against its own database (`mpct_staging`), filled on demand with a copy of
+live data. Its pages have an orange top bar, a TEST badge and a "TEST ·" tab title.
+
+Workflow: commit to `dev` → deploy and try it on test → merge `dev` into `main` → deploy live.
+
+| | Live | Test |
+| --- | --- | --- |
+| Clone (on the server) | `~/docker/mpct` on `main` | `~/docker/mpct-test` on `dev` |
+| Compose file | `docker-compose.yml` | `docker-compose.test.yml` (selected by `COMPOSE_FILE` in `.env`) |
+| Service / container | `mpct` | `mpct-test` |
+| Host port | 8010 | 8011 |
+| Database / role | `mpct` | `mpct_staging` (cannot connect to `mpct`) |
+
+The test service is deliberately not called `mpct`. Compose adds each service name as a DNS alias on the
+shared network, so two services named `mpct` would let Caddy's `reverse_proxy mpct:8000` reach either one.
+The database name avoids "test" because the pytest suite wipes any database whose name contains it.
+
+### One-time setup
+
+1. **Clone the dev branch** (the same read-only deploy key works):
+
+   ```bash
+   cd ~/docker && git clone -b dev git@github.com:Shark1894/MPCT2.git mpct-test && cd mpct-test
+   printf 'COMPOSE_FILE=docker-compose.test.yml:docker-compose.override.yml\nMPCT_PORT=8011\n' > .env
+   ```
+
+2. **Join the shared network.** `docker-compose.override.yml` (git-ignored), naming the test service:
+
+   ```yaml
+   services:
+     mpct-test:
+       networks: [default, homeserver]
+   networks:
+     homeserver:
+       external: true
+       name: docker_default
+   ```
+
+3. **Create the test database** and copy live data into it:
+
+   ```bash
+   MPCT_DB_PASSWORD=$(openssl rand -hex 24)
+   docker exec -i postgres psql -U jason -d postgres -v pw="$MPCT_DB_PASSWORD" < scripts/create_staging_database.sql
+   echo "DATABASE_URL=postgresql+psycopg://mpct_staging:$MPCT_DB_PASSWORD@postgres:5432/mpct_staging" >> .env
+   scripts/refresh_test_db.sh
+   ```
+
+4. **Start:**
+
+   ```bash
+   docker compose up -d --build
+   curl -s localhost:8011/api/health   # ... "environment":"test", "database":"ok"
+   ```
+
+5. **Route the subdomain.** Add to `~/docker/Caddyfile`, then restart Caddy (a second or two of downtime
+   for everything behind it):
+
+   ```
+   http://chess-test.sharkeyhome.co.uk {
+   	reverse_proxy mpct-test:8000
+   }
+   ```
+
+   ```bash
+   docker restart caddy
+   ```
+
+   Cloudflare tunnel: add a published-application route `chess-test.sharkeyhome.co.uk` → `http://caddy:80`.
+   Cloudflare Access: add `chess-test.sharkeyhome.co.uk` as a second hostname on the existing MPCT
+   application (or a new application with the same Allow policy). **Do this before the tunnel route goes
+   live**, or the test site is briefly public.
+
+### Day to day
+
+```bash
+cd ~/docker/mpct-test && git pull && docker compose up -d --build   # deploy the latest dev to test
+cd ~/docker/mpct-test && scripts/refresh_test_db.sh                 # reset test data to a copy of live
+```
+
+The refresh only reads live (`pg_dump`). It replaces everything in the test database, stops the test
+container while it does, and starts it again so the `dev` branch's migrations run on the fresh copy. Test
+and live keep separate browser storage (engine settings, a game in progress against the engine and so on) because they are different
+hostnames.
+
 ## Layout
 
 ```
