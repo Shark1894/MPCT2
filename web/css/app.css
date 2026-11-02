@@ -890,6 +890,11 @@ body.training .engine {
   gap: 8px;
 }
 
+.review-head-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .review-head h2 {
   margin: 0;
   font-size: 14px;

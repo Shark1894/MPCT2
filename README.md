@@ -101,9 +101,13 @@ part of a game.
   in as each position finishes, and Cancel (what's done is kept; Review again continues). Stockfish runs in this
   browser on its own worker; the live engine pauses meanwhile. Keep the tab open; on phones the screen stays on.
 - **Results**: an evaluation graph of White's winning chances (tap to jump to a move; a copper strip marks moves in
-  the selected opening's repertoire), marks in the move list, and for the selected move: the verdict, the mover's
-  winning chances before → after, notes (missed mate, allows mate, lets a winning position slip), the engine's best
-  move and line with a green arrow, and the evaluation. A summary gives each side's accuracy and counts.
+  the selected opening's repertoire), marks in the move list, and for the selected move: the verdict, notes (missed
+  mate, allows mate, lets a winning position slip), the engine's best move and its evaluation (with a green arrow
+  for flagged moves), White's winning chances in the position and the evaluation. A summary gives each side's
+  accuracy and counts.
+- **Review again** (in the review panel) re-analyses the same moves, wherever you are in them, suggesting the next
+  longer thinking time. Positions already analysed at least that long are kept; the current results stay on screen
+  until the better ones arrive, and the longer analysis replaces the shorter one on the server.
 - **How moves are judged**, the same for both sides, by the drop in the mover's winning chances (Lichess's curve):
   10+ points `?!` inaccuracy, 20+ `?` mistake, 30+ `??` blunder. `!` = only move: the engine's best move, at least
   20 points better than the second best. Accuracy per move uses Lichess's formula; the side's figure is the average.

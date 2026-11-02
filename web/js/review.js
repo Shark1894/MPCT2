@@ -4,7 +4,7 @@
 // shows an evaluation graph, a judgement of every move and a per-side summary.
 
 import { api } from './api.js';
-import { Engine, formatScore, pvToSan } from './engine.js';
+import { Engine, formatScore } from './engine.js';
 import { START_FEN } from './game.js';
 import {
   LABELS,
@@ -48,6 +48,7 @@ export class ReviewController {
       box: $('review'),
       title: $('review-title'),
       close: $('review-close'),
+      again: $('review-again'),
       progress: $('review-progress'),
       bar: $('review-bar'),
       progressText: $('review-progress-text'),
@@ -58,6 +59,7 @@ export class ReviewController {
       book: $('review-book'),
     };
     this.el.start.addEventListener('click', () => this.start());
+    this.el.again.addEventListener('click', () => this.start({ again: true }));
     this.el.cancel.addEventListener('click', () => this.cancel());
     this.el.close.addEventListener('click', () => this.close());
     this.el.graph.addEventListener('click', (e) => this._graphClick(e));
@@ -73,10 +75,12 @@ export class ReviewController {
 
   // ---- starting ------------------------------------------------------------
 
-  async start() {
+  /** again: re-review the moves of the open review (wherever the board is), suggesting a longer time. */
+  async start({ again = false } = {}) {
     if (this.running || this.isBusy()) return;
     const g = this.game;
-    const ply = g.ply;
+    const previous = again && this.review ? this.review : null;
+    const ply = previous ? previous.moves.length : g.ply;
     if (ply === 0) {
       toast('Play or open some moves first: the review covers the moves up to the board position.');
       return;
@@ -99,13 +103,19 @@ export class ReviewController {
       const time = n === 0 ? 'already analysed' : `${describeDuration(estimateSeconds(n, s.ms))}`;
       return [key, `${s.label}: ${s.ms / 1000} s per position (${time})`];
     });
-    const preferred = SPEEDS[store.get('reviewSpeed')] ? store.get('reviewSpeed') : 'standard';
+    const keys = Object.keys(SPEEDS);
+    const longer = previous ? keys[Math.min(keys.length - 1, keys.indexOf(previous.speed) + 1)] : null;
+    const preferred = longer ?? (SPEEDS[store.get('reviewSpeed')] ? store.get('reviewSpeed') : 'standard');
     const reused = positions.length - todo(SPEEDS[preferred].ms);
     const res = await formDialog({
-      title: 'Review with the engine',
+      title: previous ? 'Review again' : 'Review with the engine',
       message:
-        `Analyses ${plural(positions.length, 'position')} (${plural(ply, 'move')}, up to the board position) one at a time, ` +
-        `then marks each move and draws the evaluation graph.` +
+        (previous
+          ? `Analyses the same ${plural(positions.length, 'position')} (${plural(ply, 'move')}) again. ` +
+            `Pick a longer thinking time for a more reliable evaluation; positions already analysed for at least that long are kept, ` +
+            `and the current results stay on screen until the better ones arrive.`
+          : `Analyses ${plural(positions.length, 'position')} (${plural(ply, 'move')}, up to the board position) one at a time, ` +
+            `then marks each move and draws the evaluation graph.`) +
         (reused ? ` ${plural(reused, 'position')} analysed before at ${SPEEDS[preferred].label} or longer will be reused.` : '') +
         `\n\nThe engine runs in this browser: keep this tab open until it finishes` +
         (coarse ? ' (the screen stays on while it works).' : '.') +
@@ -113,7 +123,7 @@ export class ReviewController {
       fields: [
         { name: 'speed', label: 'Thinking time', type: 'select', options, value: preferred },
       ],
-      submit: 'Start review',
+      submit: previous ? 'Review again' : 'Start review',
     });
     if (!res) return;
     const speed = SPEEDS[res.speed] ? res.speed : 'standard';
@@ -328,6 +338,7 @@ export class ReviewController {
     const run = this.run;
     const r = this.review;
     this.el.progress.hidden = !run;
+    this.el.again.hidden = Boolean(run);
     const analysed = r.fresh.filter(Boolean).length;
     const label = SPEEDS[r.speed]?.label ?? '';
     if (!run) {
@@ -405,11 +416,17 @@ export class ReviewController {
       if (e.terminal) return e.terminal === 'checkmate' ? 'checkmate' : 'draw';
       return `${formatScore(e.lines[0].score)} (depth ${e.depth})`;
     };
+    // White's winning chances in the position on the board (same scale as the graph).
+    const chances = () => {
+      const w = positionWhite(ev);
+      if (w !== null) add('rv-chances', `White's winning chances: ${pct(w)}`);
+    };
     let shapes = [];
     if (ply > r.moves.length) {
       add('meta', 'This position is after the reviewed moves.');
     } else if (ply === 0) {
       add('rv-move-head', 'Start position');
+      chances();
       add('meta', `Evaluation ${evalText(ev)}`);
     } else {
       const j = r.judged[ply - 1];
@@ -430,15 +447,14 @@ export class ReviewController {
           b.title = `In your ${r.book.opening} repertoire`;
           head.append(' ', b);
         }
-        add('rv-chances', `${SIDE[j.side]}'s winning chances: ${pct(j.before)} → ${pct(j.after)}`);
         for (const note of j.notes) add('rv-note', note);
         if (j.best) {
-          const bestLine = pvToSan(r.positions[ply - 1], j.best.pv, 8).map((x) => x.text).join(' ');
-          add('rv-best', `Best was ${moveLabel(ply, j.best.san, r.startFen)} (${formatScore(j.best.score)}): ${bestLine}`);
+          add('rv-best', `Best was ${moveLabel(ply, j.best.san, r.startFen)} (${formatScore(j.best.score)})`);
           if (j.label) shapes = [{ orig: j.best.uci.slice(0, 2), dest: j.best.uci.slice(2, 4), brush: 'green' }];
         }
       }
-      add('meta', `Evaluation after the move: ${evalText(ev)}`);
+      chances();
+      add('meta', `Evaluation: ${evalText(ev)}`);
     }
     this.board.setLayer('review', this.isBusy() ? [] : shapes);
   }

@@ -102,8 +102,8 @@ const marks = (page) =>
   const detail = await text(page, '#review-move');
   check(detail.startsWith('3...Nf6??') && detail.includes('Blunder'), 'Nf6 detail: ' + detail.slice(0, 40));
   check(detail.includes('Allows mate in 1'), 'explains the blunder');
-  check(/Black's winning chances: \d+% → 0%/.test(detail), 'winning chances for Black: ' + detail.match(/Black's winning chances[^E]*/)?.[0]);
-  check(/Best was 3\.\.\./.test(detail), 'names the best move');
+  check(detail.includes("White's winning chances: 100%") && !detail.includes('→'), 'one winning-chances figure for the position: ' + detail.match(/White's winning chances: \d+%/)?.[0]);
+  check(/Best was 3\.\.\.\w+ \([-+]\d\.\d\d\)$/m.test(await text(page, '#review-move .rv-best')), 'best move and its evaluation, no line: ' + (await text(page, '#review-move .rv-best')));
   const shapes = await page.evaluate(() => mpct.board.layers.review);
   check(shapes.length === 1 && shapes[0].brush === 'green', 'best move arrow on the board');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/rv-done.png` });
@@ -118,6 +118,23 @@ const marks = (page) =>
   await settle(page, 300);
   check((await page.evaluate(() => mpct.game.ply)) === 0, 'tap on the graph’s left edge goes to the start');
   check((await text(page, '#review-move .rv-move-head')) === 'Start position', 'start position detail');
+  check(/White's winning chances: 5\d%/.test(await text(page, '#review-move')), 'start position shows White’s chances');
+
+  // ---- review again, for longer (works from anywhere in the reviewed moves) ----------------
+  check(await page.isVisible('#review-again'), 'Review again offered when done');
+  await page.click('#review-again');
+  await page.waitForSelector('dialog.modal[open]');
+  check((await text(page, 'dialog.modal h2')) === 'Review again', 'dialog titled Review again');
+  check((await page.$eval('dialog.modal select[name="speed"]', (s) => s.value)) === 'standard', 'suggests the next longer time');
+  const againMsg = await text(page, 'dialog.modal .modal-message');
+  check(againMsg.includes('same 8 positions (7 moves)'), 'same moves even though the board is at the start: ' + againMsg.split('.')[0]);
+  await page.click('dialog.modal button[type="submit"]');
+  await page.waitForSelector('#review-progress:not([hidden])', { timeout: 5000 });
+  check(await page.isHidden('#review-again'), 'Review again hidden while running');
+  check((await page.$$('#review-graph svg polyline')).length === 1, 'Quick results stay on screen meanwhile');
+  await waitDone(page);
+  check((await text(page, '#review-title')) === 'Review · 7 moves · Standard', 'now at Standard: ' + (await text(page, '#review-title')));
+  check((await page.evaluate(() => mpct.game.ply)) === 0, 'board position unchanged');
 
   // ---- saved: reviewing again is instant ------------------------------------------------
   const saved = await page.evaluate(async () => {
@@ -125,10 +142,10 @@ const marks = (page) =>
     const r = await fetch('/api/evals/lookup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fens }) }).then((x) => x.json());
     return r.evals.map((e) => (e ? e.movetime_ms : null));
   });
-  check(saved.slice(0, 7).every((v) => v === 300) && saved[7] === null, 'positions saved on the server (mate needs no engine): ' + saved);
+  check(saved.slice(0, 7).every((v) => v === 1000) && saved[7] === null, 'longer analysis replaced the quick one on the server (mate needs no engine): ' + saved);
   await page.click('#nav-end');
   const again = await startReview(page, 'quick');
-  check(again.options[0].includes('already analysed') && again.msg.includes('8 positions analysed before'), 'second review reuses everything: ' + again.options[0]);
+  check(again.options[0].includes('already analysed') && again.options[1].includes('already analysed') && again.msg.includes('8 positions analysed before'), 'a new review reuses everything: ' + again.options.slice(0, 2).join(' | '));
   await waitDone(page, 5000);
   check(true, 'second review finished at once');
 
