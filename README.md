@@ -67,6 +67,7 @@ en passant square that allows no capture are ignored, so transpositions match.
 | `POST /api/openings/{id}/lines` | Save moves `{"moves": ["e2e4", ...]}`: `created`, `extended` or `exists` |
 | `GET/DELETE /api/openings/{id}/lines/through?fen=` | Count / delete the lines passing through a position |
 | `DELETE /api/lines/{id}` | Delete one line |
+| `PUT/DELETE /api/lines/{id}/bookmark` | Bookmark a line (optional note) / remove the bookmark |
 | `GET /api/openings/{id}/explorer?fen=` | Repertoire moves from a position, with line counts |
 | `GET/PUT /api/repertoires/{id}/comment` | Read / save a position comment (empty comment deletes it) |
 
@@ -155,9 +156,19 @@ The **Dashboard** tab (top bar), from top to bottom:
   **Show** (puts the position on the board) / **Train** (the lines through that move). A position drops off once
   you get it right 3 reviews in a row.
 - **Lines**: sort (next review, weakest, lowest streak, move order), show (all, due, not reviewed yet, recent
-  mistakes) and search by move (`Bf5`, `3.e5`). Choices are remembered. Each line shows its next review, streak and
-  last 5 results, with **Train**, **Show**, **Reset** (clears its history, due today) and **Delete**. On phones lines
-  are cards.
+  mistakes, bookmarked) and search by move (`Bf5`, `3.e5`). Choices are remembered. Each line shows its next review,
+  streak and last 5 results, with **☆** (bookmark), **Train**, **Show**, **Reset** (clears its history, due today)
+  and **Delete**. On phones lines are cards. When Show or the search narrows the list, **Train shown (n)** trains
+  exactly those lines in that order (**Train bookmarked (n)** with the Bookmarked filter).
+
+### Bookmarks
+
+Star a line to come back to it later or show someone: **☆** on its dashboard row, or **☆** next to Stop while
+training it (one tap, no dialog, so the line carries on). A bookmarked line shows a ✎ note under its moves: tap it to
+add or edit a short note (up to 500 characters). Bookmarks survive extending or resetting the line. Removing a
+bookmark deletes its note, and asks first if there is one.
+API: `PUT /api/lines/{id}/bookmark` with `{"note": "..."}` (bookmarks, or changes the note; empty = no note),
+`DELETE /api/lines/{id}/bookmark`. Dashboard and training lines include `bookmarked` and `bookmark_note`.
 
 Practice retries (of a line already played correctly) are left out of everything here. Hover or tap a bar, segment
 or day for its numbers.
@@ -263,6 +274,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/engine.e2e.cjs       # runs the r
 MPCT_URL=http://localhost:8010/ node tests/e2e/games.e2e.cjs        # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/play.e2e.cjs         # empty database, real engine
 MPCT_URL=http://localhost:8010/ node tests/e2e/insights.e2e.cjs     # empty database
+MPCT_URL=http://localhost:8010/ node tests/e2e/bookmarks.e2e.cjs    # empty database
 ```
 
 ## Deploy on the home server

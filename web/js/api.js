@@ -75,6 +75,8 @@ export const api = {
   resetOpening: (openingId) => request('POST', `/openings/${openingId}/reset`),
   deleteAllLines: (openingId) => request('DELETE', `/openings/${openingId}/lines`),
   deleteLine: (lineId) => request('DELETE', `/lines/${lineId}`),
+  setBookmark: (lineId, note = null) => request('PUT', `/lines/${lineId}/bookmark`, { body: { note } }),
+  removeBookmark: (lineId) => request('DELETE', `/lines/${lineId}/bookmark`),
 
   games: (q = '') => request('GET', '/games', { params: q ? { q } : {} }),
   game: (id) => request('GET', `/games/${id}`),

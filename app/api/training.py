@@ -25,6 +25,8 @@ class TrainingLineOut(BaseModel):
     id: int
     next_review_on: date
     streak: int
+    bookmarked: bool
+    bookmark_note: str | None
     moves: list[LineMoveOut]
 
 

@@ -48,6 +48,16 @@ test('viewLines filters, searches move text and sorts', () => {
   assert.deepEqual(viewLines(lines, { search: 'e5' }).map((l) => l.id), [1], 'e5 does not match exd5');
 });
 
+test('viewLines bookmarked filter', () => {
+  const lines = [
+    { ...line(1, ['e4', 'c6'], { due: 1 }), bookmarked: true, bookmark_note: 'sharp' },
+    line(2, ['e4', 'e5']),
+    { ...line(3, ['d4', 'd5'], { due: -1 }), bookmarked: true, bookmark_note: null },
+  ];
+  assert.deepEqual(viewLines(lines, { filter: 'bookmarked' }).map((l) => l.id), [3, 1]);
+  assert.deepEqual(viewLines(lines, { filter: 'bookmarked', search: 'd4' }).map((l) => l.id), [3]);
+});
+
 test('weakestLines: only lines with recent mistakes, weakest first, capped', () => {
   const lines = [
     line(1, ['e4'], { recent: [true, false] }),

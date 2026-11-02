@@ -1429,7 +1429,7 @@ body.engine-on .history {
 
 .dash-line {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 140px 90px 150px 290px;
+  grid-template-columns: minmax(0, 1fr) 140px 90px 150px 330px;
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
@@ -1488,8 +1488,56 @@ body.engine-on .history {
 
 .dash-actions-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 36px repeat(4, 1fr);
   gap: 6px;
+}
+
+/* ---- bookmarks ---- */
+
+button.star {
+  padding: 0;
+  min-width: 36px;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-dim);
+}
+
+button.star[aria-pressed='true'] {
+  color: #e8b64c;
+  border-color: rgba(232, 182, 76, 0.55);
+}
+
+.train-head .star {
+  margin-left: auto;
+}
+
+.line-note {
+  display: block;
+  margin-top: 4px;
+  padding: 0;
+  min-height: 0;
+  border: none;
+  background: none;
+  color: #e8b64c;
+  font-size: 13px;
+  font-style: italic;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.line-note::before {
+  content: '✎ ';
+  font-style: normal;
+}
+
+.line-note.empty {
+  color: var(--text-dim);
+}
+
+#dash-train-shown {
+  margin-bottom: 4px;
 }
 
 .dash-empty {

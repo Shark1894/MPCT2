@@ -75,6 +75,8 @@ def dashboard(s: Session, opening_id: int, tag_id: int | None = None) -> dict:
                 "correct": sum(1 for correct, _ in history[line.id] if correct),
                 "last_reviewed_at": history[line.id][-1][1] if history[line.id] else None,
                 "tags": sorted(line_tags[line.id]),
+                "bookmarked": line.bookmarked_at is not None,
+                "bookmark_note": line.bookmark_note,
             }
             for line in lines
         ],

@@ -2,7 +2,7 @@
 // per-line and per-opening actions. Follows the repertoire panel's selected opening.
 
 import { api } from './api.js';
-import { confirmDialog, describeDue, daysFromToday, fillOpeningSelect, plural, store, toast } from './ui.js';
+import { confirmDialog, describeDue, daysFromToday, fillOpeningSelect, formDialog, plural, store, toast } from './ui.js';
 import {
   enableTips,
   masteryBar,
@@ -67,6 +67,7 @@ export class DashboardView {
       filter: $('dash-filter'),
       search: $('dash-search'),
       showing: $('dash-showing'),
+      trainShown: $('dash-train-shown'),
     };
     const e = this.el;
     e.opening.addEventListener('change', async () => {
@@ -80,6 +81,11 @@ export class DashboardView {
     e.trainWeak.addEventListener('click', () => {
       const weak = weakestLines(this.data?.lines ?? []);
       if (weak.length) this.onTrain(this._opening(), 'all', weak.map((l) => l.id), null, 'weakest lines');
+    });
+    e.trainShown.addEventListener('click', () => {
+      const shown = viewLines(this.data?.lines ?? [], this.view);
+      const label = this.view.filter === 'bookmarked' && !this.view.search.trim() ? 'bookmarked lines' : 'shown lines';
+      if (shown.length) this.onTrain(this._opening(), 'all', shown.map((l) => l.id), null, label);
     });
     e.sort.value = this.view.sort;
     e.filter.value = this.view.filter;
@@ -184,6 +190,7 @@ export class DashboardView {
     this.el.ppList.innerHTML = '';
     this.el.ppEmpty.hidden = true;
     this.el.showing.textContent = '';
+    this.el.trainShown.hidden = true;
     this.el.lines.innerHTML = '';
     this.el.empty.textContent = text;
     this.el.empty.hidden = false;
@@ -228,7 +235,16 @@ export class DashboardView {
       ? this.data.tag_id
         ? 'No lines pass through this branch’s position.'
         : 'No lines yet. Add some from the Board view with Add line.'
-      : 'No lines match. Change Show or clear the move search.';
+      : this.view.filter === 'bookmarked' && !this.view.search.trim()
+        ? 'No bookmarked lines. Tap ☆ on a line, here or while training, to bookmark it.'
+        : 'No lines match. Change Show or clear the move search.';
+    // Train exactly what the list shows (only offered when it's narrower than Train all).
+    const narrowed = shown.length > 0 && shown.length < all.length;
+    e.trainShown.hidden = !narrowed;
+    e.trainShown.textContent =
+      this.view.filter === 'bookmarked' && !this.view.search.trim()
+        ? `Train bookmarked (${shown.length})`
+        : `Train shown (${shown.length})`;
     for (const line of shown) e.lines.appendChild(this._lineRow(line));
   }
 
@@ -252,6 +268,7 @@ export class DashboardView {
       }
       moves.appendChild(tagRow);
     }
+    if (line.bookmarked) moves.appendChild(this._noteButton(line));
 
     const due = document.createElement('div');
     due.className = 'dash-due';
@@ -271,7 +288,12 @@ export class DashboardView {
 
     const actions = document.createElement('div');
     actions.className = 'dash-actions-row';
+    const star = this._button(line.bookmarked ? '★' : '☆', () => this.toggleBookmark(line), 'star');
+    star.setAttribute('aria-pressed', String(Boolean(line.bookmarked)));
+    star.title = line.bookmarked ? 'Remove bookmark' : 'Bookmark this line';
+    star.setAttribute('aria-label', star.title);
     actions.append(
+      star,
       this._button('Train', () => this.onTrain(this._opening(), 'all', line.id, null), 'primary'),
       this._button('Show', () => this.onShowLine(line.moves)),
       this._button('Reset', () => this.resetLine(line)),
@@ -280,6 +302,16 @@ export class DashboardView {
 
     row.append(moves, due, streak, recent, actions);
     return row;
+  }
+
+  _noteButton(line) {
+    const note = document.createElement('button');
+    note.type = 'button';
+    note.className = `line-note${line.bookmark_note ? '' : ' empty'}`;
+    note.textContent = line.bookmark_note || 'Add a note';
+    note.title = 'Edit the bookmark note';
+    note.addEventListener('click', () => this.editNote(line));
+    return note;
   }
 
   _dot(kind) {
@@ -304,6 +336,50 @@ export class DashboardView {
     toast(message);
     await this.repertoire.reloadOpenings().catch(() => {});
     await this.refresh();
+  }
+
+  // ---- bookmarks ------------------------------------------------------------
+
+  /** Update one line in place (no full reload, so the list doesn't jump). */
+  _setLineBookmark(line, bookmarked, note) {
+    line.bookmarked = bookmarked;
+    line.bookmark_note = note;
+    this._renderLines();
+  }
+
+  async toggleBookmark(line) {
+    try {
+      if (!line.bookmarked) {
+        await api.setBookmark(line.id);
+        this._setLineBookmark(line, true, null);
+        toast('Bookmarked');
+        return;
+      }
+      if (line.bookmark_note) {
+        const ok = await confirmDialog('Remove this bookmark?', `${formatLine(line.moves)}\n\nIts note is deleted too:\n“${line.bookmark_note}”`, 'Remove');
+        if (!ok) return;
+      }
+      await api.removeBookmark(line.id);
+      this._setLineBookmark(line, false, null);
+      toast('Bookmark removed');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  async editNote(line) {
+    const res = await formDialog({
+      title: 'Bookmark note',
+      message: formatLine(line.moves),
+      fields: [{ name: 'note', label: 'Note (leave empty for none)', value: line.bookmark_note ?? '', required: false, maxLength: 500 }],
+    });
+    if (res === null) return;
+    try {
+      const saved = await api.setBookmark(line.id, res.note);
+      this._setLineBookmark(line, true, saved.note);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   }
 
   async resetLine(line) {

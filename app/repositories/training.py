@@ -74,6 +74,8 @@ def training_lines(
                 "id": line.id,
                 "next_review_on": line.next_review_on,
                 "streak": streaks[line.id],
+                "bookmarked": line.bookmarked_at is not None,
+                "bookmark_note": line.bookmark_note,
                 "moves": moves[line.id],
             }
             for line in lines

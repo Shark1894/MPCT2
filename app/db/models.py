@@ -71,6 +71,9 @@ class Line(Base):
     opening_id: Mapped[int] = mapped_column(ForeignKey("openings.id", ondelete="CASCADE"))
     created_on: Mapped[date] = mapped_column(Date, server_default=func.current_date())
     next_review_on: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    # Bookmark: set when starred; the optional note belongs to the bookmark.
+    bookmarked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    bookmark_note: Mapped[str | None] = mapped_column(Text)
 
     opening: Mapped[Opening] = relationship(back_populates="lines")
     moves: Mapped[list["Move"]] = relationship(

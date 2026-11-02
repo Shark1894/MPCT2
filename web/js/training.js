@@ -4,7 +4,7 @@
 import { api } from './api.js';
 import { START_FEN } from './game.js';
 import { TrainingSession } from './trainer.js';
-import { daysFromToday, plural, toast } from './ui.js';
+import { confirmDialog, daysFromToday, plural, toast } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const OPPONENT_DELAY_MS = 450;
@@ -45,7 +45,9 @@ export class TrainingController {
       commentsNote: $('train-comments-note'),
       commentsNoteText: $('train-comments-note-text'),
       commentsShow: $('train-comments-show'),
+      bookmark: $('train-bookmark'),
     };
+    this.el.bookmark.addEventListener('click', () => this.toggleBookmark());
     this.commentsRevealed = false;
     this.el.next.addEventListener('click', () => this.nextLine());
     this.el.retry.addEventListener('click', () => this.retryLine());
@@ -113,6 +115,7 @@ export class TrainingController {
     this._message('');
     this.commentsRevealed = false;
     this._applyComments();
+    this._showBookmark();
     this.render();
     this._continue();
   }
@@ -214,11 +217,49 @@ export class TrainingController {
     this.el.progress.textContent = 'Session complete';
     this._message('');
     this.el.summary.hidden = false;
+    this._showBookmark();
     $('train-summary-text').textContent =
       `${plural(sum.reviewed, 'line')} reviewed: ${sum.correct} correct` +
       (sum.fixed ? ` (${sum.fixed} on a retry)` : '') +
       (sum.failed ? `, ${sum.failed} to repeat (due again today).` : '.');
     this.el.done.focus();
+  }
+
+  // ---- bookmark -------------------------------------------------------------
+
+  _showBookmark() {
+    const line = this.session?.line;
+    const b = this.el.bookmark;
+    b.hidden = !line;
+    if (!line) return;
+    b.textContent = line.bookmarked ? '★' : '☆';
+    b.setAttribute('aria-pressed', String(Boolean(line.bookmarked)));
+    b.title = line.bookmarked ? 'Remove bookmark' : 'Bookmark this line';
+    b.setAttribute('aria-label', b.title);
+  }
+
+  /** One tap, no dialog, so training isn't interrupted. Notes are edited on the Dashboard. */
+  async toggleBookmark() {
+    const line = this.session?.line;
+    if (!line) return;
+    try {
+      if (line.bookmarked) {
+        if (line.bookmark_note) {
+          const ok = await confirmDialog('Remove this bookmark?', `Its note is deleted too:\n“${line.bookmark_note}”`, 'Remove');
+          if (!ok) return;
+        }
+        await api.removeBookmark(line.id);
+        Object.assign(line, { bookmarked: false, bookmark_note: null });
+        toast('Bookmark removed');
+      } else {
+        await api.setBookmark(line.id);
+        Object.assign(line, { bookmarked: true, bookmark_note: null });
+        toast('Bookmarked. Add a note from the Dashboard.');
+      }
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+    if (this.session?.line === line) this._showBookmark();
   }
 
   // ---- display helpers ----------------------------------------------------

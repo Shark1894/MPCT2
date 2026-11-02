@@ -70,6 +70,8 @@ class DashboardLine(BaseModel):
     correct: int
     last_reviewed_at: datetime | None
     tags: list[int]  # ids of the branch tags this line passes through
+    bookmarked: bool
+    bookmark_note: str | None
 
 
 class DashboardOut(BaseModel):

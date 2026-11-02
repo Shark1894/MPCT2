@@ -52,6 +52,7 @@ export const FILTERS = {
   due: (l) => daysFromToday(l.next_review_on) <= 0,
   new: (l) => l.reviews === 0,
   mistakes: (l) => weakness(l) > 0,
+  bookmarked: (l) => Boolean(l.bookmarked),
 };
 
 /** Lines after filter, move search and sort. Search matches the numbered move text ("Bf5", "3.e5"). */

@@ -103,6 +103,7 @@
         <div id="training" class="training" hidden>
           <div class="train-head">
             <h2 id="train-title">Training</h2>
+            <button id="train-bookmark" type="button" class="small star" aria-pressed="false" title="Bookmark this line">☆</button>
             <button id="train-stop" type="button" class="small">Stop</button>
           </div>
           <p id="train-progress" class="meta"></p>
@@ -312,12 +313,14 @@
             <option value="due">Due now</option>
             <option value="new">Not reviewed yet</option>
             <option value="mistakes">Recent mistakes</option>
+            <option value="bookmarked">Bookmarked</option>
           </select>
         </label>
         <label class="dash-search">Move
           <input id="dash-search" type="search" placeholder="e.g. Bf5 or 3.e5" autocomplete="off" spellcheck="false" />
         </label>
         <span id="dash-showing" class="meta"></span>
+        <button id="dash-train-shown" type="button" class="small" hidden>Train shown</button>
       </div>
 
       <div class="dash-table">
