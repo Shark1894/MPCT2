@@ -10,6 +10,7 @@ import { DashboardView } from './dashboard.js';
 import { AnalysisPanel } from './analysis.js';
 import { GamePanel, GamesView } from './games.js';
 import { PlayController } from './play.js';
+import { ReviewController } from './review.js';
 import { isModalOpen, store } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -115,6 +116,22 @@ const play = new PlayController({
   },
 });
 
+// ---- engine review --------------------------------------------------------------
+
+const review = new ReviewController({
+  game,
+  board,
+  analysis,
+  getOpening: () => repertoire._opening(),
+  isBusy: () => trainer.active || play.active,
+  onJump: (ply) => {
+    if (trainer.active || play.active) return;
+    game.goTo(ply);
+    render();
+  },
+  onChanged: () => render(),
+});
+
 /** Training replaces the board's moves, so an open game is closed first (asking if unsaved). */
 async function startTraining(opening, mode, lineId, tag, label) {
   if (!(await play.confirmStop())) return;
@@ -168,11 +185,17 @@ function render() {
   const status = game.status();
   ui.status.textContent = status.text;
   ui.status.classList.toggle('over', status.over);
-  renderMoveList(ui.moves, game, (ply) => {
-    if (trainer.active) return; // no peeking ahead while training
-    game.goTo(ply);
-    render();
-  });
+  review?.update();
+  renderMoveList(
+    ui.moves,
+    game,
+    (ply) => {
+      if (trainer.active) return; // no peeking ahead while training
+      game.goTo(ply);
+      render();
+    },
+    review?.annotations(),
+  );
   if (document.activeElement !== ui.fen) ui.fen.value = game.fen();
   const atStart = game.ply === 0 || trainer.active;
   const atEnd = game.ply === game.moves.length || trainer.active;
@@ -330,7 +353,9 @@ repertoire.init().then(async () => {
   if (openGameId) await gamePanel.open(openGameId);
   const saved = store.get('view');
   if (saved && saved !== 'board' && VIEWS[saved]) setView(saved);
+  await review.restore();
+  render();
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, repertoire, trainer, dashboard, setView, render, analysis, gamePanel, gamesView, play };
+window.mpct = { game, board, repertoire, trainer, dashboard, setView, render, analysis, gamePanel, gamesView, play, review };

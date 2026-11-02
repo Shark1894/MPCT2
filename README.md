@@ -27,6 +27,7 @@ The full plan, decisions and data model are in the project's
 | 7 | Engine analysis (Stockfish 19 Lite in the browser) | Done |
 | 7b | Play against the engine | Done |
 | 8 | Games database: save, edit, PGN import/export, compare with repertoire | Done |
+| — | Bookmarked lines; engine review of the moves on the board | Done |
 
 ## Using the board
 
@@ -86,6 +87,32 @@ threads and a smaller hash.
 - Blue arrow = engine's best move, pale blue = the other lines (repertoire arrows stay green). An evaluation bar
   sits beside the board and flips with it.
 - Analysis pauses during training (and is hidden), on the dashboard, and while the tab is in the background.
+
+## Engine review
+
+**Review** (engine panel, next to Play vs engine) analyses every position from the start up to the position on the
+board: an opened game, a repertoire line opened with Show, or moves you just played. Step back first to review only
+part of a game.
+
+- **Before it starts** a dialog says how many positions it will analyse and lets you pick the thinking time per
+  position: Quick 0.3 s, Standard 1 s (default), Deep 3 s, each with an estimate. Positions analysed before are
+  reused, so a second review (or one sharing an opening with an earlier one) is faster.
+- **While it runs**: a progress bar with "Analysing position 23 of 81 · about 40 s left", the graph and marks filling
+  in as each position finishes, and Cancel (what's done is kept; Review again continues). Stockfish runs in this
+  browser on its own worker; the live engine pauses meanwhile. Keep the tab open; on phones the screen stays on.
+- **Results**: an evaluation graph of White's winning chances (tap to jump to a move; a copper strip marks moves in
+  the selected opening's repertoire), marks in the move list, and for the selected move: the verdict, the mover's
+  winning chances before → after, notes (missed mate, allows mate, lets a winning position slip), the engine's best
+  move and line with a green arrow, and the evaluation. A summary gives each side's accuracy and counts.
+- **How moves are judged**, the same for both sides, by the drop in the mover's winning chances (Lichess's curve):
+  10+ points `?!` inaccuracy, 20+ `?` mistake, 30+ `??` blunder. `!` = only move: the engine's best move, at least
+  20 points better than the second best. Accuracy per move uses Lichess's formula; the side's figure is the average.
+- The review stays while you look through the moves and survives a reload; playing a different move closes it.
+
+Every analysed position is saved on the server (`position_evals`, keyed like repertoire positions, so transpositions
+share it); a longer analysis replaces a shorter one, never the reverse. API: `POST /api/evals/lookup`
+`{"fens": [...], "min_movetime_ms": 1000}` → evals in the same order (or null), `POST /api/evals`
+`{"evals": [{"fen", "movetime_ms", "depth", "engine", "lines": [{"uci", "score": {"cp"|"mate"}, "pv"}]}]}`.
 
 ## Play against the engine
 
@@ -275,6 +302,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/games.e2e.cjs        # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/play.e2e.cjs         # empty database, real engine
 MPCT_URL=http://localhost:8010/ node tests/e2e/insights.e2e.cjs     # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/bookmarks.e2e.cjs    # empty database
+MPCT_URL=http://localhost:8010/ node tests/e2e/review.e2e.cjs       # empty database, real engine
 ```
 
 ## Deploy on the home server

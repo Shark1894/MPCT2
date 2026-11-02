@@ -142,6 +142,25 @@ export class Engine {
   }
 
   /**
+   * Analyse one position for a fixed time and resolve with the final result:
+   * { depth, lines: [{ score, pv, ... }] } (scores from White's point of view),
+   * or null if stopped first. Used by the move-by-move review.
+   */
+  async evaluate(fen, { multipv = 2, movetime = 1000 } = {}) {
+    await this.start();
+    this.cancelBestMove();
+    this._stopSearch();
+    this.multipv = multipv;
+    let resolve;
+    const done = new Promise((r) => (resolve = r));
+    this.current = { fen, whiteToMove: fen.split(' ')[1] === 'w', lines: new Map(), depth: 0, done: false, resolve };
+    this._send(`setoption name MultiPV value ${multipv}`);
+    this._send(`position fen ${fen}`);
+    this._send(`go movetime ${movetime}`);
+    return done;
+  }
+
+  /**
    * Choose a move to play. The position is sent as start FEN + moves so the engine
    * sees repetitions. Strength: `skill` (0-20, Stockfish's Skill Level) or `elo`
    * (UCI_LimitStrength, 1320-3190); neither = full strength.
@@ -182,6 +201,7 @@ export class Engine {
 
   terminate() {
     this.cancelBestMove();
+    this._stopSearch();
     this.worker?.terminate();
     this.worker = null;
     this.ready = null;
@@ -192,6 +212,7 @@ export class Engine {
     if (this.current && !this.current.done) {
       this.stopsPending += 1;
       this._send('stop');
+      this.current.resolve?.(null); // an evaluate() that was stopped
     }
   }
 
@@ -225,6 +246,10 @@ export class Engine {
       if (this.current) {
         this.current.done = true;
         this._emit(true);
+        if (this.current.resolve) {
+          const lines = [...this.current.lines.values()].filter((l) => l.multipv <= this.multipv).sort((a, b) => a.multipv - b.multipv);
+          this.current.resolve({ depth: this.current.depth, lines });
+        }
       }
       return;
     }

@@ -195,7 +195,10 @@
           <button id="engine-toggle" type="button" class="switch" role="switch" aria-checked="false">Engine off</button>
           <span id="engine-eval" class="engine-eval"></span>
           <span id="engine-depth" class="meta engine-depth"></span>
-          <button id="play-start" type="button" class="small play-start">Play vs engine</button>
+          <span class="engine-actions">
+            <button id="review-start" type="button" class="small" title="Analyse every move up to this position">Review</button>
+            <button id="play-start" type="button" class="small play-start">Play vs engine</button>
+          </span>
         </div>
         <div id="engine-body" class="engine-body" hidden>
           <div id="engine-lines" class="engine-lines" aria-live="off"></div>
@@ -204,6 +207,23 @@
             <label>Depth <select id="engine-depth-limit"></select></label>
           </div>
           <p id="engine-status" class="meta engine-status"></p>
+        </div>
+        <div id="review" class="review" hidden>
+          <div class="review-head">
+            <h2 id="review-title">Review</h2>
+            <button id="review-close" type="button" class="small" title="Close the review">Close</button>
+          </div>
+          <div id="review-progress" class="review-progress" hidden>
+            <progress id="review-bar" max="1" value="0"></progress>
+            <div class="review-progress-row">
+              <span id="review-progress-text" class="meta" aria-live="polite"></span>
+              <button id="review-cancel" type="button" class="small">Cancel</button>
+            </div>
+          </div>
+          <div id="review-graph" class="review-graph" title="Tap to jump to a move"></div>
+          <div id="review-move" class="review-move" aria-live="polite"></div>
+          <div id="review-summary" class="review-summary"></div>
+          <p id="review-book" class="meta review-book" hidden></p>
         </div>
       </section>
 

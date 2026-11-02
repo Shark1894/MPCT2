@@ -1,6 +1,6 @@
 // Move list: numbered rows of SAN moves; clicking a move jumps to it.
 
-export function renderMoveList(container, game, onSelect) {
+export function renderMoveList(container, game, onSelect, annotations = new Map()) {
   const rows = game.moveRows();
   container.innerHTML = '';
 
@@ -30,6 +30,17 @@ export function renderMoveList(container, game, onSelect) {
         el.type = 'button';
         el.textContent = cell.san;
         el.dataset.ply = cell.ply;
+        const note = annotations.get(cell.ply); // engine review marks
+        if (note) {
+          if (note.symbol) {
+            const sym = document.createElement('span');
+            sym.className = `move-mark ${note.cls}`;
+            sym.textContent = note.symbol;
+            el.appendChild(sym);
+          }
+          if (note.book) el.classList.add('book');
+          el.title = note.title;
+        }
         if (cell.ply === game.ply) el.classList.add('current');
         el.addEventListener('click', () => onSelect(cell.ply));
       } else {

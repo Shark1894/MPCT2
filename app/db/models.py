@@ -21,6 +21,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 NAMING = {
@@ -212,3 +213,24 @@ class GameMove(Base):
     san: Mapped[str] = mapped_column(String(10))
 
     game: Mapped[Game] = relationship(back_populates="moves")
+
+
+class PositionEval(Base):
+    """Saved engine analysis of a position (any position, not only repertoire ones).
+
+    Keyed like positions.key (python-chess EPD), so transpositions share it. `lines` are
+    the engine's best moves, best first: [{"uci", "score": {"cp"|"mate"}, "pv": [uci...]}],
+    scores from White's point of view. `movetime_ms` is the thinking time it got; a
+    review asking for more time re-analyses, less time reuses it.
+    """
+
+    __tablename__ = "position_evals"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    movetime_ms: Mapped[int]
+    depth: Mapped[int]
+    lines: Mapped[list] = mapped_column(JSONB)
+    engine: Mapped[str] = mapped_column(String(60))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

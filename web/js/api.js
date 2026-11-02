@@ -88,6 +88,9 @@ export const api = {
   gamePgnUrl: (id) => `/api/games/${id}/pgn`,
   allGamesPgnUrl: (q = '') => `/api/pgn/games${q ? `?q=${encodeURIComponent(q)}` : ''}`,
 
+  evalsLookup: (fens, minMovetimeMs = 0) => request('POST', '/evals/lookup', { body: { fens, min_movetime_ms: minMovetimeMs } }),
+  saveEvals: (evals) => request('POST', '/evals', { body: { evals } }),
+
   comment: (repId, fen) => request('GET', `/repertoires/${repId}/comment`, { params: { fen } }),
   saveComment: (repId, fen, comment) => request('PUT', `/repertoires/${repId}/comment`, { body: { fen, comment } }),
 };

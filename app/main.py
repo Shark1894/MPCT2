@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
-from app.api import bookmarks, dashboard, games, repertoires, tags, training
+from app.api import bookmarks, dashboard, evals, games, repertoires, tags, training
 from app.config import settings
 from app.core.positions import InvalidLine, InvalidPosition
 from app.db.session import DatabaseNotConfigured, database_status
@@ -109,6 +109,7 @@ def create_app() -> FastAPI:
     app.include_router(tags.router)
     app.include_router(games.router)
     app.include_router(bookmarks.router)
+    app.include_router(evals.router)
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     @app.get("/index.html", response_class=HTMLResponse, include_in_schema=False)
