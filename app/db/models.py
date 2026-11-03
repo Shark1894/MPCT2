@@ -294,3 +294,71 @@ class WildSource(Base):
     games: Mapped[int] = mapped_column(server_default="0")
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+
+
+class Puzzle(Base):
+    """A puzzle from the Lichess puzzle database (CC0). `fen` is the position before the
+    opponent's move; `moves` (UCI) starts with that move, then the solution. `rnd` is a
+    random key for picking puzzles at random quickly. Replaced wholesale on re-import, so
+    nothing refers to it by foreign key."""
+
+    __tablename__ = "puzzles"
+    __table_args__ = (
+        Index("ix_puzzles_rnd", "rnd"),
+        Index("ix_puzzles_themes", "themes", postgresql_using="gin"),
+    )
+
+    id: Mapped[str] = mapped_column(String(10), primary_key=True)
+    fen: Mapped[str] = mapped_column(Text)
+    moves: Mapped[str] = mapped_column(Text)
+    rating: Mapped[int]
+    rating_deviation: Mapped[int]
+    popularity: Mapped[int]
+    nb_plays: Mapped[int]
+    themes: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    game_url: Mapped[str] = mapped_column(Text, server_default="")
+    opening_tags: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    rnd: Mapped[int]
+
+
+class PuzzleAttempt(Base):
+    """One go at a puzzle. Only the first go at a puzzle is rated (rated=true)."""
+
+    __tablename__ = "puzzle_attempts"
+    __table_args__ = (Index("ix_puzzle_attempts_puzzle", "puzzle_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    puzzle_id: Mapped[str] = mapped_column(String(10))
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    solved: Mapped[bool] = mapped_column(Boolean)
+    rated: Mapped[bool] = mapped_column(Boolean)
+    puzzle_rating: Mapped[int]
+    rating_before: Mapped[float]
+    rating_after: Mapped[float]
+    rd_after: Mapped[float]
+    seconds: Mapped[int | None]
+    themes: Mapped[list[str]] = mapped_column(ARRAY(Text))  # copied, so stats survive a re-import
+
+
+class PuzzleRating(Base):
+    """Your current puzzle rating (one row)."""
+
+    __tablename__ = "puzzle_rating"
+    __table_args__ = (CheckConstraint("id = 1", name="single_row"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    rating: Mapped[float]
+    rd: Mapped[float]
+    volatility: Mapped[float]
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class PuzzleImport(Base):
+    """A finished import of the Lichess puzzle database."""
+
+    __tablename__ = "puzzle_imports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    puzzles: Mapped[int]
+    source: Mapped[str] = mapped_column(Text)

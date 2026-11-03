@@ -41,8 +41,11 @@ dump=$(mktemp)
 trap 'rm -f "$dump"' EXIT
 
 # 1. Dump live first, so a failed dump leaves the test database untouched.
+#    The Lichess puzzle database (~2 GB) is left out: the tables come across empty, and
+#    the test site's Puzzles tab offers to download it (your attempts and rating do copy).
 echo "Dumping $LIVE_DB..."
-pg pg_dump -U "$PG_SUPERUSER" -d "$LIVE_DB" --format=custom --no-owner --no-privileges > "$dump"
+pg pg_dump -U "$PG_SUPERUSER" -d "$LIVE_DB" --format=custom --no-owner --no-privileges \
+  --exclude-table-data=puzzles --exclude-table-data=puzzle_imports > "$dump"
 if [ ! -s "$dump" ]; then
   echo "Dump of $LIVE_DB is empty; aborting." >&2
   exit 1

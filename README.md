@@ -29,6 +29,7 @@ The full plan, decisions and data model are in the project's
 | 8 | Games database: save, edit, PGN import/export, compare with repertoire | Done |
 | — | Bookmarked lines; engine review of the moves on the board | Done |
 | — | Repertoire in the wild: watched positions in tournament games | Done |
+| — | Puzzles: the Lichess puzzle database, your own puzzle rating | Done |
 
 ## Using the board
 
@@ -266,6 +267,36 @@ API: `GET /api/repertoires/{id}/watches`, `GET /api/openings/{id}/watches`, `PUT
 `GET /api/wild-games/{id}` (with moves), `GET /api/wild-games/{id}/pgn`, `POST /api/wild-games/{id}/save`, `GET /api/wild/status?repertoire_id=&since=`,
 `POST /api/wild/refresh`.
 
+## Puzzles
+
+The **Puzzles** tab: tactics from the [Lichess puzzle database](https://database.lichess.org/#puzzles) (CC0, about
+6 million puzzles) with your own puzzle rating.
+
+- **The database:** **Download puzzles** streams the compressed file (about 260 MB) from Lichess into Postgres in the
+  background, with a progress bar: a few minutes, about 2 GB in the database. **Update puzzles** later replaces them
+  with the latest file; your attempts and rating are kept. A failed download leaves the previous puzzles in place.
+  By hand: `python -m app.tools.import_puzzles` (or give it a downloaded `.csv.zst` file).
+- **Solving:** **Start puzzles** (any theme, or pick one) opens puzzle mode on the board, like training: the opponent's
+  move is played, then it's yours, from your side of the board. The first wrong move fails the puzzle, as on Lichess
+  (the rating change shows straight away); you can keep trying (after a second wrong try the piece to move is
+  highlighted) or show the **Solution**. Any checkmate is accepted. **Skip** moves on (counts as failed if you'd
+  started). After a puzzle: the result and rating change, its themes and opening, a link to the game on Lichess,
+  **Next puzzle** and **Retry** (not rated). Once a puzzle is over the engine and move navigation are free, to look
+  at it. While solving the engine, repertoire panel and other tabs are hidden.
+- **Which puzzle:** a random one within 200 of your rating that you haven't tried (wider if none is left), skipping
+  puzzles players voted down. Only the first go at a puzzle is rated.
+- **Rating:** Glicko-2, starting at 1500 (shown with a ? while it settles, for your first few dozen puzzles); each
+  attempt is a game against the puzzle's own rating, as on Lichess.
+- **Tab:** your rating and record (today too), rating history (last rating of each day), themes to work on (rated
+  results per theme once you've done 5, weakest first, with **Practise**), and recent puzzles with **Retry**.
+
+The test-site refresh (`scripts/refresh_test_db.sh`) leaves the puzzle database out; download it there separately if
+you want puzzles on the test site.
+
+API: `GET /api/puzzles/status`, `POST /api/puzzles/import`, `GET /api/puzzles/themes`, `GET /api/puzzles/summary`,
+`GET /api/puzzles/next?theme=&exclude=`, `GET /api/puzzles/{id}`, `POST /api/puzzles/{id}/attempts`
+(`{"solved", "seconds"}`).
+
 ## Games
 
 The **Games** tab lists your games newest first (date, players with teams, competition, opening moves, result),
@@ -363,6 +394,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/bookmarks.e2e.cjs    # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/review.e2e.cjs       # empty database, real engine
 # empty database, server started with WILD_FETCH=false; loads games with the import tool:
 MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/wild.e2e.cjs
+MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/puzzles.e2e.cjs   # empty database
 ```
 
 ## Deploy on the home server
@@ -523,6 +555,7 @@ app/
   api/            FastAPI routers + request/response schemas
   tools/          command-line tools (legacy repertoire + games import, wild PGN import)
   wild_fetch.py   background fetching of tournament games (Lichess broadcasts, TWIC)
+  puzzle_import.py streaming import of the Lichess puzzle database
 web/              frontend served as-is
   js/game.js      game state + rules wrapper (pure logic, unit tested)
   js/board.js     chessground wrapper + promotion picker
@@ -536,6 +569,8 @@ web/              frontend served as-is
   js/analysis.js  engine panel, evaluation bar, engine arrows
   js/games.js     games list view + open-game panel (save, compare, PGN)
   js/wild.js      Wild tab: watched positions, spotted tournament games, fetch status
+  js/puzzle.js    one puzzle's rules + rating chart path (pure logic, unit tested)
+  js/puzzles.js   Puzzles tab + puzzle mode on the board
   js/play.js      play vs engine: levels, engine replies, takeback, resign, save
   js/api.js       JSON API client
   js/ui.js        dialogs, toast, local storage

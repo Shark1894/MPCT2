@@ -23,6 +23,7 @@
         <button id="view-board" type="button" class="view-tab" aria-pressed="true">Board</button>
         <button id="view-dashboard" type="button" class="view-tab" aria-pressed="false">Dashboard</button>
         <button id="view-games" type="button" class="view-tab" aria-pressed="false">Games</button>
+        <button id="view-puzzles" type="button" class="view-tab" aria-pressed="false">Puzzles</button>
         <button id="view-wild" type="button" class="view-tab" aria-pressed="false" title="Your repertoire in tournament games">Wild<span id="wild-new" class="tab-count" hidden></span></button>
       </nav>
       <span id="mode-badge" class="mode-badge" hidden>Training</span>
@@ -125,6 +126,28 @@
           <div id="train-summary" class="train-summary" hidden>
             <p id="train-summary-text"></p>
             <button id="train-done" type="button" class="primary">Done</button>
+          </div>
+        </div>
+
+        <div id="puzzle" class="training puzzle" hidden>
+          <div class="train-head">
+            <h2 id="puzzle-title">Puzzle</h2>
+            <button id="puzzle-stop" type="button" class="small">Stop</button>
+          </div>
+          <p id="puzzle-progress" class="meta"></p>
+          <p id="puzzle-message" class="train-message" aria-live="polite"></p>
+          <div class="train-end-actions" id="puzzle-playing">
+            <button id="puzzle-reveal" type="button" title="Show the solution (counts as failed)">Solution</button>
+            <button id="puzzle-skip" type="button" title="Skip to another puzzle (counts as failed if you've started)">Skip</button>
+          </div>
+          <div id="puzzle-end" class="train-end" hidden>
+            <p id="puzzle-result" class="train-result" aria-live="polite"></p>
+            <p id="puzzle-info" class="meta puzzle-info"></p>
+            <div class="train-end-actions">
+              <button id="puzzle-next" type="button" class="primary">Next puzzle</button>
+              <button id="puzzle-retry" type="button" title="Try it again (not rated)">Retry</button>
+            </div>
+            <a id="puzzle-game" class="button small" href="#" target="_blank" rel="noopener">Game on Lichess</a>
           </div>
         </div>
 
@@ -412,6 +435,47 @@
         <div id="wild-games" class="games-list"></div>
         <p id="wild-empty" class="dash-empty" hidden></p>
         <button id="wild-more" type="button" hidden>Show more</button>
+      </section>
+    </main>
+    <main id="puzzles-view" class="games-view puzzles-view" hidden>
+      <section class="dash-card pz-top">
+        <div class="pz-rating">
+          <span class="stat-label">Puzzle rating</span>
+          <span id="pz-rating" class="pz-rating-value">—</span>
+          <span id="pz-rating-meta" class="meta"></span>
+        </div>
+        <div class="pz-start">
+          <label class="pz-theme">Theme
+            <select id="pz-theme"><option value="">Any theme</option></select>
+          </label>
+          <button id="pz-start" type="button" class="primary">Start puzzles</button>
+        </div>
+      </section>
+
+      <section id="pz-db" class="dash-card pz-db">
+        <h2 class="dash-h">Puzzle database</h2>
+        <p id="pz-db-text" class="meta"></p>
+        <div id="pz-db-progress" class="pz-progress" hidden><div id="pz-db-bar"></div></div>
+        <button id="pz-import" type="button" class="small">Download puzzles</button>
+      </section>
+
+      <div class="dash-two">
+        <section class="dash-card">
+          <h2 class="dash-h">Rating history</h2>
+          <div id="pz-chart" class="pz-chart"></div>
+          <p id="pz-chart-empty" class="meta" hidden>Solve some puzzles to see your rating over time.</p>
+        </section>
+        <section class="dash-card">
+          <h2 class="dash-h">Themes to work on <span class="meta">rated puzzles, weakest first</span></h2>
+          <ul id="pz-themes" class="pz-themes"></ul>
+          <p id="pz-themes-empty" class="meta" hidden>After 5 or more puzzles of a theme, your results for it show here.</p>
+        </section>
+      </div>
+
+      <section class="dash-card">
+        <h2 class="dash-h">Recent puzzles</h2>
+        <ul id="pz-recent" class="pz-recent"></ul>
+        <p id="pz-recent-empty" class="meta" hidden>No puzzles yet.</p>
       </section>
     </main>
   </body>

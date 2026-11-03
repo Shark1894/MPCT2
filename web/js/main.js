@@ -13,6 +13,7 @@ import { PlayController } from './play.js';
 import { ReviewController } from './review.js';
 import { SavedEval } from './saved-eval.js';
 import { WildView } from './wild.js';
+import { PuzzleController, PuzzlesView } from './puzzles.js';
 import { isModalOpen, store, toast } from './ui.js';
 import { api } from './api.js';
 
@@ -89,20 +90,57 @@ const dashboard = new DashboardView({
   },
 });
 
+/** Training and puzzles share one mode: repertoire hidden, other tabs locked. Training also
+ *  hides the engine throughout; puzzles hide it only while unsolved (see onLock). */
+function trainingMode(active, badge, bodyClass = 'training') {
+  if (bodyClass === 'training') {
+    if (active) analysis.pause('training');
+    else analysis.resume('training');
+  }
+  document.body.classList.toggle(bodyClass, active);
+  $('mode-badge').textContent = badge;
+  $('mode-badge').hidden = !active;
+  for (const v of ['dashboard', 'games', 'wild', 'puzzles']) $(`view-${v}`).disabled = active;
+  repertoire.setTraining(active);
+}
+
 const trainer = new TrainingController({
   game,
   board,
   panel: repertoire,
   render: () => render(),
+  onModeChange: (active) => trainingMode(active, 'Training'),
+});
+
+const puzzles = new PuzzleController({
+  game,
+  board,
+  render: () => render(),
   onModeChange: (active) => {
-    if (active) analysis.pause('training');
-    else analysis.resume('training');
-    document.body.classList.toggle('training', active);
-    $('mode-badge').hidden = !active;
-    $('view-dashboard').disabled = active;
-    $('view-games').disabled = active;
-    $('view-wild').disabled = active;
-    repertoire.setTraining(active);
+    trainingMode(active, 'Puzzle', 'puzzling');
+    if (active) repertoire.setCommentsVisible(false); // repertoire notes don't belong to puzzles
+  },
+  onLock: (locked) => {
+    // While solving, the engine would give the answer away; afterwards it's free to analyse.
+    if (locked) analysis.pause('puzzle');
+    else analysis.resume('puzzle');
+    document.body.classList.toggle('puzzle-locked', locked);
+  },
+});
+
+/** The board belongs to a training line or an unsolved puzzle: no navigation or free moves. */
+const locked = () => trainer.active || puzzles.locked;
+
+const puzzlesView = new PuzzlesView({
+  onStart: async (theme) => {
+    if (!(await startBoardMode())) return;
+    setView('board');
+    puzzles.start(theme);
+  },
+  onRetry: async (id) => {
+    if (!(await startBoardMode())) return;
+    setView('board');
+    puzzles.open(id);
   },
 });
 
@@ -183,9 +221,9 @@ const review = new ReviewController({
   board,
   analysis,
   getOpening: () => repertoire._opening(),
-  isBusy: () => trainer.active || play.active,
+  isBusy: () => locked() || play.active,
   onJump: (ply) => {
-    if (trainer.active || play.active) return;
+    if (locked() || play.active) return;
     game.goTo(ply);
     render();
   },
@@ -193,20 +231,26 @@ const review = new ReviewController({
   onSaved: (fen, ev) => savedEval.remember(fen, ev),
 });
 
-/** Training replaces the board's moves, so an open game is closed first (asking if unsaved). */
+/** Training and puzzles replace the board's moves, so an open game is closed first (asking if unsaved). */
+async function startBoardMode() {
+  if (!(await play.confirmStop())) return false;
+  if (!(await gamePanel.confirmLeave())) return false;
+  return true;
+}
+
 async function startTraining(opening, mode, lineId, tag, label) {
-  if (!(await play.confirmStop())) return;
-  if (!(await gamePanel.confirmLeave())) return;
+  if (puzzles.active) puzzles.stop();
+  if (!(await startBoardMode())) return;
   trainer.start(opening, mode, lineId, tag, label);
 }
 
 // ---- views: Board | Dashboard | Games -----------------------------------------------
 
-const VIEWS = { board: 'main.layout', dashboard: '#dashboard', games: '#games-view', wild: '#wild-view' };
+const VIEWS = { board: 'main.layout', dashboard: '#dashboard', games: '#games-view', wild: '#wild-view', puzzles: '#puzzles-view' };
 let view = 'board';
 
 function setView(next) {
-  if (next !== 'board' && trainer.active) return;
+  if (next !== 'board' && (trainer.active || puzzles.active)) return;
   view = next;
   for (const [name, sel] of Object.entries(VIEWS)) {
     document.querySelector(sel).hidden = view !== name;
@@ -223,6 +267,8 @@ function setView(next) {
   }
   if (view === 'wild') wildView.refresh();
   else wildView.hide();
+  if (view === 'puzzles') puzzlesView.refresh();
+  else puzzlesView.hide();
   window.scrollTo(0, 0);
 }
 
@@ -244,26 +290,28 @@ const ui = {
 let shownFen = null;
 
 function render() {
-  board.show(game, { canMove: trainer.active ? trainer.canMove() : play?.active ? play.canMove() : true });
+  board.show(game, {
+    canMove: trainer.active ? trainer.canMove() : puzzles.locked ? puzzles.canMove() : play?.active ? play.canMove() : true,
+  });
   const status = game.status();
   ui.status.textContent = status.text;
   ui.status.classList.toggle('over', status.over);
   review?.update();
   // Hidden when something else already shows the evaluation (review panel, live engine) or it would give answers away.
-  savedEval?.update(game.fen(), Boolean(review?.open) || analysis.settings.on || trainer.active || Boolean(play?.active));
+  savedEval?.update(game.fen(), Boolean(review?.open) || analysis.settings.on || locked() || Boolean(play?.active));
   renderMoveList(
     ui.moves,
     game,
     (ply) => {
-      if (trainer.active) return; // no peeking ahead while training
+      if (locked()) return; // no peeking ahead while training or solving
       game.goTo(ply);
       render();
     },
     review?.annotations(),
   );
   if (document.activeElement !== ui.fen) ui.fen.value = game.fen();
-  const atStart = game.ply === 0 || trainer.active;
-  const atEnd = game.ply === game.moves.length || trainer.active;
+  const atStart = game.ply === 0 || locked();
+  const atEnd = game.ply === game.moves.length || locked();
   ui.nav.start.disabled = atStart;
   ui.nav.back.disabled = atStart;
   ui.nav.forward.disabled = atEnd;
@@ -309,13 +357,17 @@ async function onBoardMove(from, to) {
     trainer.onUserMove(from, to, promotion);
     return;
   }
+  if (puzzles.locked) {
+    puzzles.onUserMove(from, to, promotion);
+    return;
+  }
   if (play.active && !play.canMove()) return render();
   game.play(from, to, promotion);
   render();
 }
 
 function step(action) {
-  if (trainer.active) return; // navigation is locked while training
+  if (locked()) return; // navigation is locked while training or solving
   action();
   render();
 }
@@ -340,7 +392,7 @@ document.addEventListener('keydown', (e) => {
     End: () => game.toEnd(),
     f: () => board.flip(),
   };
-  const action = trainer.active && e.key !== 'f' ? null : actions[e.key];
+  const action = locked() && e.key !== 'f' ? null : actions[e.key];
   if (action && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     step(action);
@@ -356,7 +408,7 @@ $('board').addEventListener(
     const now = performance.now();
     if (now - lastWheel < 60) return;
     lastWheel = now;
-    if (trainer.active) return;
+    if (locked()) return;
     step(() => (e.deltaY > 0 ? game.forward() : game.back()));
   },
   { passive: false },
@@ -429,4 +481,4 @@ repertoire.init().then(async () => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, repertoire, trainer, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval };
+window.mpct = { game, board, repertoire, trainer, puzzles, puzzlesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval };

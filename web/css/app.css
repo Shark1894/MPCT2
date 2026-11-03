@@ -2548,3 +2548,159 @@ button.star[aria-pressed='true'] {
   appearance: none;
   background-image: none;
 }
+
+/* ---- puzzles ---- */
+
+body.puzzling .tools,
+body.puzzling .game,
+body.puzzle-locked .engine {
+  display: none;
+}
+
+.puzzle-info {
+  margin: 0;
+  font-size: 13px;
+}
+
+.pz-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pz-rating {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pz-rating-value {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.pz-start {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pz-theme {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.pz-theme select {
+  min-height: 40px;
+  min-width: 200px;
+}
+
+#pz-start {
+  min-height: 40px;
+  padding: 6px 22px;
+}
+
+.pz-db p {
+  margin: 0 0 8px;
+}
+
+.pz-progress {
+  height: 8px;
+  margin: 0 0 10px;
+  border-radius: 4px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+#pz-db-bar {
+  height: 100%;
+  width: 0;
+  background: var(--blue);
+  transition: width 0.4s;
+}
+
+.pz-chart {
+  width: 100%;
+}
+
+.pz-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.pz-line {
+  fill: none;
+  stroke: var(--blue);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+.pz-dot {
+  fill: var(--blue);
+}
+
+.pz-axis {
+  fill: var(--text-dim);
+  font-size: 12px;
+}
+
+.pz-themes,
+.pz-recent {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pz-theme-row,
+.pz-recent-row {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.pz-theme-row:first-child,
+.pz-recent-row:first-child {
+  border-top: 0;
+}
+
+.pz-theme-row {
+  grid-template-columns: minmax(0, 1.2fr) minmax(60px, 1fr) auto auto;
+}
+
+.pz-theme-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--ok) var(--pct), var(--bg) var(--pct));
+}
+
+.pz-recent-row {
+  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+}
+
+.pz-mark.good { color: var(--ok); font-weight: 700; }
+.pz-mark.bad { color: var(--copper); font-weight: 700; }
+.pz-change { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 600px) {
+  .pz-start,
+  .pz-theme select,
+  #pz-start {
+    width: 100%;
+  }
+
+  .pz-theme {
+    width: 100%;
+  }
+}

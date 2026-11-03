@@ -118,6 +118,15 @@ export const api = {
     }),
   wildRefresh: (repId = null) => request('POST', '/wild/refresh', { params: repId ? { repertoire_id: repId } : {} }),
 
+  puzzleStatus: () => request('GET', '/puzzles/status'),
+  puzzleImport: () => request('POST', '/puzzles/import'),
+  puzzleThemes: () => request('GET', '/puzzles/themes'),
+  puzzleSummary: () => request('GET', '/puzzles/summary'),
+  nextPuzzle: (theme = null, exclude = []) =>
+    request('GET', '/puzzles/next', { params: { ...(theme ? { theme } : {}), ...(exclude.length ? { exclude: exclude.join(',') } : {}) } }),
+  puzzle: (id) => request('GET', `/puzzles/${id}`),
+  puzzleAttempt: (id, solved, seconds) => request('POST', `/puzzles/${id}/attempts`, { body: { solved, seconds } }),
+
   comment: (repId, fen) => request('GET', `/repertoires/${repId}/comment`, { params: { fen } }),
   saveComment: (repId, fen, comment) => request('PUT', `/repertoires/${repId}/comment`, { body: { fen, comment } }),
 };
