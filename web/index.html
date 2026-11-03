@@ -47,20 +47,22 @@
           <h2 id="game-title" class="game-title">Game</h2>
           <span id="game-dirty" class="game-dirty" hidden>Unsaved</span>
         </div>
+        <p id="game-source" class="meta game-source" hidden></p>
         <details class="game-details" open>
           <summary>Details</summary>
           <div class="game-fields">
             <label>White <input id="game-white" maxlength="100" autocomplete="off" /></label>
-            <label>Team <input id="game-white-team" maxlength="100" autocomplete="off" /></label>
+            <label><span id="game-white-team-label">Team</span> <input id="game-white-team" maxlength="100" autocomplete="off" /></label>
             <label>Black <input id="game-black" maxlength="100" autocomplete="off" /></label>
-            <label>Team <input id="game-black-team" maxlength="100" autocomplete="off" /></label>
-            <label class="wide">Competition <input id="game-competition" maxlength="150" autocomplete="off" /></label>
+            <label><span id="game-black-team-label">Team</span> <input id="game-black-team" maxlength="100" autocomplete="off" /></label>
+            <label class="wide"><span id="game-competition-label">Competition</span> <input id="game-competition" maxlength="150" autocomplete="off" /></label>
             <label>Date <input id="game-played-on" type="date" /></label>
             <label>Result <select id="game-result"></select></label>
           </div>
         </details>
         <div class="game-buttons">
           <button id="game-save" type="button" class="primary" disabled>Save</button>
+          <button id="game-wild-save" type="button" class="primary" hidden title="Copy this tournament game into your Games">Save to Games</button>
           <a id="game-pgn" class="button" href="#">PGN</a>
           <button id="game-close" type="button">Close</button>
         </div>

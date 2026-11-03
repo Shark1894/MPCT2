@@ -196,6 +196,20 @@ def test_save_to_games(client, db, rep):
     assert client.post(f"/api/wild-games/{g['id']}/save").json() == {"game_id": saved["game_id"], "created": False}
 
 
+def test_pgn_of_a_tournament_game(client, db, rep):
+    r, o = rep
+    store(db, pgn("Carlsen, Magnus", "Caruana, Fabiano", SLAV))
+    watch(client, o)
+    g = client.get(f"/api/repertoires/{r['id']}/wild-games").json()["games"][0]
+    res = client.get(f"/api/wild-games/{g['id']}/pgn")
+    assert res.status_code == 200 and 'filename="Carlsen-Caruana-' in res.headers["content-disposition"]
+    text = res.text
+    for line in ('[Event "Test Open"]', '[Site "Oslo NOR"]', '[Round "1.1"]', '[White "Carlsen, Magnus"]', '[WhiteElo "2700"]', '[BlackElo "2650"]'):
+        assert line in text, line
+    games, _ = read_games(text)
+    assert games[0].moves[:3] == ["d2d4", "d7d5", "c2c4"] and games[0].white_elo == 2700
+
+
 def test_status_counts_new_games(client, db, rep):
     r, o = rep
     watch(client, o)

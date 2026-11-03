@@ -56,11 +56,17 @@ export class GamePanel {
       pgn: $('game-pgn'),
       compare: $('game-compare'),
       compareResult: $('game-compare-result'),
+      source: $('game-source'),
+      wildSave: $('game-wild-save'),
+      whiteTeamLabel: $('game-white-team-label'),
+      blackTeamLabel: $('game-black-team-label'),
+      competitionLabel: $('game-competition-label'),
       fields: Object.fromEntries(META.map((f) => [f, $(`game-${f.replace('_', '-')}`)])),
     };
     for (const [value, label] of RESULTS) this.el.fields.result.appendChild(new Option(label, value));
     for (const input of Object.values(this.el.fields)) input.addEventListener('input', () => this.updateState());
     this.el.save.addEventListener('click', () => this.save());
+    this.el.wildSave.addEventListener('click', () => this.saveWild());
     this.el.close.addEventListener('click', () => this.close());
     this.el.compare.addEventListener('click', () => this.compare());
     window.addEventListener('beforeunload', (e) => {
@@ -70,6 +76,92 @@ export class GamePanel {
 
   get isOpen() {
     return this.current !== null;
+  }
+
+  /** A tournament game (Wild tab) is shown read-only; Save to Games makes it one of yours. */
+  get isWild() {
+    return Boolean(this.current?.wild);
+  }
+
+  _setMode(wild) {
+    const e = this.el;
+    for (const input of Object.values(e.fields)) {
+      input.readOnly = wild;
+      input.disabled = wild && input.tagName === 'SELECT';
+    }
+    e.whiteTeamLabel.textContent = e.blackTeamLabel.textContent = wild ? 'Rating' : 'Team';
+    e.competitionLabel.textContent = wild ? 'Event' : 'Competition';
+    e.save.hidden = wild;
+    e.wildSave.hidden = !wild;
+    e.wildSave.disabled = false;
+    e.wildSave.textContent = 'Save to Games';
+    e.source.hidden = !wild;
+    e.dirty.hidden = true;
+    e.panel.classList.toggle('wild-game', wild);
+  }
+
+  /** Open a tournament game from the Wild tab at `ply` (the watched position). */
+  async openWild(id, ply = null) {
+    if (!(await this.confirmLeave())) return null;
+    let g;
+    try {
+      g = await api.wildGame(id);
+    } catch (err) {
+      toast(err.message, 'error');
+      if (err.status === 404) store.set('openWild', null);
+      return null;
+    }
+    this.game.load(START_FEN);
+    for (const uci of g.moves) if (!this.game.play(uci.slice(0, 2), uci.slice(2, 4), uci[4])) break;
+    if (ply === null) this.game.toEnd();
+    else this.game.goTo(Math.min(ply, this.game.moves.length));
+    const f = this.el.fields;
+    f.white.value = g.white;
+    f.black.value = g.black;
+    f.white_team.value = g.white_elo ?? '';
+    f.black_team.value = g.black_elo ?? '';
+    f.competition.value = g.event;
+    f.played_on.value = g.played_on ?? '';
+    f.result.value = g.result;
+    this.el.source.textContent = [
+      'Tournament game',
+      g.round ? `round ${g.round}` : '',
+      g.site,
+      g.source === 'twic' ? 'from The Week in Chess' : 'from a Lichess broadcast',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    this.el.pgn.href = api.wildGamePgnUrl(id);
+    this.el.compareResult.innerHTML = '';
+    this.current = { id, wild: true, data: g, saved: null };
+    this._setMode(true);
+    store.set('openGameId', null);
+    store.set('openWild', { id, ply });
+    this.el.panel.hidden = false;
+    this.render();
+    this.updateState();
+    return g;
+  }
+
+  /** Copy the open tournament game into Games and carry on with it as one of yours. */
+  async saveWild() {
+    if (!this.isWild) return;
+    const ply = this.game.ply;
+    this.el.wildSave.disabled = true;
+    let r;
+    try {
+      r = await api.saveWildGame(this.current.id);
+    } catch (err) {
+      this.el.wildSave.disabled = false;
+      toast(err.message, 'error');
+      return;
+    }
+    this._close();
+    if (await this.open(r.game_id)) {
+      this.game.goTo(Math.min(ply, this.game.moves.length));
+      this.render();
+    }
+    toast(r.created ? 'Saved to your Games: edit the details and Save as usual.' : 'Already in your Games: opened that copy.');
   }
 
   async open(id) {
@@ -89,7 +181,9 @@ export class GamePanel {
     this.el.pgn.href = api.gamePgnUrl(id);
     this.el.compareResult.innerHTML = '';
     this.current = { id, saved: null };
+    this._setMode(false);
     this.current.saved = this._snapshot();
+    store.set('openWild', null);
     store.set('openGameId', id); // reopened after a reload
     this.el.panel.hidden = false;
     this.render();
@@ -116,12 +210,14 @@ export class GamePanel {
   _close() {
     this.current = null;
     store.set('openGameId', null);
+    store.set('openWild', null);
+    this._setMode(false);
     this.el.panel.hidden = true;
     this.onClosed?.();
   }
 
   forget(id) {
-    if (this.current?.id === id) this._close();
+    if (this.current?.id === id && !this.isWild) this._close();
   }
 
   _meta() {
@@ -136,13 +232,19 @@ export class GamePanel {
   }
 
   isDirty() {
-    return this.isOpen && this._snapshot() !== this.current.saved;
+    return this.isOpen && !this.isWild && this._snapshot() !== this.current.saved;
   }
 
   /** Refresh the title and unsaved marker (called on every board change). */
   updateState() {
     if (!this.isOpen) return;
     const meta = this._meta();
+    if (this.isWild) {
+      const g = this.current.data;
+      const side = (name, elo) => `${name || '?'}${elo ? ` (${elo})` : ''}`;
+      this.el.title.textContent = `${side(g.white, g.white_elo)} v ${side(g.black, g.black_elo)} · ${resultText(g.result)}`;
+      return;
+    }
     this.el.title.textContent = `${playersText(meta)} · ${resultText(meta.result)}`;
     const dirty = this.isDirty();
     this.el.dirty.hidden = !dirty;
@@ -260,7 +362,7 @@ export class GamesView {
   _row(g) {
     const row = document.createElement('div');
     row.className = 'game-row';
-    if (this.panel.current?.id === g.id) row.classList.add('open');
+    if (this.panel.current?.id === g.id && !this.panel.isWild) row.classList.add('open');
 
     const date = document.createElement('div');
     date.className = 'game-date';

@@ -111,6 +111,7 @@ export const api = {
   wildGame: (id) => request('GET', `/wild-games/${id}`),
   saveWildGame: (id) => request('POST', `/wild-games/${id}/save`),
   markWildViewed: (id) => request('POST', `/wild-games/${id}/viewed`),
+  wildGamePgnUrl: (id) => `/api/wild-games/${id}/pgn`,
   wildStatus: (repId = null, since = null, minElo = null) =>
     request('GET', '/wild/status', {
       params: { ...(repId ? { repertoire_id: repId } : {}), ...(since ? { since } : {}), ...(minElo ? { min_elo: minElo } : {}) },

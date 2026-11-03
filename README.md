@@ -237,8 +237,11 @@ any game that reaches a branch you watch shows up in the **Wild** tab.
   date; **Not viewed** shows only the games you haven't opened. Filter by watched position, by rating (**A player 2000+** … **2700+**: at least one player rated that
   or higher; remembered, and the counts, the board's Watch button and the new-games count follow it), or search
   players and event. **Open** puts the game on the board at that
-  position (the rest of the game follows, so you can step through it or review it with the engine); **Save to Games**
-  copies it into the Games tab. The tab shows a count of new games since you last looked.
+  position (the rest of the game follows, so you can step through it or review it with the engine), with the same
+  details panel as your own games: players with ratings, event, date, result, plus round, site and source. The details
+  are read-only, **PGN** downloads it, **Compare with repertoire** works as usual, and it stays open after a reload.
+  **Save to Games** (on the row or in the panel) copies it into the Games tab; from the panel it then carries on as
+  one of your games, editable, at the same move. The tab shows a count of new games since you last looked.
 - **Fetching:** a minute after the app starts, then every 6 hours, or **Check now**. TWIC is fetched from 1 January
   2026 (`WILD_SINCE`): every issue since then, once each (a missed issue is picked up on the next run). Lichess offers
   only its recent broadcasts (5 pages of the list), so its history builds up from when fetching started. Finished
@@ -260,7 +263,7 @@ docker compose exec mpct python -m app.tools.import_wild_pgn /tmp/twic1669g.zip
 
 API: `GET /api/repertoires/{id}/watches`, `GET /api/openings/{id}/watches`, `PUT/DELETE /api/tags/{id}/watch`,
 `DELETE /api/watches/{id}`, `POST /api/wild-games/{id}/viewed`, `GET /api/repertoires/{id}/wild-games?watch_id=&q=&min_elo=&unviewed=&limit=&offset=` (`min_elo` also on the watches and status calls),
-`GET /api/wild-games/{id}` (with moves), `POST /api/wild-games/{id}/save`, `GET /api/wild/status?repertoire_id=&since=`,
+`GET /api/wild-games/{id}` (with moves), `GET /api/wild-games/{id}/pgn`, `POST /api/wild-games/{id}/save`, `GET /api/wild/status?repertoire_id=&since=`,
 `POST /api/wild/refresh`.
 
 ## Games

@@ -128,6 +128,42 @@ function importPgn(name, pgn) {
   const at = await page.evaluate(() => ({ ply: mpct.game.ply, total: mpct.game.moves.length, view: !document.querySelector('main.layout').hidden }));
   check(at.view && at.ply === 6 && at.total === 10, `opened on the board at the watched position (ply ${at.ply} of ${at.total})`);
   check((await text(page, '#watch-toggle')) === 'In the wild: 2 games', 'board shows it as watched (transposed move order)');
+
+  // details panel, like one of your own games but read-only
+  check(!(await page.isHidden('#game-panel')), 'game details panel shown');
+  check((await text(page, '#game-title')) === 'Giri, Anish (2750) v So, Wesley (2740) · ½-½', 'title with players, ratings and result: ' + (await text(page, '#game-title')));
+  const fields = await page.evaluate(() => ({
+    white: document.getElementById('game-white').value,
+    whiteElo: document.getElementById('game-white-team').value,
+    label: document.getElementById('game-white-team-label').textContent,
+    event: document.getElementById('game-competition').value,
+    result: document.getElementById('game-result').value,
+    readOnly: document.getElementById('game-white').readOnly && document.getElementById('game-result').disabled,
+  }));
+  check(fields.white === 'Giri, Anish' && fields.whiteElo === '2750' && fields.label === 'Rating' && fields.event === 'Tata Steel' && fields.result === '1/2-1/2', 'details filled in (ratings in place of teams)');
+  check(fields.readOnly, 'details are read-only');
+  check(/Tournament game · round 4 · from The Week in Chess/.test(await text(page, '#game-source')), 'source line: ' + (await text(page, '#game-source')));
+  check(await page.isHidden('#game-save') && !(await page.isHidden('#game-wild-save')), 'Save to Games instead of Save');
+  check(/\/api\/wild-games\/\d+\/pgn$/.test(await page.getAttribute('#game-pgn', 'href')), 'PGN link');
+  await page.click('#game-compare');
+  await settle(page, 500);
+  check(/Slav/.test(await text(page, '#game-compare-result')), 'Compare with repertoire works: ' + (await text(page, '#game-compare-result')));
+  await page.evaluate(() => { mpct.game.back(); mpct.render(); });
+  check(await page.isHidden('#game-dirty'), 'stepping through never shows Unsaved');
+
+  // after a reload it's still open at the same move
+  await page.reload();
+  await settle(page, 1200);
+  check(!(await page.isHidden('#game-panel')) && /Giri/.test(await text(page, '#game-title')) && (await page.evaluate(() => mpct.game.ply)) === 5, 'reopened after a reload, same move');
+
+  // Save to Games turns it into one of your games (it was already saved from the list)
+  await page.click('#game-wild-save');
+  await settle(page, 900);
+  check(await page.isHidden('#game-wild-save') && !(await page.isHidden('#game-save')), 'now a normal game panel');
+  check((await page.evaluate(() => document.getElementById('game-white-team-label').textContent)) === 'Team' && !(await page.evaluate(() => document.getElementById('game-white').readOnly)), 'editable again');
+  check((await page.evaluate(() => mpct.game.ply)) === 5, 'kept the move you were on');
+  await page.click('#game-close');
+  await settle(page, 300);
   await page.click('#view-wild');
   await page.waitForSelector('#wild-games .wild-row');
   await settle(page, 400);

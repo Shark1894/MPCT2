@@ -2529,3 +2529,22 @@ button.star[aria-pressed='true'] {
   flex: 0 0 auto;
   width: auto;
 }
+
+.game-source {
+  margin: -4px 0 0;
+  font-size: 13px;
+}
+
+.wild-game .game-fields input[readonly],
+.wild-game .game-fields select:disabled {
+  background: transparent;
+  border-color: transparent;
+  padding-left: 0;
+  color: var(--text);
+  opacity: 1;
+}
+
+.wild-game .game-fields select:disabled {
+  appearance: none;
+  background-image: none;
+}

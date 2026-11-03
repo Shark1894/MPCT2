@@ -193,6 +193,31 @@ def get_game(s: Session, game_id: int) -> dict:
     return _game_row(g) | {"moves": g.moves.split()}
 
 
+def game_pgn(s: Session, game_id: int) -> tuple[str, str]:
+    """(PGN text, file name) for a tournament game."""
+    from app.core.pgn import to_pgn
+
+    g = _get_game(s, game_id)
+    text = to_pgn(
+        white=g.white, black=g.black, white_team="", black_team="", competition=g.event,
+        played_on=g.played_on, result=g.result, start_fen=None, moves=g.moves.split(),
+    )
+    extra = "".join(
+        f'[{tag} "{value}"]\n'
+        for tag, value in (("WhiteElo", g.white_elo), ("BlackElo", g.black_elo))
+        if value
+    )
+    if extra:  # ratings after the seven standard tags
+        head, _, body = text.partition("\n\n")
+        text = f"{head}\n{extra.rstrip()}\n\n{body}"
+    if g.site:
+        text = text.replace('[Site "?"]', f'[Site "{g.site}"]', 1)
+    if g.round:
+        text = text.replace('[Round "?"]', f'[Round "{g.round}"]', 1)
+    name = "-".join(x for x in (g.white.split(",")[0], g.black.split(",")[0], str(g.played_on or "")) if x)
+    return text, "".join(c if c.isalnum() or c in "-_" else "_" for c in name) + ".pgn"
+
+
 def mark_viewed(s: Session, game_id: int) -> dict:
     """Record that the game was opened (the first time counts)."""
     g = _get_game(s, game_id)

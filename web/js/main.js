@@ -142,17 +142,12 @@ async function showMoves({ ucis = [], sans = [], ply = null }) {
 const wildView = new WildView({
   repertoire,
   onOpen: async (id, ply) => {
-    let g;
-    try {
-      g = await api.wildGame(id);
-    } catch (err) {
-      toast(err.message, 'error');
-      return;
-    }
-    if (!(await showMoves({ ucis: g.moves, ply }))) return;
+    if (!(await play.confirmStop())) return;
+    const g = await gamePanel.openWild(id, ply);
+    if (!g) return;
     setView('board');
     render();
-    toast(`${g.white} – ${g.black}${g.event ? `, ${g.event}` : ''}: at the watched position (move ${Math.ceil(ply / 2)}).`);
+    toast(`At the watched position (move ${Math.ceil(ply / 2)}). Step on through the game, or review it with the engine.`);
   },
   onShowPosition: async (sans) => {
     if (!(await showMoves({ sans }))) return;
@@ -420,7 +415,12 @@ render();
 play.restore();
 repertoire.init().then(async () => {
   const openGameId = store.get('openGameId');
+  const openWild = store.get('openWild');
   if (openGameId) await gamePanel.open(openGameId);
+  else if (openWild) {
+    const ply = game.ply; // keep where you were in it
+    if (await gamePanel.openWild(openWild.id, ply)) render();
+  }
   const saved = store.get('view');
   if (saved && saved !== 'board' && VIEWS[saved]) setView(saved);
   await review.restore();

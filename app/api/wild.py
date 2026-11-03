@@ -4,6 +4,7 @@ from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -138,6 +139,12 @@ def wild_games(
 @router.get("/wild-games/{game_id}", response_model=WildGameFull)
 def wild_game(game_id: int, s: Db):
     return repo.get_game(s, game_id)
+
+
+@router.get("/wild-games/{game_id}/pgn", response_class=PlainTextResponse)
+def wild_game_pgn(game_id: int, s: Db):
+    text, name = repo.game_pgn(s, game_id)
+    return PlainTextResponse(text, media_type="application/x-chess-pgn", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @router.post("/wild-games/{game_id}/viewed", response_model=ViewedOut)
