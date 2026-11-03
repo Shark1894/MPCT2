@@ -31,9 +31,10 @@ test('status line', () => {
   const base = { enabled: true, running: false, step: '', games: 0, twic_issue: null, last_fetch_at: null };
   assert.match(statusText(base, NOW), /^Not checked yet/);
   assert.equal(
-    statusText({ ...base, last_fetch_at: '2026-11-03T15:00:00Z', games: 81234, twic_issue: 1669 }, NOW),
-    'Last checked 3 h ago · 81,234 games stored · TWIC up to 1669.',
+    statusText({ ...base, last_fetch_at: '2026-11-03T15:00:00Z', games: 281234, oldest_played_on: '2026-01-01', twic_first: 1625, twic_issue: 1669 }, NOW),
+    'Last checked 3 h ago · 281,234 games stored since 2026-01-01 · TWIC 1625–1669.',
   );
+  assert.equal(statusText({ ...base, last_fetch_at: '2026-11-03T15:00:00Z', games: 10, twic_first: 1669, twic_issue: 1669 }, NOW), 'Last checked 3 h ago · 10 games stored · TWIC 1669.');
   assert.equal(statusText({ ...base, running: true, step: 'The Week in Chess 1660' }, NOW), 'Checking for new games… The Week in Chess 1660');
   assert.match(statusText({ ...base, enabled: false }, NOW), /turned off/);
 });

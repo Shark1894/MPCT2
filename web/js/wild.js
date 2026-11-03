@@ -42,14 +42,19 @@ export function ago(iso, now = Date.now()) {
   return `${Math.round(s / 86400)} days ago`;
 }
 
+/** The Wild tab's rating filter (shared with the board's Watch button): a number, or null for any. */
+export function minElo() {
+  return Number(store.get('wildMinElo', 0)) || null;
+}
+
 /** One line describing the fetcher: running step, or when it last checked and what it has. */
 export function statusText(st, now = Date.now()) {
   if (!st.enabled) return 'Fetching tournament games is turned off on this server (WILD_FETCH=false).';
   if (st.running) return `Checking for new games… ${st.step}`;
   const parts = [];
   parts.push(st.last_fetch_at ? `Last checked ${ago(st.last_fetch_at, now)}` : 'Not checked yet: the first check starts a minute after the app starts');
-  if (st.games) parts.push(`${st.games.toLocaleString('en-GB')} games stored`);
-  if (st.twic_issue) parts.push(`TWIC up to ${st.twic_issue}`);
+  if (st.games) parts.push(`${st.games.toLocaleString('en-GB')} games stored${st.oldest_played_on ? ` since ${st.oldest_played_on}` : ''}`);
+  if (st.twic_issue) parts.push(st.twic_first && st.twic_first !== st.twic_issue ? `TWIC ${st.twic_first}–${st.twic_issue}` : `TWIC ${st.twic_issue}`);
   return parts.join(' · ') + '.';
 }
 
@@ -85,6 +90,7 @@ export class WildView {
       watches: $('wild-watches'),
       watchesEmpty: $('wild-watches-empty'),
       filter: $('wild-filter'),
+      minElo: $('wild-min-elo'),
       search: $('wild-search'),
       count: $('wild-count'),
       list: $('wild-games'),
@@ -95,6 +101,13 @@ export class WildView {
     const e = this.el;
     e.check.addEventListener('click', () => this.checkNow());
     e.filter.addEventListener('change', () => this.loadGames());
+    e.minElo.value = minElo() ? String(minElo()) : '';
+    e.minElo.addEventListener('change', async () => {
+      store.set('wildMinElo', Number(e.minElo.value) || 0);
+      await this.loadWatches();
+      await this.loadGames();
+      this.repertoire.loadTags?.(); // the board's Watch count follows the filter
+    });
     let searchTimer = null;
     e.search.addEventListener('input', () => {
       clearTimeout(searchTimer);
@@ -129,7 +142,7 @@ export class WildView {
     const since = store.get('wildSeen');
     if (!since) return;
     try {
-      const st = await api.wildStatus(this.repId, since);
+      const st = await api.wildStatus(this.repId, since, minElo());
       if (!this.visible) this._setTabCount(st.new_games);
     } catch {
       /* not important */
@@ -196,7 +209,7 @@ export class WildView {
       this.watches = [];
     } else {
       try {
-        this.watches = await api.watches(this.repId);
+        this.watches = await api.watches(this.repId, minElo());
       } catch (err) {
         toast(err.message, 'error');
         this.watches = [];
@@ -223,7 +236,7 @@ export class WildView {
     const count = el(
       'div',
       'wild-watch-count',
-      w.games ? `${plural(w.games, 'game')}${w.latest_played_on ? ` · latest ${w.latest_played_on}` : ''}` : 'No games yet',
+      w.games ? `${plural(w.games, 'game')}${w.latest_played_on ? ` · latest ${w.latest_played_on}` : ''}` : minElo() ? `No games with a player ${minElo()}+` : 'No games yet',
     );
     const actions = el('div', 'wild-watch-actions');
     const games = el('button', 'small primary', 'Games');
@@ -287,7 +300,7 @@ export class WildView {
     const offset = more ? this.games.length : 0;
     let data;
     try {
-      data = await api.wildGames(this.repId, { watchId, q, limit: PAGE, offset });
+      data = await api.wildGames(this.repId, { watchId, q, limit: PAGE, offset, minElo: minElo() });
     } catch (err) {
       toast(err.message, 'error');
       return;
@@ -300,13 +313,15 @@ export class WildView {
   _renderGames() {
     const e = this.el;
     e.list.innerHTML = '';
-    const filtered = Boolean(e.filter.value || e.search.value.trim());
+    const filtered = Boolean(e.filter.value || e.search.value.trim() || minElo());
     e.count.textContent = this.total ? `${plural(this.total, 'game')}${this.games.length < this.total ? `, showing ${this.games.length}` : ''}` : '';
     e.empty.hidden = this.games.length > 0;
     e.empty.textContent = !this.watches.length
       ? 'Watch a position to see the tournament games that reach it.'
       : filtered
-        ? 'No games match.'
+        ? minElo() && !e.filter.value && !e.search.value.trim()
+          ? `No games with a player rated ${minElo()}+ yet. Lower the rating filter to see more.`
+          : 'No games match.'
         : 'No tournament games reach your watched positions yet. New games are checked every few hours.';
     e.more.hidden = this.games.length >= this.total;
     const byId = new Map(this.watches.map((w) => [w.id, w]));

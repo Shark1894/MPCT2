@@ -4,9 +4,12 @@ in Chess (TWIC). Runs in a background thread every few hours (and on "Check now"
 - Lichess: /api/broadcast/top lists active broadcasts and pages of past ones. Each
   tournament is downloaded whole (/api/broadcast/{id}.pgn). Finished tournaments are
   fetched once; active ones again on every run until they finish. Unfinished games are
-  skipped, so a game is stored once it has a result.
-- TWIC: one zip of PGN a week (theweekinchess.com/zips/twic{n}g.zip). The first run takes
-  the issues covering the last `wild_days`; later runs take any newer issues.
+  skipped, so a game is stored once it has a result. The list only goes back 5 pages, so
+  Lichess history builds up from whenever fetching started.
+- TWIC: one zip of PGN a week (theweekinchess.com/zips/twic{n}g.zip). Every issue from
+  `wild_since` (default 1 Jan 2026) is fetched once; later runs take any new or missed issues.
+
+Every game is kept: the store is a growing history of both sources.
 
 Requests are made one at a time with a pause between them, and a 429 from Lichess waits a
 minute, as its API guidelines ask. Network and parse errors are recorded in the status and
@@ -16,7 +19,6 @@ the run moves on: a bad download never stops the rest.
 import io
 import json
 import logging
-import math
 import re
 import threading
 import time
@@ -167,9 +169,10 @@ def fetch_lichess(s_factory, since: datetime, get=http_get) -> int:
 # ---- TWIC ---------------------------------------------------------------------------------------
 
 
-def twic_estimate(today: date) -> int:
+def twic_estimate(day: date) -> int:
+    """The issue published around `day` (issues are weekly; used as a fallback and for `wild_since`)."""
     n, d = TWIC_ANCHOR
-    return n + max(0, (today - d).days // 7)
+    return n + (day - d).days // 7
 
 
 def twic_latest(today: date, get=http_get) -> int:
@@ -190,13 +193,11 @@ def twic_pgn(issue: int, get=http_get) -> str:
         return _text(z.read(name))
 
 
-def fetch_twic(s_factory, today: date, days: int, get=http_get) -> int:
+def fetch_twic(s_factory, today: date, since: date, get=http_get) -> int:
     latest = twic_latest(today, get)
     with s_factory() as s:
-        last = repo.latest_twic(s)
-    first = latest - math.ceil(days / 7) + 1
-    if last is not None:
-        first = max(first, last + 1)
+        done = repo.done_twic(s)
+    first = min(twic_estimate(since) - 1, latest)  # one early: the estimate may be a week out
     added = 0
     failures = 0
     issue = first
@@ -205,6 +206,9 @@ def fetch_twic(s_factory, today: date, days: int, get=http_get) -> int:
             _error("TWIC: giving up for this run after 3 failed downloads")
             break
         key = f"twic:{issue}"
+        if issue in done:
+            issue += 1
+            continue
         _step(f"The Week in Chess {issue}")
         try:
             games, _ = read_games(twic_pgn(issue, get))
@@ -240,13 +244,11 @@ def run_once(get=http_get, today: date | None = None) -> bool:
         today = today or date.today()
         state.update(running=True, started_at=_now(), step="Starting", errors=[], added=0)
         factory = lambda: Session(get_engine())  # noqa: E731
-        since = datetime.combine(today - timedelta(days=settings.wild_days), datetime.min.time(), timezone.utc)
+        since = datetime.combine(settings.wild_since, datetime.min.time(), timezone.utc)
         added = fetch_lichess(factory, since, get)
-        added += fetch_twic(factory, today, settings.wild_days, get)
-        with factory() as s, s.begin():
-            pruned = repo.prune(s, settings.wild_days, today)
+        added += fetch_twic(factory, today, settings.wild_since, get)
         state["added"] = added
-        _step(f"Done: {added} new games" + (f", {pruned} old ones pruned" if pruned else ""))
+        _step(f"Done: {added} new games")
     except Exception as exc:  # never let the thread die
         _error(f"Run failed: {exc}")
         state["step"] = "Failed"

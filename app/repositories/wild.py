@@ -5,10 +5,10 @@ to an opening. Matching is an indexed lookup of the watch's position hash in eac
 array of position hashes, so a new watch immediately finds games already stored.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
-from sqlalchemy import delete, exists, func, or_, select
-from sqlalchemy.dialects.postgresql import array, insert
+from sqlalchemy import func, or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.core.positions import START_KEY, key_from_fen
@@ -29,11 +29,18 @@ class InvalidWatch(ValueError):
 # ---- watches -------------------------------------------------------------------------
 
 
-def _watch_counts(s: Session, watches: list[WildWatch]) -> dict[int, tuple[int, date | None]]:
+def _strong_enough(min_elo: int | None):
+    """Games where the stronger player is rated at least min_elo (None = every game)."""
+    if not min_elo:
+        return True
+    return func.greatest(func.coalesce(WildGame.white_elo, 0), func.coalesce(WildGame.black_elo, 0)) >= min_elo
+
+
+def _watch_counts(s: Session, watches: list[WildWatch], min_elo: int | None = None) -> dict[int, tuple[int, date | None]]:
     out = {}
     for w in watches:
         n, latest = s.execute(
-            select(func.count(), func.max(WildGame.played_on)).where(WildGame.hashes.contains([w.hash]))
+            select(func.count(), func.max(WildGame.played_on)).where(WildGame.hashes.contains([w.hash]), _strong_enough(min_elo))
         ).one()
         out[w.id] = (n, latest)
     return out
@@ -54,7 +61,7 @@ def _watch_dict(s: Session, w: WildWatch, opening: Opening, key: str, counts) ->
     }
 
 
-def list_watches(s: Session, repertoire_id: int) -> list[dict]:
+def list_watches(s: Session, repertoire_id: int, min_elo: int | None = None) -> list[dict]:
     get_repertoire(s, repertoire_id)
     rows = s.execute(
         select(WildWatch, Opening, Position.key)
@@ -62,7 +69,7 @@ def list_watches(s: Session, repertoire_id: int) -> list[dict]:
         .join(Position, Position.id == WildWatch.position_id)
         .where(Opening.repertoire_id == repertoire_id)
     ).all()
-    counts = _watch_counts(s, [w for w, _, _ in rows])
+    counts = _watch_counts(s, [w for w, _, _ in rows], min_elo)
     out = [_watch_dict(s, w, o, key, counts) for w, o, key in rows]
     return sorted(out, key=lambda w: (w["color"] != "white", w["opening_name"].lower(), len(w["path"]), w["id"]))
 
@@ -111,7 +118,7 @@ def delete_watch(s: Session, watch_id: int) -> None:
     s.flush()
 
 
-def opening_watches(s: Session, opening_id: int) -> list[dict]:
+def opening_watches(s: Session, opening_id: int, min_elo: int | None = None) -> list[dict]:
     """Watches of one opening (for the board's repertoire panel)."""
     opening = get_opening(s, opening_id)
     rows = s.execute(
@@ -119,7 +126,7 @@ def opening_watches(s: Session, opening_id: int) -> list[dict]:
         .join(Position, Position.id == WildWatch.position_id)
         .where(WildWatch.opening_id == opening_id)
     ).all()
-    counts = _watch_counts(s, [w for w, _ in rows])
+    counts = _watch_counts(s, [w for w, _ in rows], min_elo)
     return [_watch_dict(s, w, opening, key, counts) for w, key in rows]
 
 
@@ -151,6 +158,7 @@ def list_games(
     q: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    min_elo: int | None = None,
 ) -> dict:
     """Games reaching any watched position of the repertoire (or one watch), newest first."""
     get_repertoire(s, repertoire_id)
@@ -163,7 +171,7 @@ def list_games(
     matches: dict[int, list[dict]] = {}
     for w_id, h in watches:
         for g_id, ply in s.execute(
-            select(WildGame.id, func.array_position(WildGame.hashes, h)).where(WildGame.hashes.contains([h]))
+            select(WildGame.id, func.array_position(WildGame.hashes, h)).where(WildGame.hashes.contains([h]), _strong_enough(min_elo))
         ).all():
             matches.setdefault(g_id, []).append({"watch_id": w_id, "ply": ply})
     if not matches:
@@ -265,28 +273,30 @@ def mark_source(s: Session, key: str, finished: bool, games: int) -> None:
     )
 
 
-def latest_twic(s: Session) -> int | None:
-    keys = s.scalars(select(WildSource.key).where(WildSource.key.like("twic:%"))).all()
-    return max((int(k.split(":")[1]) for k in keys), default=None)
+def done_twic(s: Session) -> set[int]:
+    """TWIC issues already fetched."""
+    keys = s.scalars(select(WildSource.key).where(WildSource.key.like("twic:%"), WildSource.finished)).all()
+    return {int(k.split(":")[1]) for k in keys}
 
 
-def prune(s: Session, days: int, today: date | None = None) -> int:
-    """Delete games older than `days` that no watched position matches."""
-    cutoff = (today or date.today()) - timedelta(days=days)
-    matched = exists().where(WildGame.hashes.contains(array([WildWatch.hash])))
-    played = func.coalesce(WildGame.played_on, func.date(WildGame.imported_at))
-    return s.execute(delete(WildGame).where(played < cutoff, ~matched)).rowcount
-
-
-def stats(s: Session, repertoire_id: int | None = None, since: datetime | None = None) -> dict:
+def stats(s: Session, repertoire_id: int | None = None, since: datetime | None = None, min_elo: int | None = None) -> dict:
     games = s.scalar(select(func.count()).select_from(WildGame))
-    newest = s.scalar(select(func.max(WildGame.played_on)))
+    oldest, newest = s.execute(select(func.min(WildGame.played_on), func.max(WildGame.played_on))).one()
     last_fetch = s.scalar(select(func.max(WildSource.fetched_at)))
-    out = {"games": games, "newest_played_on": newest, "last_fetch_at": last_fetch, "twic_issue": latest_twic(s), "new_games": 0}
+    twic = done_twic(s)
+    out = {
+        "games": games,
+        "oldest_played_on": oldest,
+        "newest_played_on": newest,
+        "last_fetch_at": last_fetch,
+        "twic_first": min(twic, default=None),
+        "twic_issue": max(twic, default=None),
+        "new_games": 0,
+    }
     if repertoire_id is not None and since is not None:
         hashes = s.scalars(select(WildWatch.hash).join(Opening).where(Opening.repertoire_id == repertoire_id)).all()
         if hashes:
             out["new_games"] = s.scalar(
-                select(func.count()).where(WildGame.imported_at > since, WildGame.hashes.overlap(list(hashes)))
+                select(func.count()).where(WildGame.imported_at > since, WildGame.hashes.overlap(list(hashes)), _strong_enough(min_elo))
             )
     return out

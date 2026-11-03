@@ -92,6 +92,24 @@ function importPgn(name, pgn) {
   await page.fill('#wild-search', '');
   await settle(page, 600);
 
+  // rating filter: one player rated at least X
+  await page.evaluate(() => document.getElementById('wild-min-elo').add(new Option('2745 (test)', '2745')));
+  await page.selectOption('#wild-min-elo', '2745');
+  await settle(page, 700);
+  check((await page.$$('#wild-games .wild-row')).length === 2 && /2 games/.test(await text(page, '#wild-watches')), '2745 filter: both games have a 2750 player');
+  await page.evaluate(() => document.getElementById('wild-min-elo').add(new Option('2800 (test)', '2800')));
+  await page.selectOption('#wild-min-elo', '2800');
+  await settle(page, 700);
+  check((await page.$$('#wild-games .wild-row')).length === 0 && /No games with a player 2800\+/.test(await text(page, '#wild-watches')), '2800 filter: no games, watch says so');
+  check(/Lower the rating filter/.test(await text(page, '#wild-empty')), 'empty message suggests lowering the filter');
+  await page.click('#view-board');
+  await settle(page, 500);
+  check((await text(page, '#watch-toggle')) === 'In the wild: 0 games', 'board Watch count follows the filter');
+  await page.click('#view-wild');
+  await page.selectOption('#wild-min-elo', '');
+  await settle(page, 700);
+  check((await page.$$('#wild-games .wild-row')).length === 2, 'Any rating shows both again');
+
   // Save to Games, then open on the board
   await page.click('#wild-games .wild-row:first-child button:not(.primary)');
   await settle(page, 600);

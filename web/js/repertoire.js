@@ -416,7 +416,8 @@ export class RepertoirePanel {
       this.watches = [];
     } else {
       try {
-        const [tags, watches] = await Promise.all([api.tags(openingId), api.openingWatches(openingId).catch(() => [])]);
+        const minElo = Number(store.get('wildMinElo', 0)) || null; // the Wild tab's rating filter
+        const [tags, watches] = await Promise.all([api.tags(openingId), api.openingWatches(openingId, minElo).catch(() => [])]);
         if (openingId !== this.openingId) return; // opening changed meanwhile
         this.tags = tags;
         this.watches = watches;

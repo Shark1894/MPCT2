@@ -91,19 +91,22 @@ export const api = {
   evalsLookup: (fens, minMovetimeMs = 0) => request('POST', '/evals/lookup', { body: { fens, min_movetime_ms: minMovetimeMs } }),
   saveEvals: (evals) => request('POST', '/evals', { body: { evals } }),
 
-  watches: (repId) => request('GET', `/repertoires/${repId}/watches`),
-  openingWatches: (openingId) => request('GET', `/openings/${openingId}/watches`),
+  watches: (repId, minElo = null) => request('GET', `/repertoires/${repId}/watches`, { params: minElo ? { min_elo: minElo } : {} }),
+  openingWatches: (openingId, minElo = null) =>
+    request('GET', `/openings/${openingId}/watches`, { params: minElo ? { min_elo: minElo } : {} }),
   createWatch: (openingId, fen, label = '') => request('POST', `/openings/${openingId}/watches`, { body: { fen, label } }),
   updateWatch: (id, label) => request('PATCH', `/watches/${id}`, { body: { label } }),
   deleteWatch: (id) => request('DELETE', `/watches/${id}`),
-  wildGames: (repId, { watchId = null, q = '', limit = 50, offset = 0 } = {}) =>
+  wildGames: (repId, { watchId = null, q = '', limit = 50, offset = 0, minElo = null } = {}) =>
     request('GET', `/repertoires/${repId}/wild-games`, {
-      params: { limit, offset, ...(watchId ? { watch_id: watchId } : {}), ...(q ? { q } : {}) },
+      params: { limit, offset, ...(watchId ? { watch_id: watchId } : {}), ...(q ? { q } : {}), ...(minElo ? { min_elo: minElo } : {}) },
     }),
   wildGame: (id) => request('GET', `/wild-games/${id}`),
   saveWildGame: (id) => request('POST', `/wild-games/${id}/save`),
-  wildStatus: (repId = null, since = null) =>
-    request('GET', '/wild/status', { params: { ...(repId ? { repertoire_id: repId } : {}), ...(since ? { since } : {}) } }),
+  wildStatus: (repId = null, since = null, minElo = null) =>
+    request('GET', '/wild/status', {
+      params: { ...(repId ? { repertoire_id: repId } : {}), ...(since ? { since } : {}), ...(minElo ? { min_elo: minElo } : {}) },
+    }),
   wildRefresh: (repId = null) => request('POST', '/wild/refresh', { params: repId ? { repertoire_id: repId } : {} }),
 
   comment: (repId, fen) => request('GET', `/repertoires/${repId}/comment`, { params: { fen } }),

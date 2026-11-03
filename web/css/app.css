@@ -2492,3 +2492,8 @@ button.star[aria-pressed='true'] {
     padding: 4px 8px;
   }
 }
+
+#wild-min-elo {
+  flex: 0 0 auto;
+  width: auto;
+}

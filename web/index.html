@@ -391,6 +391,15 @@
         <div class="games-head">
           <h2 id="wild-games-title" class="dash-h">Spotted in tournament games</h2>
           <select id="wild-filter" aria-label="Watched position"></select>
+          <select id="wild-min-elo" aria-label="Strongest player rated at least" title="Only games where at least one player is rated this or higher">
+            <option value="">Any rating</option>
+            <option value="2000">A player 2000+</option>
+            <option value="2200">A player 2200+</option>
+            <option value="2400">A player 2400+</option>
+            <option value="2500">A player 2500+</option>
+            <option value="2600">A player 2600+</option>
+            <option value="2700">A player 2700+</option>
+          </select>
           <input id="wild-search" type="search" placeholder="Search players or event" aria-label="Search spotted games" />
         </div>
         <p id="wild-count" class="meta"></p>

@@ -172,15 +172,22 @@ def test_status_counts_new_games(client, db, rep):
     assert st["games"] == 2 and st["new_games"] == 1 and st["running"] is False and st["enabled"] is False
 
 
-def test_prune_keeps_matched_and_recent_games(client, db, rep):
-    _, o = rep
-    old = TODAY - timedelta(days=200)
-    store(db, pgn("Old", "Matched", SLAV, day=old) + pgn("Old", "Other", QGD, day=old) + pgn("New", "Other", QGD))
-    client.post(f"/api/openings/{o['id']}/watches", json={"fen": BF5})
-    with Session(db) as s, s.begin():
-        assert repo.prune(s, 92) == 1
-    with Session(db) as s:
-        assert repo.stats(s)["games"] == 2
+def test_rating_filter(client, db, rep):
+    r, o = rep
+    store(db, pgn("Strong, A", "Weak, B", SLAV, elo=("2610", "2100"))
+          + pgn("Club, C", "Club, D", SLAV_TRANSPOSED, elo=("1950", "1900"))
+          + pgn("Unrated, E", "Unrated, F", SLAV, elo=("?", "?"), event="Unrated"))
+    w = client.post(f"/api/openings/{o['id']}/watches", json={"fen": BF5}).json()
+    assert w["games"] == 3
+    games = lambda **p: client.get(f"/api/repertoires/{r['id']}/wild-games", params=p).json()  # noqa: E731
+    assert games()["total"] == 3
+    assert [g["white"] for g in games(min_elo=2000)["games"]] == ["Strong, A"]  # one player is enough
+    assert games(min_elo=2700)["total"] == 0
+    assert client.get(f"/api/repertoires/{r['id']}/watches", params={"min_elo": 2000}).json()[0]["games"] == 1
+    assert client.get(f"/api/openings/{o['id']}/watches", params={"min_elo": 1900}).json()[0]["games"] == 2
+    since = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    st = client.get("/api/wild/status", params={"repertoire_id": r["id"], "since": since, "min_elo": 2000}).json()
+    assert st["new_games"] == 1 and st["games"] == 3
 
 
 # ---- fetching (fake network) ----------------------------------------------------------------
@@ -237,7 +244,8 @@ class FakeNet:
 @pytest.fixture
 def quick(monkeypatch):
     monkeypatch.setattr(wild_fetch, "PAUSE_S", 0)
-    monkeypatch.setattr(wild_fetch.settings, "wild_days", 92)
+    # history from about 14 weeks ago, like the 1 Jan 2026 default relative to TWIC 1669
+    monkeypatch.setattr(wild_fetch.settings, "wild_since", TODAY - timedelta(days=92))
 
 
 def test_run_fetches_lichess_and_twic(client, db, rep, quick):
@@ -247,12 +255,13 @@ def test_run_fetches_lichess_and_twic(client, db, rep, quick):
     assert wild_fetch.run_once(get=net, today=TODAY) is True
     assert wild_fetch.state["errors"] == [], wild_fetch.state["errors"]
     twic = [u for u in net.calls if "/zips/" in u]
-    assert twic[0].endswith("twic1656g.zip") and twic[-1].endswith("twic1670g.zip")  # 92 days = 14 issues, then probe the next
+    first = wild_fetch.twic_estimate(TODAY - timedelta(days=92)) - 1
+    assert twic[0].endswith(f"twic{first}g.zip") and twic[-1].endswith("twic1670g.zip")  # then probe the next
     assert not any("ancient1" in u for u in net.calls)
     with Session(db) as s:
         st = repo.stats(s)
-    # Lichess: live 1 (the unfinished game skipped) + recent 1 + older 1; TWIC: 14 issues of 1 game
-    assert st["games"] == 17 and st["twic_issue"] == 1669
+    # Lichess: live 1 (the unfinished game skipped) + recent 1 + older 1; TWIC: one game per issue
+    assert st["games"] == 3 + (1669 - first + 1) and st["twic_issue"] == 1669 and st["twic_first"] == first
     names = {g["white"] for g in client.get(f"/api/repertoires/{r['id']}/wild-games").json()["games"]}
     assert names == {"Live, A", "Recent, A", "Twic1669, A"}
 
@@ -264,6 +273,19 @@ def test_run_fetches_lichess_and_twic(client, db, rep, quick):
     assert any("live0001.pgn" in u for u in fetched)
     assert not any("past0001" in u or "past0002" in u for u in fetched)
     assert [u for u in fetched if "/zips/" in u] == [f"{wild_fetch.TWIC}/zips/twic1670g.zip", f"{wild_fetch.TWIC}/zips/twic1671g.zip"]
+
+
+def test_missed_twic_issues_are_backfilled(client, db, rep, quick):
+    net = FakeNet(TODAY)
+    wild_fetch.run_once(get=net, today=TODAY)
+    first = wild_fetch.twic_estimate(TODAY - timedelta(days=92)) - 1
+    with Session(db) as s, s.begin():  # pretend two issues failed earlier
+        s.execute(__import__("sqlalchemy").text("DELETE FROM wild_sources WHERE key IN ('twic:1660', 'twic:1661')"))
+    net2 = FakeNet(TODAY)
+    wild_fetch.run_once(get=net2, today=TODAY)
+    zips = [u.rsplit("/", 1)[1] for u in net2.calls if "/zips/" in u]
+    assert zips == ["twic1660g.zip", "twic1661g.zip", "twic1670g.zip"]
+    assert first < 1660
 
 
 def test_run_survives_network_errors(client, db, rep, quick):
@@ -312,6 +334,7 @@ def test_lichess_list_stops_at_the_page_limit(quick):
 def test_twic_estimate():
     assert wild_fetch.twic_estimate(date(2026, 8, 31)) == 1660
     assert wild_fetch.twic_estimate(date(2026, 11, 2)) == 1669
+    assert wild_fetch.twic_estimate(date(2026, 1, 1)) == 1625  # the default history start (TWIC 1626 = 5 Jan 2026)
 
 
 def test_refresh_endpoint_starts_a_run(client, monkeypatch):

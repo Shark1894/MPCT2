@@ -1,5 +1,7 @@
 """Settings from environment variables (or a .env file in the working directory)."""
 
+from datetime import date
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,7 +19,9 @@ class Settings(BaseSettings):
     # in the background. WILD_FETCH=false turns it off.
     wild_fetch: bool = True
     wild_interval_hours: float = 6
-    wild_days: int = 92  # how far back the first fetch goes; older unmatched games are pruned
+    # How far back TWIC issues and Lichess broadcasts are fetched. Every game is kept, so the
+    # history builds up from here as new games are fetched.
+    wild_since: date = date(2026, 1, 1)
 
 
 settings = Settings()

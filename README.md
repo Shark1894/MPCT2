@@ -232,20 +232,22 @@ any game that reaches a position you watch shows up in the **Wild** tab.
   Transpositions count: the position is matched, not the move order.
 - **Wild tab:** the positions you watch (with game counts, **Games**, **Show**, **Rename**, **Unwatch**) and the games
   that reached them, newest first: players and ratings, event and round, result, and the move where your position
-  came up. Filter by watched position or search players and event. **Open** puts the game on the board at that
+  came up. Filter by watched position, by rating (**A player 2000+** … **2700+**: at least one player rated that
+  or higher; remembered, and the counts, the board's Watch button and the new-games count follow it), or search
+  players and event. **Open** puts the game on the board at that
   position (the rest of the game follows, so you can step through it or review it with the engine); **Save to Games**
   copies it into the Games tab. The tab shows a count of new games since you last looked.
-- **Fetching:** a minute after the app starts, then every 6 hours, or **Check now**. The first run goes back about 3
-  months (about 14 TWIC issues plus Lichess broadcasts from that period), which takes a few minutes; later runs only
-  fetch what's new. Finished broadcasts and old TWIC issues are fetched once; live broadcasts again until they end.
-  Unfinished games are skipped, and a game found in both sources is stored once.
-- **Storage:** every fetched game is kept (about 2 KB each, so roughly 150–200 MB for 3 months), with a hash of each
-  of its first 20 moves' positions so matching is one indexed lookup. Games older than 3 months are pruned unless they
-  reach a watched position.
+- **Fetching:** a minute after the app starts, then every 6 hours, or **Check now**. TWIC is fetched from 1 January
+  2026 (`WILD_SINCE`): every issue since then, once each (a missed issue is picked up on the next run). Lichess offers
+  only its recent broadcasts (5 pages of the list), so its history builds up from when fetching started. Finished
+  broadcasts are fetched once, live ones again until they end. Unfinished games are skipped, and a game found in both
+  sources is stored once.
+- **Storage:** every game is kept, so the history grows over time: about 2 KB a game, roughly 0.5–0.6 GB for 2026 so
+  far and maybe 1.5–2 GB a year after that. Each game keeps a hash of each of its first 20 moves' positions, so
+  matching is one indexed lookup. The games are part of the database, so they're in backups and the test copy too.
 
 Settings (environment): `WILD_FETCH=false` turns fetching off (the tab still works with games already stored),
-`WILD_INTERVAL_HOURS` (default 6), `WILD_DAYS` (default 92: how far back the first run goes and when unmatched games
-are pruned).
+`WILD_INTERVAL_HOURS` (default 6), `WILD_SINCE` (default 2026-01-01: how far back TWIC and Lichess are fetched).
 
 If a site blocks the server's downloads, load a file by hand (a TWIC zip or any PGN):
 
@@ -255,7 +257,7 @@ docker compose exec mpct python -m app.tools.import_wild_pgn /tmp/twic1669g.zip
 ```
 
 API: `GET /api/repertoires/{id}/watches`, `GET/POST /api/openings/{id}/watches` (`{"fen", "label"}`),
-`PATCH/DELETE /api/watches/{id}`, `GET /api/repertoires/{id}/wild-games?watch_id=&q=&limit=&offset=`,
+`PATCH/DELETE /api/watches/{id}`, `GET /api/repertoires/{id}/wild-games?watch_id=&q=&min_elo=&limit=&offset=` (`min_elo` also on the watches and status calls),
 `GET /api/wild-games/{id}` (with moves), `POST /api/wild-games/{id}/save`, `GET /api/wild/status?repertoire_id=&since=`,
 `POST /api/wild/refresh`.
 

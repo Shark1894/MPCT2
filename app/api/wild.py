@@ -13,6 +13,7 @@ from app.db.session import get_session
 from app.repositories import wild as repo
 
 router = APIRouter(prefix="/api", tags=["wild"])
+MinElo = Annotated[int | None, Query(ge=0, le=3500, description="Only games where the stronger player is rated at least this")]
 Db = Annotated[Session, Depends(get_session)]
 Label = Annotated[str, StringConstraints(strip_whitespace=True, max_length=60)]
 
@@ -87,20 +88,22 @@ class StatusOut(BaseModel):
     next_run_at: datetime | None
     added: int  # new games in the last run
     games: int  # games stored
+    oldest_played_on: date | None
     newest_played_on: date | None
     last_fetch_at: datetime | None
-    twic_issue: int | None
+    twic_first: int | None  # TWIC issues fetched: first..
+    twic_issue: int | None  # ..latest
     new_games: int  # games for this repertoire's watches imported after `since`
 
 
 @router.get("/repertoires/{repertoire_id}/watches", response_model=list[WatchOut])
-def list_watches(repertoire_id: int, s: Db):
-    return repo.list_watches(s, repertoire_id)
+def list_watches(repertoire_id: int, s: Db, min_elo: MinElo = None):
+    return repo.list_watches(s, repertoire_id, min_elo)
 
 
 @router.get("/openings/{opening_id}/watches", response_model=list[WatchOut])
-def opening_watches(opening_id: int, s: Db):
-    return repo.opening_watches(s, opening_id)
+def opening_watches(opening_id: int, s: Db, min_elo: MinElo = None):
+    return repo.opening_watches(s, opening_id, min_elo)
 
 
 @router.post("/openings/{opening_id}/watches", response_model=WatchOut, status_code=201)
@@ -127,8 +130,9 @@ def wild_games(
     q: str | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    min_elo: MinElo = None,
 ):
-    return repo.list_games(s, repertoire_id, watch_id, q, limit, offset)
+    return repo.list_games(s, repertoire_id, watch_id, q, limit, offset, min_elo)
 
 
 @router.get("/wild-games/{game_id}", response_model=WildGameFull)
@@ -141,7 +145,7 @@ def save_wild_game(game_id: int, s: Db):
     return repo.save_to_games(s, game_id)
 
 
-def _status(s: Session, repertoire_id: int | None, since: datetime | None) -> dict:
+def _status(s: Session, repertoire_id: int | None, since: datetime | None, min_elo: int | None = None) -> dict:
     st = wild_fetch.state
     return {
         "enabled": settings.wild_fetch,
@@ -152,12 +156,12 @@ def _status(s: Session, repertoire_id: int | None, since: datetime | None) -> di
         "finished_at": st["finished_at"],
         "next_run_at": st["next_run_at"],
         "added": st["added"],
-    } | repo.stats(s, repertoire_id, since)
+    } | repo.stats(s, repertoire_id, since, min_elo)
 
 
 @router.get("/wild/status", response_model=StatusOut)
-def status(s: Db, repertoire_id: int | None = None, since: datetime | None = None):
-    return _status(s, repertoire_id, since)
+def status(s: Db, repertoire_id: int | None = None, since: datetime | None = None, min_elo: MinElo = None):
+    return _status(s, repertoire_id, since, min_elo)
 
 
 @router.post("/wild/refresh", response_model=StatusOut, status_code=202)
