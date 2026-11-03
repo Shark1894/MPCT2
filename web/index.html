@@ -125,32 +125,6 @@
           </div>
         </div>
 
-        <div id="drill" class="training drill" hidden>
-          <div class="train-head">
-            <h2 id="drill-title">Drill</h2>
-            <button id="drill-stop" type="button" class="small">Stop</button>
-          </div>
-          <p id="drill-progress" class="meta"></p>
-          <p id="drill-message" class="train-message" aria-live="polite"></p>
-          <button id="drill-next" type="button" class="primary" hidden>Next position</button>
-          <div id="drill-end" class="train-end" hidden>
-            <p id="drill-result" class="train-result" aria-live="polite"></p>
-            <ul id="drill-compare" class="drill-compare"></ul>
-            <ul id="drill-comments" class="drill-comments meta"></ul>
-            <label class="drill-rule-label" for="drill-rule">Rule to remember the difference <span class="meta">(added to both positions’ comments)</span></label>
-            <textarea id="drill-rule" rows="2" maxlength="300" placeholder="e.g. Bishop on f5: cxd5. Bishop on g4: Ne5."></textarea>
-            <div class="train-end-actions">
-              <button id="drill-rule-save" type="button" disabled>Add rule</button>
-              <button id="drill-again" type="button" title="Drill this pair again, the other way round">Again</button>
-            </div>
-            <button id="drill-next-pair" type="button" class="primary">Next pair</button>
-          </div>
-          <div id="drill-summary" class="train-summary" hidden>
-            <p id="drill-summary-text"></p>
-            <button id="drill-done" type="button" class="primary">Done</button>
-          </div>
-        </div>
-
         <div id="rep-build" class="rep-build">
           <div class="picker">
             <label for="rep-select">Repertoire</label>
@@ -347,19 +321,6 @@
           <p id="pp-empty" class="meta" hidden></p>
         </section>
       </div>
-
-      <section class="dash-card" aria-labelledby="cp-title">
-        <div class="cp-head">
-          <h2 id="cp-title" class="dash-h">Confusable positions <span class="meta">look alike, different move</span></h2>
-          <button id="cp-drill-top" type="button" class="small primary" hidden>Drill top</button>
-        </div>
-        <ol id="cp-list" class="pp-list cp-list"></ol>
-        <p id="cp-empty" class="meta" hidden></p>
-        <p id="cp-footer" class="meta cp-footer" hidden>
-          <span id="cp-count"></span>
-          <button id="cp-unhide" type="button" class="small" hidden>Show hidden</button>
-        </p>
-      </section>
 
       <div class="dash-toolbar">
         <label>Sort

@@ -16,12 +16,11 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
-from app.api import bookmarks, confusable, dashboard, evals, games, repertoires, tags, training
+from app.api import bookmarks, dashboard, evals, games, repertoires, tags, training
 from app.config import settings
 from app.core.positions import InvalidLine, InvalidPosition
 from app.db.session import DatabaseNotConfigured, database_status
 from app.repositories.repertoire import Conflict, NotFound
-from app.repositories.confusable import InvalidPair
 from app.repositories.tags import InvalidTag
 from app.repositories.training import InvalidReview
 
@@ -79,7 +78,6 @@ def create_app() -> FastAPI:
     app.add_exception_handler(InvalidPosition, _error(422))
     app.add_exception_handler(InvalidReview, _error(422))
     app.add_exception_handler(InvalidTag, _error(422))
-    app.add_exception_handler(InvalidPair, _error(422))
     app.add_exception_handler(DatabaseNotConfigured, _error(503))
 
     @app.middleware("http")
@@ -112,7 +110,6 @@ def create_app() -> FastAPI:
     app.include_router(games.router)
     app.include_router(bookmarks.router)
     app.include_router(evals.router)
-    app.include_router(confusable.router)
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     @app.get("/index.html", response_class=HTMLResponse, include_in_schema=False)

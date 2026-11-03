@@ -28,7 +28,6 @@ The full plan, decisions and data model are in the project's
 | 7b | Play against the engine | Done |
 | 8 | Games database: save, edit, PGN import/export, compare with repertoire | Done |
 | — | Bookmarked lines; engine review of the moves on the board | Done |
-| — | Confusable positions: finder + drill | Done |
 
 ## Using the board
 
@@ -221,31 +220,6 @@ Training API: `GET /api/openings/{id}/training?mode=due|all` (or `line_id=`, or 
 `POST /api/lines/{id}/reviews` with `{"practice": false, "attempts": [{"ply": 2, "uci": "c7c6"}, ...]}` records a
 finished line (the server checks each move against the line and updates the schedule).
 
-## Confusable positions
-
-Positions that look almost the same but need a different move, like the bishop on f5 (cxd5) or g4 (Ne5) in the
-Slav. Training each line on its own doesn't stop you mixing them up; drilling them side by side does.
-
-- **Finding pairs:** every position where it's your move, across all openings of the same colour in the
-  repertoire, compared square by square. A pair has at most 4 differing squares (a piece standing elsewhere counts
-  twice), different correct moves, and each move is also legal in the other position. Positions on a common line
-  aren't paired, and the same position with two different moves is left out (no drill can tell those apart).
-- **Ranking:** pairs you've actually mixed up in training (you played one position's move in the other) come first,
-  then the closest pairs. The dashboard shows up to 30 pairs with at least one side in the selected opening (or branch).
-- **Dashboard:** the **Confusable positions** card lists each pair's moves, what differs ("Black bishop on f5: cxd5.
-  Black bishop on g4: Ne5.") and how often you've mixed them up. **Show** puts a position on the board, **Drill**
-  drills the pair, **Hide** marks it as not confusing (**Show hidden** brings hidden pairs back). **Drill top n**
-  drills the first 10.
-- **Drill:** the two positions back to back, in random order, set up with their moves. Wrong moves snap back, with
-  the trainer's hints (piece after 2 wrong tries, arrow after 3); playing the other position's move is called out.
-  After a mistake or the right move, the differing squares are circled. After each pair: the comparison, any existing
-  comments, an optional rule added to both positions' comments, **Again** (the other way round) and **Next pair**.
-  The drill is practice: nothing is recorded and the schedule doesn't change.
-
-API: `GET /api/openings/{id}/confusable?tag_id=&max_distance=4&limit=30`,
-`POST /api/repertoires/{id}/confusable/hidden` (`{"position_ids": [a, b]}`),
-`DELETE /api/repertoires/{id}/confusable/hidden` (show all hidden pairs again).
-
 ## Games
 
 The **Games** tab lists your games newest first (date, players with teams, competition, opening moves, result),
@@ -341,7 +315,6 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/play.e2e.cjs         # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/insights.e2e.cjs     # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/bookmarks.e2e.cjs    # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/review.e2e.cjs       # empty database, real engine
-MPCT_URL=http://localhost:8010/ node tests/e2e/confusable.e2e.cjs   # empty database
 ```
 
 ## Deploy on the home server
@@ -510,8 +483,6 @@ web/              frontend served as-is
   js/training.js  training mode: board, auto replies, hints, results
   js/dashboard.js dashboard view: stats, lines with history, resets
   js/insights.js  dashboard insights: progress bars, forecast, activity, problems, line sort/filter
-  js/pairdrill.js confusable-positions drill rules (pure logic, unit tested)
-  js/confusable.js confusable-positions dashboard list + drill controller
   js/engine.js    Stockfish worker client + UCI parsing (helpers unit tested)
   js/analysis.js  engine panel, evaluation bar, engine arrows
   js/games.js     games list view + open-game panel (save, compare, PGN)
