@@ -91,6 +91,12 @@ export const api = {
   evalsLookup: (fens, minMovetimeMs = 0) => request('POST', '/evals/lookup', { body: { fens, min_movetime_ms: minMovetimeMs } }),
   saveEvals: (evals) => request('POST', '/evals', { body: { evals } }),
 
+  confusable: (openingId, tagId = null) =>
+    request('GET', `/openings/${openingId}/confusable`, { params: tagId ? { tag_id: tagId } : {} }),
+  hideConfusable: (repId, positionIds) =>
+    request('POST', `/repertoires/${repId}/confusable/hidden`, { body: { position_ids: positionIds } }),
+  unhideConfusable: (repId) => request('DELETE', `/repertoires/${repId}/confusable/hidden`),
+
   comment: (repId, fen) => request('GET', `/repertoires/${repId}/comment`, { params: { fen } }),
   saveComment: (repId, fen, comment) => request('PUT', `/repertoires/${repId}/comment`, { body: { fen, comment } }),
 };

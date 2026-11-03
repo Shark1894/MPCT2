@@ -234,3 +234,16 @@ class PositionEval(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class ConfusableHidden(Base):
+    """A confusable pair you marked as not confusing, per repertoire. Stored by position
+    (lower id first)."""
+
+    __tablename__ = "confusable_hidden"
+    __table_args__ = (CheckConstraint("position_a_id < position_b_id", name="ordered"),)
+
+    repertoire_id: Mapped[int] = mapped_column(ForeignKey("repertoires.id", ondelete="CASCADE"), primary_key=True)
+    position_a_id: Mapped[int] = mapped_column(ForeignKey("positions.id", ondelete="CASCADE"), primary_key=True)
+    position_b_id: Mapped[int] = mapped_column(ForeignKey("positions.id", ondelete="CASCADE"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

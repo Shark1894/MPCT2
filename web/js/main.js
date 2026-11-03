@@ -6,6 +6,7 @@ import { BoardView } from './board.js';
 import { renderMoveList } from './movelist.js';
 import { RepertoirePanel } from './repertoire.js';
 import { TrainingController } from './training.js';
+import { PairDrillController } from './confusable.js';
 import { DashboardView } from './dashboard.js';
 import { AnalysisPanel } from './analysis.js';
 import { GamePanel, GamesView } from './games.js';
@@ -39,7 +40,7 @@ const repertoire = new RepertoirePanel({
   onOrientation: (color) => board.setOrientation(color),
   onTrain: (opening, mode, tag) => startTraining(opening, mode, null, tag),
   onJump: (ply) => {
-    if (trainer.active) return;
+    if (busy()) return;
     game.goTo(ply);
     render();
   },
@@ -51,7 +52,7 @@ const repertoire = new RepertoirePanel({
  * it, just jump there (keeping the moves after it); otherwise set up the tag's moves from the start.
  */
 async function showTagPosition(tag) {
-  if (trainer.active) return;
+  if (busy()) return;
   const key = (fen) => fen.split(' ').slice(0, 4).join(' ');
   if (key(game.startFen) === key(START_FEN)) {
     const ply = game.moves.findIndex((m) => key(m.fen) === tag.key) + 1;
@@ -85,23 +86,42 @@ const dashboard = new DashboardView({
     setView('board');
     render();
   },
+  onDrill: (pairs, label) => {
+    setView('board');
+    startDrill(pairs, label);
+  },
 });
+
+/** Training and the confusable-positions drill share one mode: explorer hidden, navigation locked. */
+function trainingMode(active, badge) {
+  if (active) analysis.pause('training');
+  else analysis.resume('training');
+  document.body.classList.toggle('training', active);
+  $('mode-badge').textContent = badge;
+  $('mode-badge').hidden = !active;
+  $('view-dashboard').disabled = active;
+  $('view-games').disabled = active;
+  repertoire.setTraining(active);
+}
 
 const trainer = new TrainingController({
   game,
   board,
   panel: repertoire,
   render: () => render(),
-  onModeChange: (active) => {
-    if (active) analysis.pause('training');
-    else analysis.resume('training');
-    document.body.classList.toggle('training', active);
-    $('mode-badge').hidden = !active;
-    $('view-dashboard').disabled = active;
-    $('view-games').disabled = active;
-    repertoire.setTraining(active);
-  },
+  onModeChange: (active) => trainingMode(active, 'Training'),
 });
+
+const drill = new PairDrillController({
+  game,
+  board,
+  panel: repertoire,
+  render: () => render(),
+  onModeChange: (active) => trainingMode(active, 'Drill'),
+});
+
+/** Training or drilling: the board belongs to the session. */
+const busy = () => trainer.active || drill.active;
 
 // ---- games -------------------------------------------------------------------
 
@@ -150,9 +170,9 @@ const review = new ReviewController({
   board,
   analysis,
   getOpening: () => repertoire._opening(),
-  isBusy: () => trainer.active || play.active,
+  isBusy: () => busy() || play.active,
   onJump: (ply) => {
-    if (trainer.active || play.active) return;
+    if (busy() || play.active) return;
     game.goTo(ply);
     render();
   },
@@ -167,13 +187,21 @@ async function startTraining(opening, mode, lineId, tag, label) {
   trainer.start(opening, mode, lineId, tag, label);
 }
 
+/** The drill also replaces the board's moves. */
+async function startDrill(pairs, label) {
+  if (busy()) return;
+  if (!(await play.confirmStop())) return;
+  if (!(await gamePanel.confirmLeave())) return;
+  drill.start(pairs, label);
+}
+
 // ---- views: Board | Dashboard | Games -----------------------------------------------
 
 const VIEWS = { board: 'main.layout', dashboard: '#dashboard', games: '#games-view' };
 let view = 'board';
 
 function setView(next) {
-  if (next !== 'board' && trainer.active) return;
+  if (next !== 'board' && busy()) return;
   view = next;
   for (const [name, sel] of Object.entries(VIEWS)) {
     document.querySelector(sel).hidden = view !== name;
@@ -209,26 +237,28 @@ const ui = {
 let shownFen = null;
 
 function render() {
-  board.show(game, { canMove: trainer.active ? trainer.canMove() : play?.active ? play.canMove() : true });
+  board.show(game, {
+    canMove: trainer.active ? trainer.canMove() : drill.active ? drill.canMove() : play?.active ? play.canMove() : true,
+  });
   const status = game.status();
   ui.status.textContent = status.text;
   ui.status.classList.toggle('over', status.over);
   review?.update();
   // Hidden when something else already shows the evaluation (review panel, live engine) or it would give answers away.
-  savedEval?.update(game.fen(), Boolean(review?.open) || analysis.settings.on || trainer.active || Boolean(play?.active));
+  savedEval?.update(game.fen(), Boolean(review?.open) || analysis.settings.on || busy() || Boolean(play?.active));
   renderMoveList(
     ui.moves,
     game,
     (ply) => {
-      if (trainer.active) return; // no peeking ahead while training
+      if (busy()) return; // no peeking ahead while training
       game.goTo(ply);
       render();
     },
     review?.annotations(),
   );
   if (document.activeElement !== ui.fen) ui.fen.value = game.fen();
-  const atStart = game.ply === 0 || trainer.active;
-  const atEnd = game.ply === game.moves.length || trainer.active;
+  const atStart = game.ply === 0 || busy();
+  const atEnd = game.ply === game.moves.length || busy();
   ui.nav.start.disabled = atStart;
   ui.nav.back.disabled = atStart;
   ui.nav.forward.disabled = atEnd;
@@ -274,13 +304,17 @@ async function onBoardMove(from, to) {
     trainer.onUserMove(from, to, promotion);
     return;
   }
+  if (drill.active) {
+    drill.onUserMove(from, to, promotion);
+    return;
+  }
   if (play.active && !play.canMove()) return render();
   game.play(from, to, promotion);
   render();
 }
 
 function step(action) {
-  if (trainer.active) return; // navigation is locked while training
+  if (busy()) return; // navigation is locked while training
   action();
   render();
 }
@@ -305,7 +339,7 @@ document.addEventListener('keydown', (e) => {
     End: () => game.toEnd(),
     f: () => board.flip(),
   };
-  const action = trainer.active && e.key !== 'f' ? null : actions[e.key];
+  const action = busy() && e.key !== 'f' ? null : actions[e.key];
   if (action && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     step(action);
@@ -321,7 +355,7 @@ $('board').addEventListener(
     const now = performance.now();
     if (now - lastWheel < 60) return;
     lastWheel = now;
-    if (trainer.active) return;
+    if (busy()) return;
     step(() => (e.deltaY > 0 ? game.forward() : game.back()));
   },
   { passive: false },
@@ -388,4 +422,4 @@ repertoire.init().then(async () => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, repertoire, trainer, dashboard, setView, render, analysis, gamePanel, gamesView, play, review, savedEval };
+window.mpct = { game, board, repertoire, trainer, drill, dashboard, setView, render, analysis, gamePanel, gamesView, play, review, savedEval };

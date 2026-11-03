@@ -13,6 +13,7 @@ import {
   viewLines,
   weakestLines,
 } from './insights.js';
+import { DRILL_TOP, renderConfusable } from './confusable.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -29,9 +30,11 @@ export class DashboardView {
    * @param {import('./repertoire.js').RepertoirePanel} deps.repertoire
    * @param {(opening, mode: 'due'|'all', lineId?: number|number[], tag?, label?: string) => void} deps.onTrain
    * @param {(sans: string[]) => void} deps.onShowLine
+   * @param {(pairs: object[], label: string) => void} deps.onDrill  drill confusable pairs
    */
-  constructor({ repertoire, onTrain, onShowLine }) {
-    Object.assign(this, { repertoire, onTrain, onShowLine });
+  constructor({ repertoire, onTrain, onShowLine, onDrill }) {
+    Object.assign(this, { repertoire, onTrain, onShowLine, onDrill });
+    this.confusable = null;
     this.data = null;
     this.view = { sort: 'due', filter: 'all', search: '', ...store.get('dashView', {}) };
     this.el = {
@@ -68,6 +71,12 @@ export class DashboardView {
       search: $('dash-search'),
       showing: $('dash-showing'),
       trainShown: $('dash-train-shown'),
+      cpList: $('cp-list'),
+      cpEmpty: $('cp-empty'),
+      cpDrillTop: $('cp-drill-top'),
+      cpFooter: $('cp-footer'),
+      cpCount: $('cp-count'),
+      cpUnhide: $('cp-unhide'),
     };
     const e = this.el;
     e.opening.addEventListener('change', async () => {
@@ -87,6 +96,11 @@ export class DashboardView {
       const label = this.view.filter === 'bookmarked' && !this.view.search.trim() ? 'bookmarked lines' : 'shown lines';
       if (shown.length) this.onTrain(this._opening(), 'all', shown.map((l) => l.id), null, label);
     });
+    e.cpDrillTop.addEventListener('click', () => {
+      const pairs = (this.confusable?.pairs ?? []).slice(0, DRILL_TOP);
+      if (pairs.length) this.onDrill(pairs, pairs.length === 1 ? 'top pair' : `top ${pairs.length} pairs`);
+    });
+    e.cpUnhide.addEventListener('click', () => this.unhideConfusable());
     e.sort.value = this.view.sort;
     e.filter.value = this.view.filter;
     e.search.value = this.view.search;
@@ -150,6 +164,71 @@ export class DashboardView {
     if (this._opening()?.id !== data.opening.id || this.repertoire.tagId !== data.tag_id) return; // changed meanwhile
     this.data = data;
     this._render();
+    await this._loadConfusable();
+  }
+
+  // ---- confusable positions ---------------------------------------------------------
+
+  async _loadConfusable() {
+    const opening = this._opening();
+    const tagId = this.repertoire.tagId;
+    if (!opening) return;
+    let data = null;
+    try {
+      data = await api.confusable(opening.id, tagId);
+    } catch {
+      /* shown as "couldn't load" */
+    }
+    if (this._opening()?.id !== opening.id || this.repertoire.tagId !== tagId) return; // changed meanwhile
+    this.confusable = data;
+    this._renderConfusable();
+  }
+
+  _renderConfusable() {
+    const e = this.el;
+    const data = this.confusable;
+    renderConfusable(e.cpList, e.cpEmpty, data, {
+      openingId: this._opening()?.id,
+      onDrill: (pairs, label) => this.onDrill(pairs, label),
+      onShow: (sans) => this.onShowLine(sans),
+      onHide: (pair) => this.hideConfusable(pair),
+    });
+    const n = Math.min(data?.pairs.length ?? 0, DRILL_TOP);
+    e.cpDrillTop.hidden = n < 2;
+    e.cpDrillTop.textContent = `Drill top ${n}`;
+    const shown = data?.pairs.length ?? 0;
+    const parts = [];
+    if (data && data.total > shown) parts.push(`Showing ${shown} of ${data.total} pairs.`);
+    if (data?.hidden) parts.push(`${plural(data.hidden, 'pair')} hidden.`);
+    e.cpCount.textContent = parts.join(' ');
+    e.cpUnhide.hidden = !data?.hidden;
+    e.cpFooter.hidden = parts.length === 0;
+  }
+
+  async hideConfusable(pair) {
+    const repId = this.repertoire.repId;
+    if (!repId) return;
+    try {
+      await api.hideConfusable(repId, [pair.a.position_id, pair.b.position_id]);
+      toast('Pair hidden. Show hidden pairs at the bottom of the list.');
+    } catch (err) {
+      toast(err.message, 'error');
+      return;
+    }
+    await this._loadConfusable();
+  }
+
+  async unhideConfusable() {
+    const repId = this.repertoire.repId;
+    if (!repId) return;
+    try {
+      const r = await api.unhideConfusable(repId);
+      toast(`${plural(r.pairs, 'pair')} shown again.`);
+    } catch (err) {
+      toast(err.message, 'error');
+      return;
+    }
+    await this._loadConfusable();
   }
 
   async _refreshBand() {
@@ -189,6 +268,11 @@ export class DashboardView {
     this.el.fcNote.textContent = '';
     this.el.ppList.innerHTML = '';
     this.el.ppEmpty.hidden = true;
+    this.confusable = null;
+    this.el.cpList.innerHTML = '';
+    this.el.cpEmpty.hidden = true;
+    this.el.cpDrillTop.hidden = true;
+    this.el.cpFooter.hidden = true;
     this.el.showing.textContent = '';
     this.el.trainShown.hidden = true;
     this.el.lines.innerHTML = '';

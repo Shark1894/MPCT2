@@ -20,7 +20,7 @@ from app.db.session import get_engine
 from app.main import app
 
 ROOT = Path(__file__).resolve().parent.parent
-TABLES = "position_evals, game_moves, games, opening_tags, move_attempts, line_reviews, position_comments, moves, lines, openings, repertoires, positions"
+TABLES = "confusable_hidden, position_evals, game_moves, games, opening_tags, move_attempts, line_reviews, position_comments, moves, lines, openings, repertoires, positions"
 
 
 @pytest.fixture(scope="session")
