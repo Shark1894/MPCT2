@@ -25,11 +25,16 @@ export function moveNumber(ply) {
   return Math.ceil(ply / 2);
 }
 
-/** A watch's display name: its label, or the last move of its path ("3...Bf5"). */
+/** A watch's display name: its branch tag's name. */
 export function watchName(w) {
-  if (w.label) return w.label;
-  if (!w.path.length) return 'Start';
-  return formatMoves(w.path.slice(-1), w.path.length);
+  return w.name;
+}
+
+/** "Viewed 3 Nov" / "New" marker for a spotted game. */
+export function viewedText(viewedAt) {
+  if (!viewedAt) return 'New';
+  const d = new Date(viewedAt);
+  return `Viewed ${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })}`;
 }
 
 /** How long ago, roughly: "just now", "5 min ago", "3 h ago", "2 days ago". */
@@ -90,6 +95,7 @@ export class WildView {
       watches: $('wild-watches'),
       watchesEmpty: $('wild-watches-empty'),
       filter: $('wild-filter'),
+      seen: $('wild-seen'),
       minElo: $('wild-min-elo'),
       search: $('wild-search'),
       count: $('wild-count'),
@@ -101,6 +107,11 @@ export class WildView {
     const e = this.el;
     e.check.addEventListener('click', () => this.checkNow());
     e.filter.addEventListener('change', () => this.loadGames());
+    e.seen.value = store.get('wildSeenFilter', '');
+    e.seen.addEventListener('change', () => {
+      store.set('wildSeenFilter', e.seen.value);
+      this.loadGames();
+    });
     e.minElo.value = minElo() ? String(minElo()) : '';
     e.minElo.addEventListener('change', async () => {
       store.set('wildMinElo', Number(e.minElo.value) || 0);
@@ -253,6 +264,7 @@ export class WildView {
     show.addEventListener('click', () => this.onShowPosition(w.path));
     const rename = el('button', 'small', 'Rename');
     rename.type = 'button';
+    rename.title = 'Rename the branch tag';
     rename.addEventListener('click', () => this.rename(w));
     const remove = el('button', 'small danger-outline', 'Unwatch');
     remove.type = 'button';
@@ -262,15 +274,18 @@ export class WildView {
     return li;
   }
 
+  /** Renames the branch tag (the watch shows the tag's name). */
   async rename(w) {
     const values = await formDialog({
-      title: 'Name this watched position',
-      fields: [{ name: 'label', label: 'Name (empty = show the move)', value: w.label, required: false, maxLength: 60 }],
-      submit: 'Save',
+      title: 'Rename branch tag',
+      message: `The tag is renamed everywhere in ${w.opening_name}.`,
+      fields: [{ name: 'name', label: 'Branch name', value: w.name, maxLength: 60 }],
+      submit: 'Rename',
     });
     if (!values) return;
     try {
-      await api.updateWatch(w.id, values.label ?? '');
+      await api.renameTag(w.tag_id, values.name);
+      this.repertoire.loadTags?.();
     } catch (err) {
       toast(err.message, 'error');
     }
@@ -279,7 +294,7 @@ export class WildView {
   }
 
   async unwatch(w) {
-    const ok = await confirmDialog('Stop watching this position?', `${w.opening_name}: ${formatMoves(w.path)}`, 'Unwatch');
+    const ok = await confirmDialog(`Stop watching “${w.name}”?`, `${w.opening_name}: ${formatMoves(w.path)}. The branch tag stays.`, 'Unwatch');
     if (!ok) return;
     try {
       await api.deleteWatch(w.id);
@@ -300,7 +315,7 @@ export class WildView {
     const offset = more ? this.games.length : 0;
     let data;
     try {
-      data = await api.wildGames(this.repId, { watchId, q, limit: PAGE, offset, minElo: minElo() });
+      data = await api.wildGames(this.repId, { watchId, q, limit: PAGE, offset, minElo: minElo(), unviewed: this.el.seen.value === 'new' });
     } catch (err) {
       toast(err.message, 'error');
       return;
@@ -313,13 +328,15 @@ export class WildView {
   _renderGames() {
     const e = this.el;
     e.list.innerHTML = '';
-    const filtered = Boolean(e.filter.value || e.search.value.trim() || minElo());
+    const filtered = Boolean(e.filter.value || e.search.value.trim() || minElo() || e.seen.value);
     e.count.textContent = this.total ? `${plural(this.total, 'game')}${this.games.length < this.total ? `, showing ${this.games.length}` : ''}` : '';
     e.empty.hidden = this.games.length > 0;
     e.empty.textContent = !this.watches.length
-      ? 'Watch a position to see the tournament games that reach it.'
+      ? 'Watch a branch tag to see the tournament games that reach it.'
       : filtered
-        ? minElo() && !e.filter.value && !e.search.value.trim()
+        ? e.seen.value === 'new' && !e.filter.value && !e.search.value.trim() && !minElo()
+          ? 'You’ve viewed every game here.'
+          : minElo() && !e.filter.value && !e.search.value.trim()
           ? `No games with a player rated ${minElo()}+ yet. Lower the rating filter to see more.`
           : 'No games match.'
         : 'No tournament games reach your watched positions yet. New games are checked every few hours.';
@@ -329,10 +346,14 @@ export class WildView {
   }
 
   _gameRow(g, byId) {
-    const row = el('div', 'game-row wild-row');
+    const row = el('div', `game-row wild-row${g.viewed_at ? ' viewed' : ' unviewed'}`);
     const date = el('div', 'game-date', g.played_on || 'No date');
     const main = el('div', 'game-main');
-    main.append(el('div', 'game-players', `${playerText(g.white, g.white_elo)} – ${playerText(g.black, g.black_elo)}`));
+    const players = el('div', 'game-players');
+    const seen = el('span', g.viewed_at ? 'wild-seen-tag seen' : 'wild-seen-tag new', viewedText(g.viewed_at));
+    seen.title = g.viewed_at ? `You opened this game on ${new Date(g.viewed_at).toLocaleString('en-GB')}` : 'Not opened yet';
+    players.append(seen, document.createTextNode(` ${playerText(g.white, g.white_elo)} – ${playerText(g.black, g.black_elo)}`));
+    main.append(players);
     const m = g.matches[0];
     const w = byId.get(m.watch_id);
     const reached = w ? `${watchName(w)} at move ${moveNumber(m.ply)}` : `move ${moveNumber(m.ply)}`;
@@ -352,7 +373,16 @@ export class WildView {
     const open = el('button', 'small primary', 'Open');
     open.type = 'button';
     open.title = 'Open on the board at the watched position';
-    open.addEventListener('click', () => this.onOpen(g.id, m.ply));
+    open.addEventListener('click', async () => {
+      if (!g.viewed_at) {
+        try {
+          g.viewed_at = (await api.markWildViewed(g.id)).viewed_at;
+        } catch {
+          /* still open it */
+        }
+      }
+      this.onOpen(g.id, m.ply);
+    });
     const save = el('button', 'small', 'Save to Games');
     save.type = 'button';
     save.addEventListener('click', async () => {

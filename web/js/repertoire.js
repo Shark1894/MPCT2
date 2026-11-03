@@ -30,7 +30,7 @@ export class RepertoirePanel {
     this.onShowTag = onShowTag;
     this.training = false;
     this.tags = []; // branch tags of the selected opening
-    this.watches = []; // positions of the selected opening watched in tournament games
+    this.watches = []; // branch tags of the selected opening watched in tournament games
     this.tagId = null; // training/dashboard filter: null = all lines
 
     this.repertoires = [];
@@ -500,37 +500,37 @@ export class RepertoirePanel {
     this.el.tagAdd.disabled = !this.openingId || this.game.ply === 0;
     this.el.tagRename.hidden = this.el.tagDelete.hidden = !here;
 
-    const watch = this._watchHere();
+    // Only branch tags can be watched: the button sits with the tag's own buttons.
+    const watch = here ? this._watchOf(here) : null;
     const wb = this.el.watchToggle;
-    wb.disabled = !this.openingId || this.game.ply === 0;
+    wb.hidden = !here;
     wb.setAttribute('aria-pressed', String(Boolean(watch)));
     wb.textContent = watch ? `In the wild: ${watch.games} game${watch.games === 1 ? '' : 's'}` : 'Watch in the wild';
     wb.title = watch
-      ? 'Watched: tournament games reaching this position are listed in the Wild tab. Tap to stop watching.'
-      : 'Show tournament games that reach this position (Wild tab)';
+      ? `Watched: tournament games reaching “${here.name}” are listed in the Wild tab. Tap to stop watching.`
+      : `Show tournament games that reach “${here?.name ?? ''}” in the Wild tab`;
   }
 
-  _watchHere() {
-    const key = this.game.fen().split(' ').slice(0, 4).join(' ');
-    return this.game.ply > 0 ? (this.watches.find((w) => w.key === key) ?? null) : null;
+  _watchOf(tag) {
+    return this.watches.find((w) => w.tag_id === tag.id) ?? null;
   }
 
   async toggleWatch() {
-    const o = this._opening();
-    if (!o) return;
-    const watch = this._watchHere();
+    const tag = this._tagHere();
+    if (!tag) return;
+    const watch = this._watchOf(tag);
     try {
       if (watch) {
-        const ok = await confirmDialog('Stop watching this position?', 'Its games disappear from the Wild tab.', 'Unwatch');
+        const ok = await confirmDialog(`Stop watching “${tag.name}”?`, 'Its games disappear from the Wild tab. The tag stays.', 'Unwatch');
         if (!ok) return;
-        await api.deleteWatch(watch.id);
-        toast('No longer watching this position');
+        await api.unwatchTag(tag.id);
+        toast(`No longer watching “${tag.name}”`);
       } else {
-        const w = await api.createWatch(o.id, this.game.fen());
+        const w = await api.watchTag(tag.id);
         toast(
           w.games
-            ? `Watching: ${w.games} tournament game${w.games === 1 ? '' : 's'} already reach it. See the Wild tab.`
-            : 'Watching. Tournament games that reach it will show in the Wild tab.',
+            ? `Watching “${tag.name}”: ${w.games} tournament game${w.games === 1 ? '' : 's'} already reach it. See the Wild tab.`
+            : `Watching “${tag.name}”. Tournament games that reach it will show in the Wild tab.`,
         );
       }
       await this.loadTags();

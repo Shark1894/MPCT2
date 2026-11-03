@@ -94,6 +94,15 @@ def rep(client):
     return r, o
 
 
+def watch(client, o, name="Slav Bf5", fen=BF5 + " 0 4"):
+    """Tag a position and watch the tag; returns the watch."""
+    tag = client.post(f"/api/openings/{o['id']}/tags", json={"name": name, "fen": fen})
+    assert tag.status_code == 201, tag.text
+    res = client.put(f"/api/tags/{tag.json()['id']}/watch")
+    assert res.status_code == 201, res.text
+    return res.json()
+
+
 def store(db, text, source="twic", ref="twic1669"):
     games, _ = read_games(text)
     with Session(db) as s, s.begin():
@@ -105,10 +114,8 @@ def test_watch_finds_stored_games(client, db, rep):
     store(db, pgn("Carlsen, Magnus", "Caruana, Fabiano", SLAV, day=TODAY - timedelta(days=3))
           + pgn("Giri, Anish", "So, Wesley", SLAV_TRANSPOSED, day=TODAY - timedelta(days=1))
           + pgn("X", "Y", QGD))
-    res = client.post(f"/api/openings/{o['id']}/watches", json={"fen": BF5 + " 0 4", "label": "Slav Bf5"})
-    assert res.status_code == 201, res.text
-    w = res.json()
-    assert (w["games"], w["label"], w["path"]) == (2, "Slav Bf5", ["d4", "d5", "c4", "c6", "Nf3", "Bf5"])
+    w = watch(client, o)
+    assert (w["games"], w["name"], w["path"]) == (2, "Slav Bf5", ["d4", "d5", "c4", "c6", "Nf3", "Bf5"])
     assert w["latest_played_on"] == str(TODAY - timedelta(days=1))
 
     data = client.get(f"/api/repertoires/{r['id']}/wild-games").json()
@@ -123,38 +130,64 @@ def test_watch_finds_stored_games(client, db, rep):
 
 def test_new_games_match_existing_watches(client, db, rep):
     r, o = rep
-    w = client.post(f"/api/openings/{o['id']}/watches", json={"fen": BF5 + " 0 4"}).json()
+    w = watch(client, o)
     assert w["games"] == 0
     store(db, pgn("A", "B", SLAV))
     assert store(db, pgn("A", "B", SLAV), "lichess", "lichess:x") == 0  # same game from another source
     assert client.get(f"/api/repertoires/{r['id']}/wild-games", params={"watch_id": w["id"]}).json()["total"] == 1
 
 
-def test_watch_validation(client, rep):
+def test_only_tags_can_be_watched(client, rep):
     _, o = rep
-    start = chess.STARTING_FEN
-    assert client.post(f"/api/openings/{o['id']}/watches", json={"fen": start}).status_code == 422
-    elsewhere = key("e4", "e5") + " 0 2"
-    assert client.post(f"/api/openings/{o['id']}/watches", json={"fen": elsewhere}).status_code == 422
-    assert client.post(f"/api/openings/{o['id']}/watches", json={"fen": BF5}).status_code == 201
-    assert client.post(f"/api/openings/{o['id']}/watches", json={"fen": BF5}).status_code == 409
-    assert client.post("/api/openings/999/watches", json={"fen": BF5}).status_code == 404
+    tag = client.post(f"/api/openings/{o['id']}/tags", json={"name": "Slav Bf5", "fen": BF5}).json()
+    assert client.put(f"/api/tags/{tag['id']}/watch").status_code == 201
+    assert client.put(f"/api/tags/{tag['id']}/watch").status_code == 409
+    assert client.put("/api/tags/999/watch").status_code == 404
+    assert client.post(f"/api/openings/{o['id']}/watches", json={"fen": BF5}).status_code == 405  # no untagged watches
 
 
-def test_rename_and_unwatch(client, rep):
+def test_watch_takes_the_tag_name_and_goes_with_the_tag(client, rep):
     r, o = rep
-    w = client.post(f"/api/openings/{o['id']}/watches", json={"fen": BF5}).json()
-    assert client.patch(f"/api/watches/{w['id']}", json={"label": " Bf5 Slav "}).json()["label"] == "Bf5 Slav"
-    assert len(client.get(f"/api/openings/{o['id']}/watches").json()) == 1
-    assert client.delete(f"/api/watches/{w['id']}").status_code == 204
+    w = watch(client, o)
+    client.patch(f"/api/tags/{w['tag_id']}", json={"name": "Slav with Bf5"})
+    assert client.get(f"/api/repertoires/{r['id']}/watches").json()[0]["name"] == "Slav with Bf5"
+    assert client.get(f"/api/openings/{o['id']}/watches").json()[0]["tag_id"] == w["tag_id"]
+    assert client.delete(f"/api/tags/{w['tag_id']}").status_code == 204  # removing the tag removes the watch
     assert client.get(f"/api/repertoires/{r['id']}/watches").json() == []
-    assert client.delete(f"/api/watches/{w['id']}").status_code == 404
+
+
+def test_unwatch(client, rep):
+    r, o = rep
+    w = watch(client, o)
+    assert client.delete(f"/api/tags/{w['tag_id']}/watch").status_code == 204
+    assert client.get(f"/api/repertoires/{r['id']}/watches").json() == []
+    assert client.delete(f"/api/tags/{w['tag_id']}/watch").status_code == 404
+    w = client.put(f"/api/tags/{w['tag_id']}/watch").json()
+    assert client.delete(f"/api/watches/{w['id']}").status_code == 204  # from the Wild tab
+    assert client.get(f"/api/openings/{o['id']}/tags").json()[0]["name"] == "Slav Bf5"  # the tag stays
+
+
+def test_viewed_games(client, db, rep):
+    r, o = rep
+    store(db, pgn("A", "B", SLAV) + pgn("C", "D", SLAV_TRANSPOSED))
+    watch(client, o)
+    games = client.get(f"/api/repertoires/{r['id']}/wild-games").json()["games"]
+    assert [g["viewed_at"] for g in games] == [None, None]
+    first = client.post(f"/api/wild-games/{games[0]['id']}/viewed").json()
+    assert first["viewed_at"]
+    again = client.post(f"/api/wild-games/{games[0]['id']}/viewed").json()
+    assert again["viewed_at"] == first["viewed_at"]  # the first time counts
+    games = client.get(f"/api/repertoires/{r['id']}/wild-games").json()["games"]
+    assert [bool(g["viewed_at"]) for g in games] == [True, False]
+    unseen = client.get(f"/api/repertoires/{r['id']}/wild-games", params={"unviewed": True}).json()
+    assert unseen["total"] == 1 and unseen["games"][0]["id"] == games[1]["id"]
+    assert client.post("/api/wild-games/999/viewed").status_code == 404
 
 
 def test_save_to_games(client, db, rep):
     r, o = rep
     store(db, pgn("Carlsen, Magnus", "Caruana, Fabiano", SLAV))
-    client.post(f"/api/openings/{o['id']}/watches", json={"fen": BF5})
+    watch(client, o)
     g = client.get(f"/api/repertoires/{r['id']}/wild-games").json()["games"][0]
     saved = client.post(f"/api/wild-games/{g['id']}/save").json()
     assert saved["created"] is True
@@ -165,7 +198,7 @@ def test_save_to_games(client, db, rep):
 
 def test_status_counts_new_games(client, db, rep):
     r, o = rep
-    client.post(f"/api/openings/{o['id']}/watches", json={"fen": BF5})
+    watch(client, o)
     before = datetime.now(timezone.utc) - timedelta(seconds=5)
     store(db, pgn("A", "B", SLAV) + pgn("C", "D", QGD))
     st = client.get("/api/wild/status", params={"repertoire_id": r["id"], "since": before.isoformat()}).json()
@@ -177,7 +210,7 @@ def test_rating_filter(client, db, rep):
     store(db, pgn("Strong, A", "Weak, B", SLAV, elo=("2610", "2100"))
           + pgn("Club, C", "Club, D", SLAV_TRANSPOSED, elo=("1950", "1900"))
           + pgn("Unrated, E", "Unrated, F", SLAV, elo=("?", "?"), event="Unrated"))
-    w = client.post(f"/api/openings/{o['id']}/watches", json={"fen": BF5}).json()
+    w = watch(client, o)
     assert w["games"] == 3
     games = lambda **p: client.get(f"/api/repertoires/{r['id']}/wild-games", params=p).json()  # noqa: E731
     assert games()["total"] == 3
@@ -250,7 +283,7 @@ def quick(monkeypatch):
 
 def test_run_fetches_lichess_and_twic(client, db, rep, quick):
     r, o = rep
-    client.post(f"/api/openings/{o['id']}/watches", json={"fen": BF5})
+    watch(client, o)
     net = FakeNet(TODAY)
     assert wild_fetch.run_once(get=net, today=TODAY) is True
     assert wild_fetch.state["errors"] == [], wild_fetch.state["errors"]

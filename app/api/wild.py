@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app import wild_fetch
@@ -15,24 +15,15 @@ from app.repositories import wild as repo
 router = APIRouter(prefix="/api", tags=["wild"])
 MinElo = Annotated[int | None, Query(ge=0, le=3500, description="Only games where the stronger player is rated at least this")]
 Db = Annotated[Session, Depends(get_session)]
-Label = Annotated[str, StringConstraints(strip_whitespace=True, max_length=60)]
-
-
-class WatchIn(BaseModel):
-    fen: str
-    label: Label = ""
-
-
-class WatchPatch(BaseModel):
-    label: Label
 
 
 class WatchOut(BaseModel):
     id: int
+    tag_id: int
+    name: str  # the branch tag's name
     opening_id: int
     opening_name: str
     color: str
-    label: str
     key: str  # the position (FEN without move counters)
     path: list[str]  # SAN moves of the shortest stored route to it
     games: int  # stored games reaching it
@@ -58,6 +49,7 @@ class WildGameOut(BaseModel):
     result: str
     plies: int
     imported_at: datetime
+    viewed_at: datetime | None  # first opened on the board; None = not seen yet
 
 
 class WildGameRow(WildGameOut):
@@ -71,6 +63,11 @@ class WildGamesOut(BaseModel):
 
 class WildGameFull(WildGameOut):
     moves: list[str]  # UCI
+
+
+class ViewedOut(BaseModel):
+    id: int
+    viewed_at: datetime
 
 
 class SavedOut(BaseModel):
@@ -106,14 +103,16 @@ def opening_watches(opening_id: int, s: Db, min_elo: MinElo = None):
     return repo.opening_watches(s, opening_id, min_elo)
 
 
-@router.post("/openings/{opening_id}/watches", response_model=WatchOut, status_code=201)
-def create_watch(opening_id: int, body: WatchIn, s: Db):
-    return repo.create_watch(s, opening_id, body.fen, body.label)
+@router.put("/tags/{tag_id}/watch", response_model=WatchOut, status_code=201)
+def watch_tag(tag_id: int, s: Db):
+    """Watch a branch tag in tournament games (shown in the Wild tab under the tag's name)."""
+    return repo.watch_tag(s, tag_id)
 
 
-@router.patch("/watches/{watch_id}", response_model=WatchOut)
-def update_watch(watch_id: int, body: WatchPatch, s: Db):
-    return repo.update_watch(s, watch_id, body.label)
+@router.delete("/tags/{tag_id}/watch", status_code=204)
+def unwatch_tag(tag_id: int, s: Db):
+    repo.unwatch_tag(s, tag_id)
+    return Response(status_code=204)
 
 
 @router.delete("/watches/{watch_id}", status_code=204)
@@ -131,13 +130,19 @@ def wild_games(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     min_elo: MinElo = None,
+    unviewed: bool = False,
 ):
-    return repo.list_games(s, repertoire_id, watch_id, q, limit, offset, min_elo)
+    return repo.list_games(s, repertoire_id, watch_id, q, limit, offset, min_elo, unviewed)
 
 
 @router.get("/wild-games/{game_id}", response_model=WildGameFull)
 def wild_game(game_id: int, s: Db):
     return repo.get_game(s, game_id)
+
+
+@router.post("/wild-games/{game_id}/viewed", response_model=ViewedOut)
+def mark_viewed(game_id: int, s: Db):
+    return repo.mark_viewed(s, game_id)
 
 
 @router.post("/wild-games/{game_id}/save", response_model=SavedOut)

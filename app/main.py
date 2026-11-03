@@ -25,7 +25,6 @@ from app.db.session import DatabaseNotConfigured, database_status
 from app.repositories.repertoire import Conflict, NotFound
 from app.repositories.tags import InvalidTag
 from app.repositories.training import InvalidReview
-from app.repositories.wild import InvalidWatch
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
@@ -90,7 +89,6 @@ def create_app() -> FastAPI:
     app.add_exception_handler(InvalidPosition, _error(422))
     app.add_exception_handler(InvalidReview, _error(422))
     app.add_exception_handler(InvalidTag, _error(422))
-    app.add_exception_handler(InvalidWatch, _error(422))
     app.add_exception_handler(DatabaseNotConfigured, _error(503))
 
     @app.middleware("http")

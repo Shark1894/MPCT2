@@ -238,17 +238,18 @@ class PositionEval(Base):
 
 
 class WildWatch(Base):
-    """A repertoire position you want to see in tournament games ("in the wild").
-    `hash` is the position's Polyglot hash (app.core.wild.key_hash), as stored per game."""
+    """A branch tag you want to see in tournament games ("in the wild"); its name is the tag's.
+    opening_id and position_id copy the tag's; `hash` is the position's Polyglot hash
+    (app.core.wild.key_hash), as stored per game. Removing the tag removes the watch."""
 
     __tablename__ = "wild_watches"
     __table_args__ = (UniqueConstraint("opening_id", "position_id", name="uq_wild_watches_position"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    tag_id: Mapped[int] = mapped_column(ForeignKey("opening_tags.id", ondelete="CASCADE"), unique=True)
     opening_id: Mapped[int] = mapped_column(ForeignKey("openings.id", ondelete="CASCADE"), index=True)
     position_id: Mapped[int] = mapped_column(ForeignKey("positions.id"))
     hash: Mapped[int] = mapped_column(BigInteger, index=True)
-    label: Mapped[str] = mapped_column(String(60), server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -280,6 +281,7 @@ class WildGame(Base):
     moves: Mapped[str] = mapped_column(Text)
     hashes: Mapped[list[int]] = mapped_column(ARRAY(BigInteger))
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # first opened on the board
 
 
 class WildSource(Base):

@@ -176,7 +176,7 @@
               <button id="tag-add" type="button" class="small">Tag this position</button>
               <button id="tag-rename" type="button" class="small" hidden>Rename tag</button>
               <button id="tag-delete" type="button" class="small danger-outline" hidden>Remove tag</button>
-              <button id="watch-toggle" type="button" class="small" title="Show tournament games that reach this position (Wild tab)">Watch in the wild</button>
+              <button id="watch-toggle" type="button" class="small" hidden>Watch in the wild</button>
             </div>
           </div>
         </div>
@@ -382,15 +382,19 @@
         <h2 id="wild-watch-title" class="dash-h">Watching <span id="wild-rep" class="meta"></span></h2>
         <ul id="wild-watches" class="wild-watches"></ul>
         <p id="wild-watches-empty" class="meta" hidden>
-          Not watching any positions yet. On the Board, go to a position in one of your openings and tap
-          <strong>Watch in the wild</strong> (under Branches).
+          Not watching any branches yet. On the Board, go to a tagged position (or tag one under Branches) and tap
+          <strong>Watch in the wild</strong> next to the tag’s buttons.
         </p>
       </section>
 
       <section class="wild-games-box" aria-labelledby="wild-games-title">
         <div class="games-head">
           <h2 id="wild-games-title" class="dash-h">Spotted in tournament games</h2>
-          <select id="wild-filter" aria-label="Watched position"></select>
+          <select id="wild-filter" aria-label="Watched branch"></select>
+          <select id="wild-seen" aria-label="Viewed or not">
+            <option value="">All games</option>
+            <option value="new">Not viewed</option>
+          </select>
           <select id="wild-min-elo" aria-label="Strongest player rated at least" title="Only games where at least one player is rated this or higher">
             <option value="">Any rating</option>
             <option value="2000">A player 2000+</option>

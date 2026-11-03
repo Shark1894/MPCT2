@@ -2497,3 +2497,35 @@ button.star[aria-pressed='true'] {
   flex: 0 0 auto;
   width: auto;
 }
+
+.wild-seen-tag {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  vertical-align: 2px;
+}
+
+.wild-seen-tag.new {
+  background: var(--copper);
+  color: #fff;
+}
+
+.wild-seen-tag.seen {
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.wild-row.viewed .game-players {
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+#wild-seen {
+  flex: 0 0 auto;
+  width: auto;
+}

@@ -61,14 +61,18 @@ function importPgn(name, pgn) {
   await page.reload();
   await settle(page, 900);
 
-  // ---- watch from the board -------------------------------------------------------------
-  check((await page.isDisabled('#watch-toggle')), 'Watch disabled at the start position');
+  // ---- watch from the board: only at a tagged position ------------------------------------
   await page.evaluate(() => {
     for (const san of ['d4', 'd5', 'c4', 'c6', 'Nf3', 'Bf5']) mpct.game.playSan(san);
     mpct.render();
   });
   await settle(page, 400);
-  check((await text(page, '#watch-toggle')) === 'Watch in the wild' && !(await page.isDisabled('#watch-toggle')), 'Watch button offered');
+  check(await page.isHidden('#watch-toggle'), 'no Watch button at an untagged position');
+  await page.click('#tag-add');
+  await page.fill('dialog input[name="name"]', 'Slav Bf5');
+  await page.click('dialog button[type="submit"]');
+  await settle(page, 800);
+  check(!(await page.isHidden('#watch-toggle')) && (await text(page, '#watch-toggle')) === 'Watch in the wild', 'Watch button appears with the tag');
   await page.click('#watch-toggle');
   await settle(page, 700);
   check((await text(page, '#watch-toggle')) === 'In the wild: 2 games', 'watched: 2 games already reach it (one by transposition)');
@@ -79,11 +83,13 @@ function importPgn(name, pgn) {
   await page.waitForSelector('#wild-games .wild-row', { timeout: 5000 });
   check(/turned off/.test(await text(page, '#wild-status-text')) && (await page.isDisabled('#wild-check')), 'status says fetching is off here');
   const watches = await page.$$eval('#wild-watches .wild-watch', (els) => els.map((e) => e.textContent));
-  check(watches.length === 1 && /3\.\.\.Bf5/.test(watches[0]) && /2 games/.test(watches[0]), 'watch listed with its game count');
+  check(watches.length === 1 && /Slav Bf5/.test(watches[0]) && /2 games/.test(watches[0]), 'watch listed under the tag name with its game count');
   const rows = await page.$$eval('#wild-games .wild-row', (els) => els.map((e) => e.textContent));
   check(rows.length === 2, 'two spotted games (the e4 game isn’t listed)');
   check(/Giri, Anish \(2750\) – So, Wesley \(2740\)/.test(rows[0]) && /Carlsen/.test(rows[1]), 'newest first, with ratings');
-  check(/Reached 3\.\.\.Bf5 at move 3/.test(rows[0]) && /Tata Steel, round 4/.test(rows[0]) && /½–½/.test(rows[0]), 'match, event and result shown');
+  check(/Reached Slav Bf5 at move 3/.test(rows[0]) && /Tata Steel, round 4/.test(rows[0]) && /½–½/.test(rows[0]), 'match uses the tag name; event and result shown');
+  const fresh = await page.$$eval('#wild-games .wild-seen-tag', (els) => els.map((e) => e.textContent));
+  check(fresh.length === 2 && fresh.every((m) => m === 'New'), 'both games marked New');
   if (SHOTS) await page.locator('#wild-view').screenshot({ path: `${SHOTS}/wild-desktop.png` });
 
   await page.fill('#wild-search', 'carlsen');
@@ -122,16 +128,29 @@ function importPgn(name, pgn) {
   const at = await page.evaluate(() => ({ ply: mpct.game.ply, total: mpct.game.moves.length, view: !document.querySelector('main.layout').hidden }));
   check(at.view && at.ply === 6 && at.total === 10, `opened on the board at the watched position (ply ${at.ply} of ${at.total})`);
   check((await text(page, '#watch-toggle')) === 'In the wild: 2 games', 'board shows it as watched (transposed move order)');
+  await page.click('#view-wild');
+  await page.waitForSelector('#wild-games .wild-row');
+  await settle(page, 400);
+  const marks = await page.$$eval('#wild-games .wild-seen-tag', (els) => els.map((e) => e.textContent));
+  check(/^Viewed \d+ \w+$/.test(marks[0]) && marks[1] === 'New', 'opened game marked Viewed, the other still New: ' + marks);
+  await page.selectOption('#wild-seen', 'new');
+  await settle(page, 600);
+  const unseen = await page.$$eval('#wild-games .wild-row', (els) => els.map((e) => e.textContent));
+  check(unseen.length === 1 && /Carlsen/.test(unseen[0]), 'Not viewed filter');
+  await page.selectOption('#wild-seen', '');
+  await settle(page, 500);
 
   // ---- rename, new-games badge, unwatch -----------------------------------------------------
   await page.click('#view-wild');
   await page.waitForSelector('#wild-watches .wild-watch');
   await page.click('#wild-watches .wild-watch button:has-text("Rename")');
-  await page.fill('dialog input[name="label"]', 'Slav with Bf5');
+  await page.fill('dialog input[name="name"]', 'Slav with Bf5');
   await page.click('dialog button[type="submit"]');
   await settle(page, 600);
   check(/Slav with Bf5/.test(await text(page, '#wild-watches')), 'watch renamed');
   check(/Reached Slav with Bf5 at move 3/.test(await text(page, '#wild-games')), 'games use the new name');
+  const tags = await page.evaluate(() => fetch(`/api/openings/${mpct.repertoire.openingId}/tags`).then((r) => r.json()));
+  check(tags[0].name === 'Slav with Bf5', 'Rename renamed the branch tag');
 
   await page.click('#view-board');
   await page.evaluate(() => localStorage.setItem('mpct.wildSeen', JSON.stringify(new Date().toISOString()))); // seen everything so far
@@ -158,6 +177,8 @@ function importPgn(name, pgn) {
   await page.click('dialog button[type="submit"]');
   await settle(page, 700);
   check(!(await page.isHidden('#wild-watches-empty')) && (await page.$$('#wild-games .wild-row')).length === 0, 'unwatched: lists empty');
+  const left = await page.evaluate(() => fetch(`/api/openings/${mpct.repertoire.openingId}/tags`).then((r) => r.json()));
+  check(left.length === 1, 'the tag stays after unwatching');
 
   check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();

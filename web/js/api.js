@@ -94,15 +94,23 @@ export const api = {
   watches: (repId, minElo = null) => request('GET', `/repertoires/${repId}/watches`, { params: minElo ? { min_elo: minElo } : {} }),
   openingWatches: (openingId, minElo = null) =>
     request('GET', `/openings/${openingId}/watches`, { params: minElo ? { min_elo: minElo } : {} }),
-  createWatch: (openingId, fen, label = '') => request('POST', `/openings/${openingId}/watches`, { body: { fen, label } }),
-  updateWatch: (id, label) => request('PATCH', `/watches/${id}`, { body: { label } }),
+  watchTag: (tagId) => request('PUT', `/tags/${tagId}/watch`),
+  unwatchTag: (tagId) => request('DELETE', `/tags/${tagId}/watch`),
   deleteWatch: (id) => request('DELETE', `/watches/${id}`),
-  wildGames: (repId, { watchId = null, q = '', limit = 50, offset = 0, minElo = null } = {}) =>
+  wildGames: (repId, { watchId = null, q = '', limit = 50, offset = 0, minElo = null, unviewed = false } = {}) =>
     request('GET', `/repertoires/${repId}/wild-games`, {
-      params: { limit, offset, ...(watchId ? { watch_id: watchId } : {}), ...(q ? { q } : {}), ...(minElo ? { min_elo: minElo } : {}) },
+      params: {
+        limit,
+        offset,
+        ...(watchId ? { watch_id: watchId } : {}),
+        ...(q ? { q } : {}),
+        ...(minElo ? { min_elo: minElo } : {}),
+        ...(unviewed ? { unviewed: true } : {}),
+      },
     }),
   wildGame: (id) => request('GET', `/wild-games/${id}`),
   saveWildGame: (id) => request('POST', `/wild-games/${id}/save`),
+  markWildViewed: (id) => request('POST', `/wild-games/${id}/viewed`),
   wildStatus: (repId = null, since = null, minElo = null) =>
     request('GET', '/wild/status', {
       params: { ...(repId ? { repertoire_id: repId } : {}), ...(since ? { since } : {}), ...(minElo ? { min_elo: minElo } : {}) },

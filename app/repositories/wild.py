@@ -1,7 +1,7 @@
-"""Repertoire in the wild: watched positions, the store of tournament games, and matching.
+"""Repertoire in the wild: watched branch tags, the store of tournament games, and matching.
 
 Games are stored once for everyone (they're shared across repertoires); a watch belongs
-to an opening. Matching is an indexed lookup of the watch's position hash in each game's
+to a branch tag and shows under its name. Matching is an indexed lookup of the watch's position hash in each game's
 array of position hashes, so a new watch immediately finds games already stored.
 """
 
@@ -11,19 +11,14 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.core.positions import START_KEY, key_from_fen
 from app.core.wild import WildGame as Parsed
 from app.core.wild import key_hash
-from app.db.models import Game, Line, Move, Opening, Position, WildGame, WildSource, WildWatch
+from app.db.models import Game, Opening, OpeningTag, Position, WildGame, WildSource, WildWatch
 from app.repositories.games import create_game
 from app.repositories.repertoire import Conflict, NotFound, get_opening, get_repertoire
-from app.repositories.tags import _path_to
+from app.repositories.tags import _path_to, get_tag
 
 BATCH = 500
-
-
-class InvalidWatch(ValueError):
-    pass
 
 
 # ---- watches -------------------------------------------------------------------------
@@ -46,14 +41,15 @@ def _watch_counts(s: Session, watches: list[WildWatch], min_elo: int | None = No
     return out
 
 
-def _watch_dict(s: Session, w: WildWatch, opening: Opening, key: str, counts) -> dict:
+def _watch_dict(s: Session, w: WildWatch, tag: OpeningTag, opening: Opening, key: str, counts) -> dict:
     n, latest = counts.get(w.id, (0, None))
     return {
         "id": w.id,
+        "tag_id": tag.id,
+        "name": tag.name,
         "opening_id": opening.id,
         "opening_name": opening.name,
         "color": opening.color,
-        "label": w.label,
         "key": key,
         "path": _path_to(s, opening.id, w.position_id),
         "games": n,
@@ -61,17 +57,31 @@ def _watch_dict(s: Session, w: WildWatch, opening: Opening, key: str, counts) ->
     }
 
 
-def list_watches(s: Session, repertoire_id: int, min_elo: int | None = None) -> list[dict]:
-    get_repertoire(s, repertoire_id)
-    rows = s.execute(
-        select(WildWatch, Opening, Position.key)
+def _watch_rows(s: Session, *where):
+    return s.execute(
+        select(WildWatch, OpeningTag, Opening, Position.key)
+        .join(OpeningTag, OpeningTag.id == WildWatch.tag_id)
         .join(Opening, Opening.id == WildWatch.opening_id)
         .join(Position, Position.id == WildWatch.position_id)
-        .where(Opening.repertoire_id == repertoire_id)
+        .where(*where)
     ).all()
-    counts = _watch_counts(s, [w for w, _, _ in rows], min_elo)
-    out = [_watch_dict(s, w, o, key, counts) for w, o, key in rows]
-    return sorted(out, key=lambda w: (w["color"] != "white", w["opening_name"].lower(), len(w["path"]), w["id"]))
+
+
+def _dicts(s: Session, rows, min_elo: int | None) -> list[dict]:
+    counts = _watch_counts(s, [w for w, _, _, _ in rows], min_elo)
+    return [_watch_dict(s, w, tag, o, key, counts) for w, tag, o, key in rows]
+
+
+def list_watches(s: Session, repertoire_id: int, min_elo: int | None = None) -> list[dict]:
+    get_repertoire(s, repertoire_id)
+    out = _dicts(s, _watch_rows(s, Opening.repertoire_id == repertoire_id), min_elo)
+    return sorted(out, key=lambda w: (w["color"] != "white", w["opening_name"].lower(), len(w["path"]), w["name"].lower()))
+
+
+def opening_watches(s: Session, opening_id: int, min_elo: int | None = None) -> list[dict]:
+    """Watches of one opening (for the board's Branches section)."""
+    get_opening(s, opening_id)
+    return _dicts(s, _watch_rows(s, WildWatch.opening_id == opening_id), min_elo)
 
 
 def _get_watch(s: Session, watch_id: int) -> WildWatch:
@@ -81,53 +91,30 @@ def _get_watch(s: Session, watch_id: int) -> WildWatch:
     return w
 
 
-def _one(s: Session, w: WildWatch) -> dict:
-    opening = s.get(Opening, w.opening_id)
-    key = s.scalar(select(Position.key).where(Position.id == w.position_id))
-    return _watch_dict(s, w, opening, key, _watch_counts(s, [w]))
-
-
-def create_watch(s: Session, opening_id: int, fen: str, label: str = "") -> dict:
-    get_opening(s, opening_id)
-    key = key_from_fen(fen)
-    if key == START_KEY:
-        raise InvalidWatch("Every game starts here: watch a position after at least one move")
-    position_id = s.scalar(select(Position.id).where(Position.key == key))
-    reached = position_id is not None and s.scalar(
-        select(func.count(Move.id)).join(Line).where(Line.opening_id == opening_id, Move.position_after_id == position_id)
-    )
-    if not reached:
-        raise InvalidWatch("No line in this opening passes through this position yet: add a line first")
-    if s.scalar(select(WildWatch.id).where(WildWatch.opening_id == opening_id, WildWatch.position_id == position_id)):
-        raise Conflict("You're already watching this position")
-    w = WildWatch(opening_id=opening_id, position_id=position_id, hash=key_hash(key), label=label)
+def watch_tag(s: Session, tag_id: int) -> dict:
+    """Watch a branch tag in tournament games."""
+    tag = get_tag(s, tag_id)
+    if s.scalar(select(WildWatch.id).where(WildWatch.tag_id == tag_id)):
+        raise Conflict(f"You're already watching “{tag.name}”")
+    key = s.scalar(select(Position.key).where(Position.id == tag.position_id))
+    w = WildWatch(tag_id=tag.id, opening_id=tag.opening_id, position_id=tag.position_id, hash=key_hash(key))
     s.add(w)
     s.flush()
-    return _one(s, w)
+    return _dicts(s, _watch_rows(s, WildWatch.id == w.id), None)[0]
 
 
-def update_watch(s: Session, watch_id: int, label: str) -> dict:
-    w = _get_watch(s, watch_id)
-    w.label = label
+def unwatch_tag(s: Session, tag_id: int) -> None:
+    get_tag(s, tag_id)
+    w = s.scalar(select(WildWatch).where(WildWatch.tag_id == tag_id))
+    if w is None:
+        raise NotFound("This tag isn't being watched")
+    s.delete(w)
     s.flush()
-    return _one(s, w)
 
 
 def delete_watch(s: Session, watch_id: int) -> None:
     s.delete(_get_watch(s, watch_id))
     s.flush()
-
-
-def opening_watches(s: Session, opening_id: int, min_elo: int | None = None) -> list[dict]:
-    """Watches of one opening (for the board's repertoire panel)."""
-    opening = get_opening(s, opening_id)
-    rows = s.execute(
-        select(WildWatch, Position.key)
-        .join(Position, Position.id == WildWatch.position_id)
-        .where(WildWatch.opening_id == opening_id)
-    ).all()
-    counts = _watch_counts(s, [w for w, _ in rows], min_elo)
-    return [_watch_dict(s, w, opening, key, counts) for w, key in rows]
 
 
 # ---- games -----------------------------------------------------------------------------
@@ -148,6 +135,7 @@ def _game_row(g: WildGame) -> dict:
         "result": g.result,
         "plies": g.plies,
         "imported_at": g.imported_at,
+        "viewed_at": g.viewed_at,
     }
 
 
@@ -159,6 +147,7 @@ def list_games(
     limit: int = 50,
     offset: int = 0,
     min_elo: int | None = None,
+    unviewed: bool = False,
 ) -> dict:
     """Games reaching any watched position of the repertoire (or one watch), newest first."""
     get_repertoire(s, repertoire_id)
@@ -177,6 +166,8 @@ def list_games(
     if not matches:
         return {"total": 0, "games": []}
     gq = select(WildGame).where(WildGame.id.in_(matches))
+    if unviewed:
+        gq = gq.where(WildGame.viewed_at.is_(None))
     if q and q.strip():
         like = f"%{q.strip()}%"
         gq = gq.where(or_(WildGame.white.ilike(like), WildGame.black.ilike(like), WildGame.event.ilike(like)))
@@ -200,6 +191,16 @@ def _get_game(s: Session, game_id: int) -> WildGame:
 def get_game(s: Session, game_id: int) -> dict:
     g = _get_game(s, game_id)
     return _game_row(g) | {"moves": g.moves.split()}
+
+
+def mark_viewed(s: Session, game_id: int) -> dict:
+    """Record that the game was opened (the first time counts)."""
+    g = _get_game(s, game_id)
+    if g.viewed_at is None:
+        g.viewed_at = func.now()
+        s.flush()
+        s.refresh(g)
+    return {"id": g.id, "viewed_at": g.viewed_at}
 
 
 def save_to_games(s: Session, game_id: int) -> dict:

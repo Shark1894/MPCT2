@@ -225,14 +225,16 @@ finished line (the server checks each move against the line and updates the sche
 
 See when strong players reach your positions. Tournament games are fetched in the background from
 [Lichess broadcasts](https://lichess.org/broadcast) and [The Week in Chess](https://theweekinchess.com) (TWIC), and
-any game that reaches a position you watch shows up in the **Wild** tab.
+any game that reaches a branch you watch shows up in the **Wild** tab.
 
-- **Watch a position:** on the Board, go to a position in one of your openings (a line has to pass through it) and
-  tap **Watch in the wild** under Branches. The button then shows how many games reach it; tap again to stop.
-  Transpositions count: the position is matched, not the move order.
-- **Wild tab:** the positions you watch (with game counts, **Games**, **Show**, **Rename**, **Unwatch**) and the games
-  that reached them, newest first: players and ratings, event and round, result, and the move where your position
-  came up. Filter by watched position, by rating (**A player 2000+** … **2700+**: at least one player rated that
+- **Watch a branch:** only branch tags can be watched. On the Board, go to a tagged position (or tag one under
+  Branches) and tap **Watch in the wild** next to the tag's buttons. The button then shows how many games reach it;
+  tap again to stop (the tag stays). Transpositions count: the position is matched, not the move order. Removing the
+  tag removes the watch.
+- **Wild tab:** the branches you watch, under their tag names (with game counts, **Games**, **Show**, **Rename** (renames
+  the tag), **Unwatch**), and the games that reached them, newest first: players and ratings, event and round, result,
+  and the branch and move where it came up. Each game is marked **New** until you open it, then **Viewed** with the
+  date; **Not viewed** shows only the games you haven't opened. Filter by watched position, by rating (**A player 2000+** … **2700+**: at least one player rated that
   or higher; remembered, and the counts, the board's Watch button and the new-games count follow it), or search
   players and event. **Open** puts the game on the board at that
   position (the rest of the game follows, so you can step through it or review it with the engine); **Save to Games**
@@ -256,8 +258,8 @@ docker cp twic1669g.zip mpct:/tmp/
 docker compose exec mpct python -m app.tools.import_wild_pgn /tmp/twic1669g.zip
 ```
 
-API: `GET /api/repertoires/{id}/watches`, `GET/POST /api/openings/{id}/watches` (`{"fen", "label"}`),
-`PATCH/DELETE /api/watches/{id}`, `GET /api/repertoires/{id}/wild-games?watch_id=&q=&min_elo=&limit=&offset=` (`min_elo` also on the watches and status calls),
+API: `GET /api/repertoires/{id}/watches`, `GET /api/openings/{id}/watches`, `PUT/DELETE /api/tags/{id}/watch`,
+`DELETE /api/watches/{id}`, `POST /api/wild-games/{id}/viewed`, `GET /api/repertoires/{id}/wild-games?watch_id=&q=&min_elo=&unviewed=&limit=&offset=` (`min_elo` also on the watches and status calls),
 `GET /api/wild-games/{id}` (with moves), `POST /api/wild-games/{id}/save`, `GET /api/wild/status?repertoire_id=&since=`,
 `POST /api/wild/refresh`.
 

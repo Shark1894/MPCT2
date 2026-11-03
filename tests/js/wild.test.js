@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ago, moveNumber, playerText, resultText, statusText, watchName } from '../../web/js/wild.js';
+import { ago, moveNumber, playerText, resultText, statusText, viewedText, watchName } from '../../web/js/wild.js';
 
 const NOW = Date.parse('2026-11-03T18:00:00Z');
 
@@ -13,10 +13,13 @@ test('players, results and move numbers', () => {
   assert.equal(moveNumber(5), 3);
 });
 
-test('a watch is named by its label or its last move', () => {
-  assert.equal(watchName({ label: 'Slav Bf5', path: ['d4'] }), 'Slav Bf5');
-  assert.equal(watchName({ label: '', path: ['d4', 'd5', 'c4', 'c6', 'Nf3', 'Bf5'] }), '3...Bf5');
-  assert.equal(watchName({ label: '', path: ['d4', 'd5', 'c4'] }), '2.c4');
+test('a watch is named after its branch tag', () => {
+  assert.equal(watchName({ name: 'Slav Bf5', path: ['d4'] }), 'Slav Bf5');
+});
+
+test('viewed marker', () => {
+  assert.equal(viewedText(null), 'New');
+  assert.equal(viewedText('2026-11-03T18:00:00Z'), 'Viewed 3 Nov');
 });
 
 test('how long ago', () => {
