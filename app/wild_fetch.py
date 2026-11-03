@@ -39,7 +39,7 @@ LICHESS = "https://lichess.org"
 TWIC = "https://theweekinchess.com"
 USER_AGENT = f"MPCT/{__version__} (personal chess training app)"
 PAUSE_S = 1.5
-LICHESS_MAX_PAGES = 20  # /api/broadcast/top allows up to page 20
+LICHESS_MAX_PAGES = 5  # /api/broadcast/top answers HTTP 400 past page 5 (seen on the server, Nov 2026)
 # Anchor for estimating the current TWIC issue if the index page can't be read.
 TWIC_ANCHOR = (1660, date(2026, 8, 31))
 
@@ -109,7 +109,13 @@ def lichess_tours(since: datetime, get=http_get) -> list[tuple[str, str, bool]]:
     tours: dict[str, tuple[str, str, bool]] = {}
     page = 1
     while page and page <= LICHESS_MAX_PAGES:
-        data = json.loads(get(f"{LICHESS}/api/broadcast/top?page={page}", "application/json"))
+        try:
+            data = json.loads(get(f"{LICHESS}/api/broadcast/top?page={page}", "application/json"))
+        except Exception as exc:
+            if page == 1:
+                raise  # nothing to go on
+            log.info("Lichess broadcast list stopped at page %s: %s", page, exc)
+            break  # keep the tours found on earlier pages
         if page == 1:
             for entry in data.get("active") or []:
                 t = entry.get("tour") or {}

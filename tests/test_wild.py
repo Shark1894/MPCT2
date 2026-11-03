@@ -276,6 +276,39 @@ def test_run_survives_network_errors(client, db, rep, quick):
     assert wild_fetch.state["running"] is False
 
 
+def test_lichess_list_keeps_earlier_pages_when_a_later_page_fails(quick):
+    since = datetime.now(timezone.utc) - timedelta(days=92)
+    recent = int((datetime.now(timezone.utc) - timedelta(days=3)).timestamp() * 1000)
+    calls = []
+
+    def get(url, accept="*/*"):
+        calls.append(url)
+        page = int(url.rsplit("=", 1)[1])
+        if page == 3:
+            raise wild_fetch.HttpError(400, url)
+        return json.dumps({
+            "active": [{"tour": {"id": "live0001", "name": "Live"}}] if page == 1 else [],
+            "past": {"currentPageResults": [{"tour": {"id": f"past000{page}", "name": f"P{page}", "dates": [recent]}}], "nextPage": page + 1},
+        }).encode()
+
+    tours = wild_fetch.lichess_tours(since, get)
+    assert {t[0] for t in tours} == {"live0001", "past0001", "past0002"}
+    assert len(calls) == 3
+
+
+def test_lichess_list_stops_at_the_page_limit(quick):
+    recent = int((datetime.now(timezone.utc) - timedelta(days=3)).timestamp() * 1000)
+    calls = []
+
+    def get(url, accept="*/*"):
+        calls.append(url)
+        page = int(url.rsplit("=", 1)[1])
+        return json.dumps({"past": {"currentPageResults": [{"tour": {"id": f"p{page}", "name": "x", "dates": [recent]}}], "nextPage": page + 1}}).encode()
+
+    tours = wild_fetch.lichess_tours(datetime.now(timezone.utc) - timedelta(days=92), get)
+    assert len(calls) == wild_fetch.LICHESS_MAX_PAGES == 5 and len(tours) == 5
+
+
 def test_twic_estimate():
     assert wild_fetch.twic_estimate(date(2026, 8, 31)) == 1660
     assert wild_fetch.twic_estimate(date(2026, 11, 2)) == 1669
