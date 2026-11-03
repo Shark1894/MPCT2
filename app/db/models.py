@@ -9,6 +9,7 @@ move_attempts (every move tried during it, including the wrong move actually pla
 from datetime import date, datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
@@ -21,7 +22,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 NAMING = {
@@ -234,3 +235,60 @@ class PositionEval(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class WildWatch(Base):
+    """A repertoire position you want to see in tournament games ("in the wild").
+    `hash` is the position's Polyglot hash (app.core.wild.key_hash), as stored per game."""
+
+    __tablename__ = "wild_watches"
+    __table_args__ = (UniqueConstraint("opening_id", "position_id", name="uq_wild_watches_position"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    opening_id: Mapped[int] = mapped_column(ForeignKey("openings.id", ondelete="CASCADE"), index=True)
+    position_id: Mapped[int] = mapped_column(ForeignKey("positions.id"))
+    hash: Mapped[int] = mapped_column(BigInteger, index=True)
+    label: Mapped[str] = mapped_column(String(60), server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WildGame(Base):
+    """A tournament game fetched from Lichess broadcasts or The Week in Chess.
+
+    `moves` is the whole game in UCI (space-separated); `hashes` holds the Polyglot hash of
+    the position after each of the first moves (hashes[1] = after White's first move), so
+    `hashes @> ARRAY[h]` finds games reaching a position and array_position gives the ply.
+    """
+
+    __tablename__ = "wild_games"
+    __table_args__ = (Index("ix_wild_games_hashes", "hashes", postgresql_using="gin"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_key: Mapped[str] = mapped_column(String(40), unique=True)
+    source: Mapped[str] = mapped_column(String(10))  # "lichess" | "twic"
+    source_ref: Mapped[str] = mapped_column(String(60))  # e.g. "twic1669", "lichess:abcd1234"
+    white: Mapped[str] = mapped_column(String(100), server_default="")
+    black: Mapped[str] = mapped_column(String(100), server_default="")
+    white_elo: Mapped[int | None]
+    black_elo: Mapped[int | None]
+    event: Mapped[str] = mapped_column(String(200), server_default="")
+    site: Mapped[str] = mapped_column(String(200), server_default="")
+    round: Mapped[str] = mapped_column(String(20), server_default="")
+    played_on: Mapped[date | None] = mapped_column(Date, index=True)
+    result: Mapped[str] = mapped_column(String(7))
+    plies: Mapped[int]
+    moves: Mapped[str] = mapped_column(Text)
+    hashes: Mapped[list[int]] = mapped_column(ARRAY(BigInteger))
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class WildSource(Base):
+    """One fetched download: a TWIC issue ("twic:1669") or a Lichess broadcast ("lichess:<tour id>")."""
+
+    __tablename__ = "wild_sources"
+
+    key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    finished: Mapped[bool] = mapped_column(Boolean, server_default="false")  # no need to fetch again
+    games: Mapped[int] = mapped_column(server_default="0")
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+

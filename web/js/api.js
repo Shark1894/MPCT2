@@ -91,6 +91,21 @@ export const api = {
   evalsLookup: (fens, minMovetimeMs = 0) => request('POST', '/evals/lookup', { body: { fens, min_movetime_ms: minMovetimeMs } }),
   saveEvals: (evals) => request('POST', '/evals', { body: { evals } }),
 
+  watches: (repId) => request('GET', `/repertoires/${repId}/watches`),
+  openingWatches: (openingId) => request('GET', `/openings/${openingId}/watches`),
+  createWatch: (openingId, fen, label = '') => request('POST', `/openings/${openingId}/watches`, { body: { fen, label } }),
+  updateWatch: (id, label) => request('PATCH', `/watches/${id}`, { body: { label } }),
+  deleteWatch: (id) => request('DELETE', `/watches/${id}`),
+  wildGames: (repId, { watchId = null, q = '', limit = 50, offset = 0 } = {}) =>
+    request('GET', `/repertoires/${repId}/wild-games`, {
+      params: { limit, offset, ...(watchId ? { watch_id: watchId } : {}), ...(q ? { q } : {}) },
+    }),
+  wildGame: (id) => request('GET', `/wild-games/${id}`),
+  saveWildGame: (id) => request('POST', `/wild-games/${id}/save`),
+  wildStatus: (repId = null, since = null) =>
+    request('GET', '/wild/status', { params: { ...(repId ? { repertoire_id: repId } : {}), ...(since ? { since } : {}) } }),
+  wildRefresh: (repId = null) => request('POST', '/wild/refresh', { params: repId ? { repertoire_id: repId } : {} }),
+
   comment: (repId, fen) => request('GET', `/repertoires/${repId}/comment`, { params: { fen } }),
   saveComment: (repId, fen, comment) => request('PUT', `/repertoires/${repId}/comment`, { body: { fen, comment } }),
 };

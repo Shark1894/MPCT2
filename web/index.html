@@ -23,6 +23,7 @@
         <button id="view-board" type="button" class="view-tab" aria-pressed="true">Board</button>
         <button id="view-dashboard" type="button" class="view-tab" aria-pressed="false">Dashboard</button>
         <button id="view-games" type="button" class="view-tab" aria-pressed="false">Games</button>
+        <button id="view-wild" type="button" class="view-tab" aria-pressed="false" title="Your repertoire in tournament games">Wild<span id="wild-new" class="tab-count" hidden></span></button>
       </nav>
       <span id="mode-badge" class="mode-badge" hidden>Training</span>
     </header>
@@ -175,6 +176,7 @@
               <button id="tag-add" type="button" class="small">Tag this position</button>
               <button id="tag-rename" type="button" class="small" hidden>Rename tag</button>
               <button id="tag-delete" type="button" class="small danger-outline" hidden>Remove tag</button>
+              <button id="watch-toggle" type="button" class="small" title="Show tournament games that reach this position (Wild tab)">Watch in the wild</button>
             </div>
           </div>
         </div>
@@ -368,6 +370,34 @@
       <p id="games-count" class="meta"></p>
       <div id="games-list" class="games-list"></div>
       <p id="games-empty" class="dash-empty" hidden></p>
+    </main>
+    <main id="wild-view" class="games-view wild-view" hidden>
+      <section class="wild-status">
+        <p id="wild-status-text" class="meta" aria-live="polite"></p>
+        <button id="wild-check" type="button" class="small">Check now</button>
+      </section>
+      <p id="wild-errors" class="wild-errors" hidden></p>
+
+      <section class="dash-card" aria-labelledby="wild-watch-title">
+        <h2 id="wild-watch-title" class="dash-h">Watching <span id="wild-rep" class="meta"></span></h2>
+        <ul id="wild-watches" class="wild-watches"></ul>
+        <p id="wild-watches-empty" class="meta" hidden>
+          Not watching any positions yet. On the Board, go to a position in one of your openings and tap
+          <strong>Watch in the wild</strong> (under Branches).
+        </p>
+      </section>
+
+      <section class="wild-games-box" aria-labelledby="wild-games-title">
+        <div class="games-head">
+          <h2 id="wild-games-title" class="dash-h">Spotted in tournament games</h2>
+          <select id="wild-filter" aria-label="Watched position"></select>
+          <input id="wild-search" type="search" placeholder="Search players or event" aria-label="Search spotted games" />
+        </div>
+        <p id="wild-count" class="meta"></p>
+        <div id="wild-games" class="games-list"></div>
+        <p id="wild-empty" class="dash-empty" hidden></p>
+        <button id="wild-more" type="button" hidden>Show more</button>
+      </section>
     </main>
   </body>
 </html>

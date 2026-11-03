@@ -13,5 +13,11 @@ class Settings(BaseSettings):
     # and an orange top bar so a test instance is never mistaken for the live one.
     mpct_env: str = "live"
 
+    # Repertoire in the wild: fetch tournament games (Lichess broadcasts, The Week in Chess)
+    # in the background. WILD_FETCH=false turns it off.
+    wild_fetch: bool = True
+    wild_interval_hours: float = 6
+    wild_days: int = 92  # how far back the first fetch goes; older unmatched games are pruned
+
 
 settings = Settings()

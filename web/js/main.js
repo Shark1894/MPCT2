@@ -12,7 +12,9 @@ import { GamePanel, GamesView } from './games.js';
 import { PlayController } from './play.js';
 import { ReviewController } from './review.js';
 import { SavedEval } from './saved-eval.js';
-import { isModalOpen, store } from './ui.js';
+import { WildView } from './wild.js';
+import { isModalOpen, store, toast } from './ui.js';
+import { api } from './api.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -99,6 +101,7 @@ const trainer = new TrainingController({
     $('mode-badge').hidden = !active;
     $('view-dashboard').disabled = active;
     $('view-games').disabled = active;
+    $('view-wild').disabled = active;
     repertoire.setTraining(active);
   },
 });
@@ -120,6 +123,41 @@ const gamesView = new GamesView({
   onOpen: async (id) => {
     if (!(await play.confirmStop())) return;
     if (await gamePanel.open(id)) setView('board');
+  },
+});
+
+// ---- repertoire in the wild ------------------------------------------------------
+
+/** Put moves from the start on the board (asking first if that ends a game vs the engine or loses edits). */
+async function showMoves({ ucis = [], sans = [], ply = null }) {
+  if (!(await play.confirmStop())) return false;
+  if (!(await gamePanel.confirmLeave())) return false;
+  game.load(START_FEN);
+  for (const san of sans) if (!game.playSan(san)) break;
+  for (const uci of ucis) if (!game.play(uci.slice(0, 2), uci.slice(2, 4), uci[4])) break;
+  if (ply !== null) game.goTo(Math.min(ply, game.moves.length));
+  return true;
+}
+
+const wildView = new WildView({
+  repertoire,
+  onOpen: async (id, ply) => {
+    let g;
+    try {
+      g = await api.wildGame(id);
+    } catch (err) {
+      toast(err.message, 'error');
+      return;
+    }
+    if (!(await showMoves({ ucis: g.moves, ply }))) return;
+    setView('board');
+    render();
+    toast(`${g.white} – ${g.black}${g.event ? `, ${g.event}` : ''}: at the watched position (move ${Math.ceil(ply / 2)}).`);
+  },
+  onShowPosition: async (sans) => {
+    if (!(await showMoves({ sans }))) return;
+    setView('board');
+    render();
   },
 });
 
@@ -169,7 +207,7 @@ async function startTraining(opening, mode, lineId, tag, label) {
 
 // ---- views: Board | Dashboard | Games -----------------------------------------------
 
-const VIEWS = { board: 'main.layout', dashboard: '#dashboard', games: '#games-view' };
+const VIEWS = { board: 'main.layout', dashboard: '#dashboard', games: '#games-view', wild: '#wild-view' };
 let view = 'board';
 
 function setView(next) {
@@ -188,6 +226,8 @@ function setView(next) {
     if (view === 'dashboard') dashboard.refresh();
     if (view === 'games') gamesView.refresh();
   }
+  if (view === 'wild') wildView.refresh();
+  else wildView.hide();
   window.scrollTo(0, 0);
 }
 
@@ -385,7 +425,8 @@ repertoire.init().then(async () => {
   if (saved && saved !== 'board' && VIEWS[saved]) setView(saved);
   await review.restore();
   render();
+  wildView.checkNew();
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, repertoire, trainer, dashboard, setView, render, analysis, gamePanel, gamesView, play, review, savedEval };
+window.mpct = { game, board, repertoire, trainer, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval };

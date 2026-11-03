@@ -30,6 +30,7 @@ export class RepertoirePanel {
     this.onShowTag = onShowTag;
     this.training = false;
     this.tags = []; // branch tags of the selected opening
+    this.watches = []; // positions of the selected opening watched in tournament games
     this.tagId = null; // training/dashboard filter: null = all lines
 
     this.repertoires = [];
@@ -68,6 +69,7 @@ export class RepertoirePanel {
       tagFilterBox: $('train-tag-box'),
       branchPath: $('branch-path'),
       tagAdd: $('tag-add'),
+      watchToggle: $('watch-toggle'),
       tagRename: $('tag-rename'),
       tagDelete: $('tag-delete'),
     };
@@ -96,6 +98,7 @@ export class RepertoirePanel {
       if (tag) this.onShowTag?.(tag); // picking a branch on the board view also shows its position
     });
     e.tagAdd.addEventListener('click', () => this.addTag());
+    e.watchToggle.addEventListener('click', () => this.toggleWatch());
     e.tagRename.addEventListener('click', () => this.renameTag());
     e.tagDelete.addEventListener('click', () => this.deleteTag());
 
@@ -410,13 +413,16 @@ export class RepertoirePanel {
     const openingId = this.openingId;
     if (!openingId) {
       this.tags = [];
+      this.watches = [];
     } else {
       try {
-        const tags = await api.tags(openingId);
+        const [tags, watches] = await Promise.all([api.tags(openingId), api.openingWatches(openingId).catch(() => [])]);
         if (openingId !== this.openingId) return; // opening changed meanwhile
         this.tags = tags;
+        this.watches = watches;
       } catch {
         this.tags = [];
+        this.watches = [];
       }
     }
     if (!this.currentTag()) this.tagId = null;
@@ -492,6 +498,44 @@ export class RepertoirePanel {
     this.el.tagAdd.hidden = Boolean(here);
     this.el.tagAdd.disabled = !this.openingId || this.game.ply === 0;
     this.el.tagRename.hidden = this.el.tagDelete.hidden = !here;
+
+    const watch = this._watchHere();
+    const wb = this.el.watchToggle;
+    wb.disabled = !this.openingId || this.game.ply === 0;
+    wb.setAttribute('aria-pressed', String(Boolean(watch)));
+    wb.textContent = watch ? `In the wild: ${watch.games} game${watch.games === 1 ? '' : 's'}` : 'Watch in the wild';
+    wb.title = watch
+      ? 'Watched: tournament games reaching this position are listed in the Wild tab. Tap to stop watching.'
+      : 'Show tournament games that reach this position (Wild tab)';
+  }
+
+  _watchHere() {
+    const key = this.game.fen().split(' ').slice(0, 4).join(' ');
+    return this.game.ply > 0 ? (this.watches.find((w) => w.key === key) ?? null) : null;
+  }
+
+  async toggleWatch() {
+    const o = this._opening();
+    if (!o) return;
+    const watch = this._watchHere();
+    try {
+      if (watch) {
+        const ok = await confirmDialog('Stop watching this position?', 'Its games disappear from the Wild tab.', 'Unwatch');
+        if (!ok) return;
+        await api.deleteWatch(watch.id);
+        toast('No longer watching this position');
+      } else {
+        const w = await api.createWatch(o.id, this.game.fen());
+        toast(
+          w.games
+            ? `Watching: ${w.games} tournament game${w.games === 1 ? '' : 's'} already reach it. See the Wild tab.`
+            : 'Watching. Tournament games that reach it will show in the Wild tab.',
+        );
+      }
+      await this.loadTags();
+    } catch (err) {
+      this._fail(err);
+    }
   }
 
   async addTag() {

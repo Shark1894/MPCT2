@@ -2359,3 +2359,136 @@ button.star[aria-pressed='true'] {
     padding: 0;
   }
 }
+
+/* ---- repertoire in the wild ---- */
+
+.tab-count {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 5px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--copper);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+#watch-toggle[aria-pressed='true'] {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.wild-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wild-status p {
+  margin: 0;
+}
+
+.wild-errors {
+  margin: 0;
+  font-size: 13px;
+  color: var(--copper);
+}
+
+.wild-watches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.wild-watch {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.wild-watch:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.wild-watch-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wild-watch-path {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.wild-watch-count {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.wild-watch-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.wild-games-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wild-games-box .games-head h2 {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+.wild-games-box .games-head select {
+  min-height: 40px;
+  max-width: 280px;
+}
+
+.wild-reached {
+  color: var(--text);
+}
+
+.wild-row {
+  grid-template-columns: 100px minmax(0, 1fr) 60px 200px;
+}
+
+.wild-actions {
+  grid-template-columns: 1fr 1.6fr;
+}
+
+@media (max-width: 760px) {
+  .wild-watch {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wild-watch-actions {
+    justify-content: flex-start;
+  }
+
+  .wild-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .wild-games-box .games-head select {
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
+  .view-tab {
+    padding: 4px 8px;
+  }
+}

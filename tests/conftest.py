@@ -20,7 +20,7 @@ from app.db.session import get_engine
 from app.main import app
 
 ROOT = Path(__file__).resolve().parent.parent
-TABLES = "position_evals, game_moves, games, opening_tags, move_attempts, line_reviews, position_comments, moves, lines, openings, repertoires, positions"
+TABLES = "wild_games, wild_sources, wild_watches, position_evals, game_moves, games, opening_tags, move_attempts, line_reviews, position_comments, moves, lines, openings, repertoires, positions"
 
 
 @pytest.fixture(scope="session")
@@ -37,6 +37,7 @@ def database():
     engine.dispose()
 
     settings.database_url = url
+    settings.wild_fetch = False
     get_engine.cache_clear()
     command.upgrade(Config(str(ROOT / "alembic.ini")), "head")
     yield get_engine()

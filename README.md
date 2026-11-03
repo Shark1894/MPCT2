@@ -28,6 +28,7 @@ The full plan, decisions and data model are in the project's
 | 7b | Play against the engine | Done |
 | 8 | Games database: save, edit, PGN import/export, compare with repertoire | Done |
 | — | Bookmarked lines; engine review of the moves on the board | Done |
+| — | Repertoire in the wild: watched positions in tournament games | Done |
 
 ## Using the board
 
@@ -220,6 +221,44 @@ Training API: `GET /api/openings/{id}/training?mode=due|all` (or `line_id=`, or 
 `POST /api/lines/{id}/reviews` with `{"practice": false, "attempts": [{"ply": 2, "uci": "c7c6"}, ...]}` records a
 finished line (the server checks each move against the line and updates the schedule).
 
+## Repertoire in the wild
+
+See when strong players reach your positions. Tournament games are fetched in the background from
+[Lichess broadcasts](https://lichess.org/broadcast) and [The Week in Chess](https://theweekinchess.com) (TWIC), and
+any game that reaches a position you watch shows up in the **Wild** tab.
+
+- **Watch a position:** on the Board, go to a position in one of your openings (a line has to pass through it) and
+  tap **Watch in the wild** under Branches. The button then shows how many games reach it; tap again to stop.
+  Transpositions count: the position is matched, not the move order.
+- **Wild tab:** the positions you watch (with game counts, **Games**, **Show**, **Rename**, **Unwatch**) and the games
+  that reached them, newest first: players and ratings, event and round, result, and the move where your position
+  came up. Filter by watched position or search players and event. **Open** puts the game on the board at that
+  position (the rest of the game follows, so you can step through it or review it with the engine); **Save to Games**
+  copies it into the Games tab. The tab shows a count of new games since you last looked.
+- **Fetching:** a minute after the app starts, then every 6 hours, or **Check now**. The first run goes back about 3
+  months (about 14 TWIC issues plus Lichess broadcasts from that period), which takes a few minutes; later runs only
+  fetch what's new. Finished broadcasts and old TWIC issues are fetched once; live broadcasts again until they end.
+  Unfinished games are skipped, and a game found in both sources is stored once.
+- **Storage:** every fetched game is kept (about 2 KB each, so roughly 150–200 MB for 3 months), with a hash of each
+  of its first 20 moves' positions so matching is one indexed lookup. Games older than 3 months are pruned unless they
+  reach a watched position.
+
+Settings (environment): `WILD_FETCH=false` turns fetching off (the tab still works with games already stored),
+`WILD_INTERVAL_HOURS` (default 6), `WILD_DAYS` (default 92: how far back the first run goes and when unmatched games
+are pruned).
+
+If a site blocks the server's downloads, load a file by hand (a TWIC zip or any PGN):
+
+```bash
+docker cp twic1669g.zip mpct:/tmp/
+docker compose exec mpct python -m app.tools.import_wild_pgn /tmp/twic1669g.zip
+```
+
+API: `GET /api/repertoires/{id}/watches`, `GET/POST /api/openings/{id}/watches` (`{"fen", "label"}`),
+`PATCH/DELETE /api/watches/{id}`, `GET /api/repertoires/{id}/wild-games?watch_id=&q=&limit=&offset=`,
+`GET /api/wild-games/{id}` (with moves), `POST /api/wild-games/{id}/save`, `GET /api/wild/status?repertoire_id=&since=`,
+`POST /api/wild/refresh`.
+
 ## Games
 
 The **Games** tab lists your games newest first (date, players with teams, competition, opening moves, result),
@@ -315,6 +354,8 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/play.e2e.cjs         # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/insights.e2e.cjs     # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/bookmarks.e2e.cjs    # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/review.e2e.cjs       # empty database, real engine
+# empty database, server started with WILD_FETCH=false; loads games with the import tool:
+MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/wild.e2e.cjs
 ```
 
 ## Deploy on the home server
@@ -473,7 +514,8 @@ app/
   db/             SQLAlchemy models, session, Alembic migrations
   repositories/   database queries (replaces the legacy DBFunctions.py)
   api/            FastAPI routers + request/response schemas
-  tools/          command-line tools (legacy repertoire + games import)
+  tools/          command-line tools (legacy repertoire + games import, wild PGN import)
+  wild_fetch.py   background fetching of tournament games (Lichess broadcasts, TWIC)
 web/              frontend served as-is
   js/game.js      game state + rules wrapper (pure logic, unit tested)
   js/board.js     chessground wrapper + promotion picker
@@ -486,6 +528,7 @@ web/              frontend served as-is
   js/engine.js    Stockfish worker client + UCI parsing (helpers unit tested)
   js/analysis.js  engine panel, evaluation bar, engine arrows
   js/games.js     games list view + open-game panel (save, compare, PGN)
+  js/wild.js      Wild tab: watched positions, spotted tournament games, fetch status
   js/play.js      play vs engine: levels, engine replies, takeback, resign, save
   js/api.js       JSON API client
   js/ui.js        dialogs, toast, local storage

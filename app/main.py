@@ -7,6 +7,7 @@ rendered with those URLs and is never cached.
 """
 
 import hashlib
+from contextlib import asynccontextmanager
 import re
 from html import escape
 from pathlib import Path
@@ -16,13 +17,15 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
-from app.api import bookmarks, dashboard, evals, games, repertoires, tags, training
+from app import wild_fetch
+from app.api import bookmarks, dashboard, evals, games, repertoires, tags, training, wild
 from app.config import settings
 from app.core.positions import InvalidLine, InvalidPosition
 from app.db.session import DatabaseNotConfigured, database_status
 from app.repositories.repertoire import Conflict, NotFound
 from app.repositories.tags import InvalidTag
 from app.repositories.training import InvalidReview
+from app.repositories.wild import InvalidWatch
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
@@ -63,8 +66,17 @@ def _error(status: int):
     return handler
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Repertoire in the wild: fetch tournament games in the background (WILD_FETCH=false to turn off).
+    wild_fetch.start_schedule()
+    yield
+    wild_fetch.stop_schedule()
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
+        lifespan=lifespan,
         title="MPCT",
         version=__version__,
         docs_url="/api/docs",
@@ -78,6 +90,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(InvalidPosition, _error(422))
     app.add_exception_handler(InvalidReview, _error(422))
     app.add_exception_handler(InvalidTag, _error(422))
+    app.add_exception_handler(InvalidWatch, _error(422))
     app.add_exception_handler(DatabaseNotConfigured, _error(503))
 
     @app.middleware("http")
@@ -110,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(games.router)
     app.include_router(bookmarks.router)
     app.include_router(evals.router)
+    app.include_router(wild.router)
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     @app.get("/index.html", response_class=HTMLResponse, include_in_schema=False)
