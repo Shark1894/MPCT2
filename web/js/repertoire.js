@@ -18,14 +18,16 @@ export class RepertoirePanel {
    * @param {(san: string) => void} opts.onPlaySan      play a move on the board
    * @param {(shapes: object[]) => void} opts.onShapes  draw arrows on the board
    * @param {(color: 'white'|'black') => void} opts.onOrientation
+   * @param {(tag: object) => void} opts.onShowTag  move the board to a branch's position
    */
-  constructor({ game, onPlaySan, onShapes, onOrientation, onTrain, onJump }) {
+  constructor({ game, onPlaySan, onShapes, onOrientation, onTrain, onJump, onShowTag }) {
     this.game = game;
     this.onPlaySan = onPlaySan;
     this.onShapes = onShapes;
     this.onOrientation = onOrientation;
     this.onTrain = onTrain; // (opening, 'due' | 'all', tag | null) => void
     this.onJump = onJump; // (ply) => void: jump the board to a move
+    this.onShowTag = onShowTag;
     this.training = false;
     this.tags = []; // branch tags of the selected opening
     this.tagId = null; // training/dashboard filter: null = all lines
@@ -88,7 +90,11 @@ export class RepertoirePanel {
     e.lineDelete.addEventListener('click', () => this.deleteLines());
     e.trainDue.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'due', this.currentTag()));
     e.trainAll.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'all', this.currentTag()));
-    e.tagFilter.addEventListener('change', () => this.setTagFilter(e.tagFilter.value ? Number(e.tagFilter.value) : null));
+    e.tagFilter.addEventListener('change', () => {
+      this.setTagFilter(e.tagFilter.value ? Number(e.tagFilter.value) : null);
+      const tag = this.currentTag();
+      if (tag) this.onShowTag?.(tag); // picking a branch on the board view also shows its position
+    });
     e.tagAdd.addEventListener('click', () => this.addTag());
     e.tagRename.addEventListener('click', () => this.renameTag());
     e.tagDelete.addEventListener('click', () => this.deleteTag());

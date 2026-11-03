@@ -43,7 +43,30 @@ const repertoire = new RepertoirePanel({
     game.goTo(ply);
     render();
   },
+  onShowTag: (tag) => showTagPosition(tag),
 });
+
+/**
+ * Move the board to a branch tag's position. If the moves on the board already pass through
+ * it, just jump there (keeping the moves after it); otherwise set up the tag's moves from the start.
+ */
+async function showTagPosition(tag) {
+  if (trainer.active) return;
+  const key = (fen) => fen.split(' ').slice(0, 4).join(' ');
+  if (key(game.startFen) === key(START_FEN)) {
+    const ply = game.moves.findIndex((m) => key(m.fen) === tag.key) + 1;
+    if (ply > 0) {
+      game.goTo(ply);
+      render();
+      return;
+    }
+  }
+  if (!(await play.confirmStop())) return;
+  if (!(await gamePanel.confirmLeave())) return;
+  game.load(START_FEN);
+  for (const san of tag.path) if (!game.playSan(san)) break;
+  render();
+}
 // Branch tags or the branch filter changed: keep the dashboard in step when it's showing.
 repertoire.onTagsChanged = () => {
   if (view === 'dashboard') dashboard.refresh();

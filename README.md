@@ -151,6 +151,9 @@ tags can nest (a line can be in "QGA" and "QGA 3.e4").
   position** names the current position (not the start, and only where a line in the opening goes);
   **Rename tag** / **Remove tag** appear at a tagged position. Removing a tag keeps the lines.
 - **Training:** the **Lines** dropdown (shown once an opening has tags) limits Train due / Train all to one branch.
+  Picking a branch there also moves the board to its position: a jump if the board's moves already pass through it
+  (later moves are kept), otherwise the branch's moves are set up from the start (asking first if that would end a
+  game against the engine or discard changes to an open game). "All lines" leaves the board alone.
 - **Dashboard:** the same filter (stats then cover just that branch), and each line lists its tags.
 
 API: `GET/POST /api/openings/{id}/tags` (`{"name", "fen"}`), `PATCH/DELETE /api/tags/{id}`; `tag_id=` on

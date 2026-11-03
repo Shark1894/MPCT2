@@ -88,6 +88,22 @@ async function dialog(p, name) {
   check((await text(page, '#train-due')) === 'Train due (4)', 'all lines: 4 due');
   await page.selectOption('#train-tag', { label: 'Queen’s Gambit Accepted (3)' });
   check((await text(page, '#train-due')) === 'Train due (3)', 'branch filter: 3 due');
+  await settle(page, 300);
+  let pos = await page.evaluate(() => ({ ply: mpct.game.ply, total: mpct.game.moves.length }));
+  check(pos.ply === 4 && pos.total === 5, 'picking a branch on the path jumps to its position, keeping later moves: ' + JSON.stringify(pos));
+  check(JSON.stringify(await chips(page)) === '["Queen’s Gambit Accepted*"]', 'branch chip marked as here');
+
+  // A branch off the board's moves: its moves are set up from the start.
+  await goTo(page, ['d4', 'd5', 'c4', 'e6']);
+  await page.selectOption('#train-tag', { label: 'QGA 3.e4 (1)' });
+  await settle(page, 300);
+  pos = await page.evaluate(() => ({ ply: mpct.game.ply, sans: mpct.game.moves.map((m) => m.san).join(' ') }));
+  check(pos.ply === 5 && pos.sans === 'd4 d5 c4 dxc4 e4', 'branch elsewhere: board set to its moves: ' + JSON.stringify(pos));
+  await page.selectOption('#train-tag', { label: 'All lines' });
+  await settle(page, 300);
+  check((await page.evaluate(() => mpct.game.ply)) === 5, 'All lines leaves the board where it is');
+  await page.selectOption('#train-tag', { label: 'Queen’s Gambit Accepted (3)' });
+  await settle(page, 300);
   await page.click('#train-due');
   await page.waitForFunction(() => mpct.trainer.active && mpct.trainer.canMove(), null, { timeout: 5000 });
   check((await text(page, '#train-progress')) === 'Line 1 of 3', 'training only the branch’s lines');
@@ -109,9 +125,11 @@ async function dialog(p, name) {
   const rowTags = await e4Row.locator('.line-tag').allTextContents();
   check(JSON.stringify(rowTags) === '["Queen’s Gambit Accepted","QGA 3.e4"]', 'line shows its branch tags: ' + rowTags);
   check((await page.locator('.dash-line', { hasText: '2...e6' }).locator('.line-tag').count()) === 0, 'line outside the branches has no tags');
+  const plyBefore = await page.evaluate(() => mpct.game.ply);
   await page.selectOption('#dash-tag', { label: 'Queen’s Gambit Accepted' });
   await settle(page, 700);
   check((await text(page, '#train-tag option:checked')) === 'Queen’s Gambit Accepted (3)', 'board filter follows the dashboard filter');
+  check((await page.evaluate(() => mpct.game.ply)) === plyBefore, 'the dashboard branch picker doesn’t move the board');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/tags-dashboard.png` });
   await page.click('#dash-train-all');
   await page.waitForFunction(() => mpct.trainer.active, null, { timeout: 5000 });
