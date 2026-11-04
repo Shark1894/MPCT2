@@ -41,6 +41,11 @@ The full plan, decisions and data model are in the project's
 - Paste a FEN and press **Load FEN** (or Enter) to set up a position; **Copy FEN** copies the current one.
 - Right-click drag draws arrows; right-click a square draws a circle.
 - The current game is kept in the browser, so reloading the page (or a phone dropping the tab) doesn't lose it.
+- **Move sounds**: a click for a move, a knock for a capture, a ping for check, two clicks for castling, a rising pair
+  for promotion; a buzz for a wrong answer in training or puzzles and a chime for a clean line or a solved puzzle.
+  Stepping forward plays the move's sound; going back and jumping are silent. **Sound on/off** (or **M**) under the
+  board, remembered per device. Made in the browser with the Web Audio API (no sound files); phones start the sound
+  on your first tap.
 
 ## Building a repertoire
 
@@ -382,6 +387,7 @@ Browser checks against a running copy (the repertoire suite needs an empty datab
 ```bash
 npm i --no-save playwright && npx playwright install chromium
 MPCT_URL=http://localhost:8010/ node tests/e2e/board.e2e.cjs
+MPCT_URL=http://localhost:8010/ node tests/e2e/sounds.e2e.cjs      # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/repertoire.e2e.cjs   # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/training.e2e.cjs     # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/dashboard.e2e.cjs    # empty database
@@ -571,6 +577,7 @@ web/              frontend served as-is
   js/wild.js      Wild tab: watched positions, spotted tournament games, fetch status
   js/puzzle.js    one puzzle's rules + rating chart path (pure logic, unit tested)
   js/puzzles.js   Puzzles tab + puzzle mode on the board
+  js/sounds.js    move sounds (Web Audio; choosing the sound is unit tested)
   js/play.js      play vs engine: levels, engine replies, takeback, resign, save
   js/api.js       JSON API client
   js/ui.js        dialogs, toast, local storage

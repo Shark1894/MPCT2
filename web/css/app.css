@@ -443,6 +443,14 @@ body.engine-on {
   gap: 6px;
 }
 
+.tool-buttons {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+#btn-sound[aria-pressed='false'] {
+  color: var(--text-dim);
+}
+
 .comments {
   display: flex;
   flex-direction: column;

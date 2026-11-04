@@ -178,6 +178,7 @@ export class PuzzleController {
     const res = run.tryMove(uci, mates);
     if (!res.correct) {
       this.render(); // snap back
+      document.dispatchEvent(new CustomEvent('mpct:sound', { detail: 'wrong' }));
       if (res.firstMistake) this._report();
       this._shapes(run.failed && !res.firstMistake ? run.hintSquare() : null);
       this._message(
@@ -259,6 +260,7 @@ export class PuzzleController {
 
   async _finish() {
     const run = this.run;
+    if (run.solved) setTimeout(() => document.dispatchEvent(new CustomEvent('mpct:sound', { detail: 'success' })), 250);
     this.el.playing.hidden = true;
     this._message('');
     this.onLock(false); // free to step through it and analyse

@@ -168,6 +168,7 @@ export class TrainingController {
           ? 'Hint: move the highlighted piece.'
           : 'Try again.';
     this._message(`Not the repertoire move. ${tip}`, 'wrong');
+    document.dispatchEvent(new CustomEvent('mpct:sound', { detail: 'wrong' }));
   }
 
   async _finishLine() {
@@ -179,6 +180,7 @@ export class TrainingController {
     this._message('');
     let resultText =
       mistakes === 0 ? '✓ Line complete, no mistakes.' : `✗ Line complete with ${plural(mistakes, 'mistake')}.`;
+    if (mistakes === 0) setTimeout(() => document.dispatchEvent(new CustomEvent('mpct:sound', { detail: 'success' })), 250);
     try {
       const saved = await api.recordReview(review.lineId, review.practice, review.attempts);
       resultText += review.practice

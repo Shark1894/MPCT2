@@ -13,6 +13,7 @@ import { PlayController } from './play.js';
 import { ReviewController } from './review.js';
 import { SavedEval } from './saved-eval.js';
 import { WildView } from './wild.js';
+import { Sounds, movedOneForward } from './sounds.js';
 import { PuzzleController, PuzzlesView } from './puzzles.js';
 import { isModalOpen, store, toast } from './ui.js';
 import { api } from './api.js';
@@ -20,6 +21,8 @@ import { api } from './api.js';
 const $ = (id) => document.getElementById(id);
 
 const game = new Game();
+const sounds = new Sounds();
+let soundState = null; // { startFen, ply } at the last render, to hear one-move steps
 restoreGame();
 const board = new BoardView($('board'), $('promo'), onBoardMove);
 
@@ -289,7 +292,15 @@ const ui = {
 
 let shownFen = null;
 
+/** A click for each move played (or stepped forward); silent for jumps, going back and new games. */
+function moveSound() {
+  const now = { startFen: game.startFen, ply: game.ply };
+  if (movedOneForward(soundState, now)) sounds.playMove(game.moves[game.ply - 1]?.san);
+  soundState = now;
+}
+
 function render() {
+  moveSound();
   board.show(game, {
     canMove: trainer.active ? trainer.canMove() : puzzles.locked ? puzzles.canMove() : play?.active ? play.canMove() : true,
   });
@@ -392,6 +403,10 @@ document.addEventListener('keydown', (e) => {
     End: () => game.toEnd(),
     f: () => board.flip(),
   };
+  if (e.key === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    toggleSound(); // works while training or solving too
+    return;
+  }
   const action = locked() && e.key !== 'f' ? null : actions[e.key];
   if (action && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
@@ -417,6 +432,21 @@ $('board').addEventListener(
 // ---- board tools --------------------------------------------------------
 
 $('btn-flip').addEventListener('click', () => board.flip());
+
+function showSound() {
+  const b = $('btn-sound');
+  b.textContent = sounds.enabled ? 'Sound on' : 'Sound off';
+  b.setAttribute('aria-pressed', String(sounds.enabled));
+}
+function toggleSound() {
+  sounds.setEnabled(!sounds.enabled);
+  showSound();
+  if (sounds.enabled) sounds.play('move');
+}
+$('btn-sound').addEventListener('click', toggleSound);
+showSound();
+// Training and puzzles report right and wrong answers.
+document.addEventListener('mpct:sound', (e) => sounds.play(e.detail));
 $('btn-new').addEventListener('click', () => {
   if (play.active) return;
   game.load(START_FEN);
@@ -481,4 +511,4 @@ repertoire.init().then(async () => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, repertoire, trainer, puzzles, puzzlesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval };
+window.mpct = { game, board, sounds, repertoire, trainer, puzzles, puzzlesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval };
