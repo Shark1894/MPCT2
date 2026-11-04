@@ -31,6 +31,7 @@ The full plan, decisions and data model are in the project's
 | — | Repertoire in the wild: watched positions in tournament games | Done |
 | — | Puzzles: the Lichess puzzle database, your own puzzle rating | Done |
 | — | Puzzles from your own games, with spaced repetition | Done |
+| — | Play on against the engine from the end of a training line | Done |
 
 ## Using the board
 
@@ -193,6 +194,14 @@ API: `GET/POST /api/openings/{id}/tags` (`{"name", "fen"}`), `PATCH/DELETE /api/
   a mistake keeps it at 0, due today. The session summary counts the line as correct. Retrying a line you got right
   is practice: recorded, but doesn't change the schedule. Stopping half-way records nothing.
 - Every move tried is stored (`move_attempts`), including the wrong move actually played.
+- **Play on vs engine** (on the end-of-line card) carries on from the line's final position against Stockfish, with
+  you on the repertoire's side, to practise the middlegame plans. It asks only for a strength (the last one used is
+  preselected). The line's result is already saved by then, so the game is practice and never changes the schedule.
+  The training session waits: **Next line** (or **Finish training** after the last line) in the play panel goes back
+  to it (asking first if the game is still on), and **Save to games** saves the game as
+  "Practice vs engine (<opening>)" and goes back too. **Stop** / **Analyse** ends the game and the session (a
+  message says how many lines were left); so does anything else that ends the game, such as starting other
+  training. A reload keeps the game but not the waiting session.
 
 ## Dashboard
 
@@ -429,6 +438,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/tags.e2e.cjs         # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/engine.e2e.cjs       # runs the real engine
 MPCT_URL=http://localhost:8010/ node tests/e2e/games.e2e.cjs        # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/play.e2e.cjs         # empty database, real engine
+MPCT_URL=http://localhost:8010/ node tests/e2e/continue.e2e.cjs     # empty database, real engine (play on after a line)
 MPCT_URL=http://localhost:8010/ node tests/e2e/insights.e2e.cjs     # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/bookmarks.e2e.cjs    # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/review.e2e.cjs       # empty database, real engine

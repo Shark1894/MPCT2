@@ -24,10 +24,13 @@ export class TrainingController {
    * @param {import('./repertoire.js').RepertoirePanel} deps.panel
    * @param {() => void} deps.render       redraw everything from game state
    * @param {(active: boolean) => void} deps.onModeChange
+   * @param {(info: {side: string, opening: string, last: boolean}) => void} [deps.onContinue]
+   *        "Play on vs engine" pressed at the end of a line
    */
-  constructor({ game, board, panel, render, onModeChange }) {
-    Object.assign(this, { game, board, panel, render, onModeChange });
+  constructor({ game, board, panel, render, onModeChange, onContinue = () => {} }) {
+    Object.assign(this, { game, board, panel, render, onModeChange, onContinue });
     this.session = null;
+    this.suspended = null; // a session put aside while playing on against the engine
     this.hintShapes = [];
     this.timer = null;
     this.el = {
@@ -39,6 +42,7 @@ export class TrainingController {
       result: $('train-result'),
       next: $('train-next'),
       retry: $('train-retry'),
+      continue: $('train-continue'),
       stop: $('train-stop'),
       summary: $('train-summary'),
       done: $('train-done'),
@@ -51,6 +55,7 @@ export class TrainingController {
     this.commentsRevealed = false;
     this.el.next.addEventListener('click', () => this.nextLine());
     this.el.retry.addEventListener('click', () => this.retryLine());
+    this.el.continue.addEventListener('click', () => this.continueVsEngine());
     this.el.stop.addEventListener('click', () => this.stop());
     this.el.done.addEventListener('click', () => this.stop());
     this.el.commentsShow.addEventListener('click', () => {
@@ -83,6 +88,7 @@ export class TrainingController {
       toast(mode === 'due' ? `Nothing due in ${where}.` : `${where} has no lines yet.`);
       return;
     }
+    this.suspended = null;
     this.session = new TrainingSession(data);
     this.board.setOrientation(data.opening.color);
     this.el.title.textContent = `Training: ${data.opening.name}${label ? ` › ${label}` : tag && !lineId ? ` › ${tag.name}` : ''}`;
@@ -103,6 +109,48 @@ export class TrainingController {
     this.el.box.hidden = true;
     this.onModeChange(false);
     this.render();
+  }
+
+  // ---- play on against the engine ---------------------------------------------
+  // The line's result is already saved when its end card shows, so the game that
+  // follows is practice only. The session is put aside, not ended, so the next line
+  // follows the game.
+
+  /** Ask the page to start a game from the final position of the finished line. */
+  continueVsEngine() {
+    const s = this.session;
+    if (!s || !s.lineComplete()) return;
+    this.onContinue({ side: s.color, opening: s.opening.name, last: s.index + 1 >= s.total });
+  }
+
+  /** Leave training mode but keep the session to come back to. The board keeps the line's moves. */
+  suspend() {
+    if (!this.session) return;
+    clearTimeout(this.timer);
+    this.suspended = this.session;
+    this.session = null;
+    this._setHint(null);
+    this.el.commentsNote.hidden = true;
+    this.el.box.hidden = true;
+    this.onModeChange(false);
+  }
+
+  /** Back from the game: carry on with the next line (or the session summary). */
+  resume() {
+    const s = this.suspended;
+    if (!s) return;
+    this.suspended = null;
+    this.session = s;
+    this.el.box.hidden = false;
+    this.onModeChange(true);
+    this.nextLine();
+  }
+
+  /** The game ended without going back to training: drop the session. Returns the lines not reached. */
+  discardSuspended() {
+    const s = this.suspended;
+    this.suspended = null;
+    return s ? s.total - s.index - 1 : 0;
   }
 
   _beginLine() {

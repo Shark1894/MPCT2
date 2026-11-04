@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LEVELS, levelById, engineOptions, resultFor, takebackPly } from '../../web/js/play.js';
+import { LEVELS, levelById, engineOptions, resultFor, takebackPly, competitionFor } from '../../web/js/play.js';
 import { Game } from '../../web/js/game.js';
 
 test('levels: skill levels below 1400, Elo limiter above, full strength last', () => {
@@ -45,4 +45,9 @@ test('truncate drops the moves after the shown position', () => {
   g.truncate();
   assert.deepEqual(g.moves.map((m) => m.san), ['e4']);
   assert.equal(g.ply, 1);
+});
+
+test('competitionFor names the opening of a continued training line', () => {
+  assert.equal(competitionFor(null), 'Practice vs engine');
+  assert.equal(competitionFor('Scandinavian'), 'Practice vs engine (Scandinavian)');
 });

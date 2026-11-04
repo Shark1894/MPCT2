@@ -114,7 +114,26 @@ const trainer = new TrainingController({
   panel: repertoire,
   render: () => render(),
   onModeChange: (active) => trainingMode(active, 'Training'),
+  onContinue: (info) => continueLineVsEngine(info),
 });
+
+/** "Play on vs engine" at the end of a training line: the session waits while you play. */
+async function continueLineVsEngine({ side, opening, last }) {
+  const level = await play.chooseContinueLevel(opening);
+  if (!level || !trainer.active) return;
+  trainer.suspend();
+  play.start(side, level, true, {
+    opening,
+    returnTo: {
+      label: last ? 'Finish training' : 'Next line',
+      onReturn: () => trainer.resume(),
+      onEnd: () => {
+        const left = trainer.discardSuspended();
+        if (left > 0) toast(`Training session ended with ${plural(left, 'line')} still to go.`);
+      },
+    },
+  });
+}
 
 const puzzles = new PuzzleController({
   game,

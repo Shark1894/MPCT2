@@ -34,6 +34,9 @@ export function engineOptions(level) {
   return { skill: level.skill ?? null, elo: level.elo ?? null, movetime: level.movetime, depth: level.depth ?? null };
 }
 
+/** Competition saved with a game; games played on from a training line name the opening. */
+export const competitionFor = (opening) => (opening ? `Practice vs engine (${opening})` : 'Practice vs engine');
+
 /** Engine name for saved games and the panel title. */
 export const engineName = (level) => `Stockfish (${level.label})`;
 
@@ -84,6 +87,8 @@ export class PlayController {
     this.token = 0; // bumps to discard engine replies that are no longer wanted
     this.engine = null;
     this.engineStatus = '';
+    this.opening = null; // set when the game continues a training line
+    this.returnTo = null; // { label, onReturn, onEnd } while a training session waits
     this.el = {
       start: $('play-start'),
       panel: $('play-panel'),
@@ -93,6 +98,7 @@ export class PlayController {
       resign: $('play-resign'),
       save: $('play-save'),
       again: $('play-again'),
+      back: $('play-back'),
       stop: $('play-stop'),
     };
     this.el.start.addEventListener('click', () => this.setup());
@@ -101,6 +107,7 @@ export class PlayController {
     this.el.save.addEventListener('click', () => this.save());
     this.el.again.addEventListener('click', () => this.setup());
     this.el.stop.addEventListener('click', () => this.confirmStop());
+    this.el.back.addEventListener('click', () => this.backToTraining());
   }
 
   /** True when the user may move on the board now. */
@@ -159,8 +166,30 @@ export class PlayController {
     this.start(side, this.settings.level, hasPosition && values.from === 'board');
   }
 
-  /** Start a game. fromBoard keeps the moves up to the shown position. */
-  start(side, levelId, fromBoard = false) {
+  /**
+   * Strength picker for playing on from the end of a training line (the side is the
+   * repertoire's). Resolves to a level id, or null if cancelled.
+   */
+  async chooseContinueLevel(opening) {
+    const values = await formDialog({
+      title: 'Play on against the engine',
+      message: `Carry on from the end of this ${opening} line. Practice only: the line's review schedule doesn't change.`,
+      fields: [{ name: 'level', label: 'Engine strength', type: 'select', options: LEVELS.map((l) => [l.id, l.label]), value: this.settings.level }],
+      submit: 'Play',
+    });
+    if (!values) return null;
+    this.settings = { ...this.settings, level: Number(values.level) };
+    store.set('playSettings', this.settings);
+    return this.settings.level;
+  }
+
+  /**
+   * Start a game. fromBoard keeps the moves up to the shown position.
+   * opening: names the line being continued (saved with the game).
+   * returnTo: { label, onReturn, onEnd } shows a button back to a waiting training session;
+   * onEnd runs if the game is left any other way.
+   */
+  start(side, levelId, fromBoard = false, { opening = null, returnTo = null } = {}) {
     const g = this.game;
     if (fromBoard) g.truncate();
     else g.load(START_FEN);
@@ -171,6 +200,8 @@ export class PlayController {
     this.result = null;
     this.thinking = false;
     this.token += 1;
+    this.opening = opening;
+    this.returnTo = returnTo;
     this.board.setOrientation(side);
     this.onModeChange(true);
     this._save();
@@ -195,9 +226,26 @@ export class PlayController {
     this.thinking = false;
     this.active = false;
     this.result = null;
+    this.opening = null;
+    const waiting = this.returnTo;
+    this.returnTo = null;
     this._save();
     this.onModeChange(false);
     this.render();
+    waiting?.onEnd?.();
+  }
+
+  /** Leave the game (asking if it's still on) and carry on with the training session. */
+  async backToTraining() {
+    const r = this.returnTo;
+    if (!this.active || !r) return;
+    if (!this.result && this.game.moves.length > this.startPly) {
+      const ok = await confirmDialog('Leave the game?', 'The game against the engine ends and training carries on.', 'Leave');
+      if (!ok) return;
+    }
+    this.returnTo = null; // not an abandoned session: no onEnd
+    this.stop();
+    r.onReturn();
   }
 
   /** Resume a game saved in local storage (after a reload). */
@@ -209,6 +257,7 @@ export class PlayController {
     this.level = levelById(saved.level);
     this.startPly = Math.min(saved.startPly ?? 0, this.game.moves.length);
     this.result = saved.result ?? null;
+    this.opening = saved.opening ?? null; // a waiting training session doesn't survive a reload
     this.board.setOrientation(this.side);
     this.onModeChange(true);
     this.render();
@@ -218,7 +267,9 @@ export class PlayController {
   _save() {
     store.set(
       'play',
-      this.active ? { active: true, side: this.side, level: this.level.id, startPly: this.startPly, result: this.result } : null,
+      this.active
+        ? { active: true, side: this.side, level: this.level.id, startPly: this.startPly, result: this.result, opening: this.opening }
+        : null,
     );
   }
 
@@ -309,7 +360,7 @@ export class PlayController {
       black: this.side === 'white' ? bot : you,
       white_team: '',
       black_team: '',
-      competition: 'Practice vs engine',
+      competition: competitionFor(this.opening),
       played_on: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD, local date
       result: this.result.score,
       start_fen: g.startFen,
@@ -317,6 +368,15 @@ export class PlayController {
     };
     try {
       const saved = await api.createGame(body);
+      const r = this.returnTo;
+      if (r) {
+        // In a training session: keep training; the game is in the Games tab.
+        toast('Saved to Games. Back to training.');
+        this.returnTo = null;
+        this.stop();
+        r.onReturn();
+        return;
+      }
       toast('Saved to Games');
       this.stop();
       this.onSaved(saved.id);
@@ -348,8 +408,11 @@ export class PlayController {
     el.resign.hidden = Boolean(this.result);
     el.resign.disabled = !played;
     el.save.hidden = !this.result;
-    el.again.hidden = !this.result;
+    el.again.hidden = !this.result || Boolean(this.returnTo);
+    el.back.hidden = !this.returnTo;
+    if (this.returnTo) el.back.textContent = this.returnTo.label;
     el.stop.textContent = this.result ? 'Analyse' : 'Stop';
-    el.stop.title = this.result ? 'Leave play mode and analyse the game' : 'Abandon the game';
+    el.stop.title =
+      (this.result ? 'Leave play mode and analyse the game' : 'Abandon the game') + (this.returnTo ? ' (ends the training session)' : '');
   }
 }
