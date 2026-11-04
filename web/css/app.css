@@ -2701,6 +2701,77 @@ body.puzzle-locked .engine {
 .pz-mark.bad { color: var(--copper); font-weight: 700; }
 .pz-change { font-variant-numeric: tabular-nums; }
 
+/* puzzles from your own games */
+.gp-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+#gp-bar {
+  height: 100%;
+  width: 0;
+  background: var(--copper);
+  transition: width 0.4s;
+}
+
+.gp-progress-box {
+  margin: 0 0 10px;
+}
+
+.gp-progress-box p {
+  margin: 0 0 6px;
+}
+
+.gp-names {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0 0 8px;
+}
+
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  min-height: 0;
+  color: var(--blue);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.gp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.gp-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.gp-row:first-child {
+  border-top: 0;
+}
+
+.gp-main {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pz-mark.warn { color: var(--copper); font-weight: 700; }
+.gp-row .pz-mark.bad { color: var(--error); }
+
 @media (max-width: 600px) {
   .pz-start,
   .pz-theme select,

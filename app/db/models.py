@@ -362,3 +362,59 @@ class PuzzleImport(Base):
     finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     puzzles: Mapped[int]
     source: Mapped[str] = mapped_column(Text)
+
+
+class AppSetting(Base):
+    """Small app-wide settings (key -> JSON), e.g. your names in games."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    value: Mapped[dict | list | str | None] = mapped_column(JSONB)
+
+
+class GameScan(Base):
+    """A game checked for your mistakes. `moves_hash` notices edits (then it's scanned again)."""
+
+    __tablename__ = "game_scans"
+
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"), primary_key=True)
+    moves_hash: Mapped[str] = mapped_column(String(40))
+    color: Mapped[str] = mapped_column(String(5))
+    movetime_ms: Mapped[int]
+    found: Mapped[int]
+    scanned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class GamePuzzle(Base):
+    """A mistake of yours in one of your games, as a puzzle: from `fen` (before your move) find
+    `best_uci`. The puzzle is shown like a Lichess one: from `setup_fen` the opponent's last
+    move `setup_uci` is played first. Practised with spaced repetition, like repertoire lines."""
+
+    __tablename__ = "game_puzzles"
+    __table_args__ = (
+        UniqueConstraint("game_id", "ply", name="uq_game_puzzles_game_ply"),
+        Index("ix_game_puzzles_due", "next_review_on"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"), index=True)
+    ply: Mapped[int]  # your move in the game (1 = White's first)
+    color: Mapped[str] = mapped_column(String(5))
+    fen: Mapped[str] = mapped_column(Text)
+    setup_fen: Mapped[str] = mapped_column(Text)
+    setup_uci: Mapped[str] = mapped_column(String(5))
+    played_uci: Mapped[str] = mapped_column(String(5))
+    played_san: Mapped[str] = mapped_column(String(10))
+    best_uci: Mapped[str] = mapped_column(String(5))
+    best_san: Mapped[str] = mapped_column(String(10))
+    best_pv: Mapped[str] = mapped_column(Text, server_default="")  # UCI, the engine's line
+    before: Mapped[float]  # your winning chances with the best move (0-100)
+    after: Mapped[float]  # after the move you played
+    label: Mapped[str] = mapped_column(String(10))  # mistake | blunder
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    streak: Mapped[int] = mapped_column(server_default="0")
+    next_review_on: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    reviews: Mapped[int] = mapped_column(server_default="0")
+    correct: Mapped[int] = mapped_column(server_default="0")
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

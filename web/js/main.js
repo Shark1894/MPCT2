@@ -129,6 +129,12 @@ const puzzles = new PuzzleController({
     else analysis.resume('puzzle');
     document.body.classList.toggle('puzzle-locked', locked);
   },
+  onOpenGame: async (gameId, ply) => {
+    puzzles.stop();
+    if (!(await gamePanel.open(gameId))) return;
+    game.goTo(Math.min(ply, game.moves.length));
+    render();
+  },
 });
 
 /** The board belongs to a training line or an unsolved puzzle: no navigation or free moves. */
@@ -145,6 +151,12 @@ const puzzlesView = new PuzzlesView({
     setView('board');
     puzzles.open(id);
   },
+  onStartOwn: async (list) => {
+    if (!(await startBoardMode())) return;
+    setView('board');
+    puzzles.startOwn(list);
+  },
+  analysis,
 });
 
 // ---- games -------------------------------------------------------------------

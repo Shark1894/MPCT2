@@ -148,6 +148,7 @@
               <button id="puzzle-retry" type="button" title="Try it again (not rated)">Retry</button>
             </div>
             <a id="puzzle-game" class="button small" href="#" target="_blank" rel="noopener">Game on Lichess</a>
+            <button id="puzzle-open-game" type="button" class="small" hidden>Open the game</button>
           </div>
         </div>
 
@@ -451,6 +452,25 @@
           </label>
           <button id="pz-start" type="button" class="primary">Start puzzles</button>
         </div>
+      </section>
+
+      <section id="gp" class="dash-card gp">
+        <div class="gp-head">
+          <h2 class="dash-h">From your games <span class="meta">your mistakes, practised like your lines</span></h2>
+        </div>
+        <p id="gp-text" class="meta"></p>
+        <div class="gp-buttons">
+          <button id="gp-due" type="button" class="primary">Practise due</button>
+          <button id="gp-all" type="button">Practise all</button>
+          <button id="gp-scan" type="button">Find puzzles in my games</button>
+        </div>
+        <div id="gp-progress-box" class="gp-progress-box" hidden>
+          <div class="pz-progress"><div id="gp-bar"></div></div>
+          <p id="gp-progress" class="meta" aria-live="polite"></p>
+          <button id="gp-cancel" type="button" class="small">Stop</button>
+        </div>
+        <p id="gp-names" class="meta gp-names"></p>
+        <ul id="gp-list" class="gp-list"></ul>
       </section>
 
       <section id="pz-db" class="dash-card pz-db">

@@ -5,7 +5,8 @@
 import { api } from './api.js';
 import { Chess } from '../vendor/chess.js/chess.js';
 import { PuzzleRun, historyPath } from './puzzle.js';
-import { daysFromToday, plural, store, toast } from './ui.js';
+import { GameScanner } from './gamescan.js';
+import { confirmDialog, daysFromToday, formDialog, plural, store, toast } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const REPLY_DELAY_MS = 500;
@@ -21,6 +22,43 @@ const el = (tag, cls, text) => {
 
 const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '±0');
 
+/** SAN for a line of UCI moves from a FEN ("Nxe5 Nxe5 d4"), stopping at anything illegal. */
+export function lineSan(fen, ucis, max = 8) {
+  const c = new Chess(fen);
+  const out = [];
+  for (const u of ucis.slice(0, max)) {
+    try {
+      out.push(c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] }).san);
+    } catch {
+      break;
+    }
+  }
+  return out.join(' ');
+}
+
+/** "today", "tomorrow", "in 3 days". */
+export function dueText(isoDate) {
+  const d = daysFromToday(isoDate);
+  return d <= 0 ? 'today' : d === 1 ? 'tomorrow' : `in ${d} days`;
+}
+
+/** A puzzle from your own game, in the Lichess shape PuzzleRun expects. */
+export function ownToRun(gp) {
+  return {
+    kind: 'mine',
+    id: gp.id,
+    fen: gp.setup_fen,
+    moves: [gp.setup_uci, gp.best_uci],
+    rating: null,
+    theme_names: [],
+    opening_tags: [],
+    nb_plays: 0,
+    game_url: '',
+    tried: 0,
+    own: gp,
+  };
+}
+
 // ---- puzzle mode on the board --------------------------------------------------------------
 
 export class PuzzleController {
@@ -31,9 +69,11 @@ export class PuzzleController {
    * @param {() => void} deps.render
    * @param {(active: boolean) => void} deps.onModeChange   puzzle mode on/off (panel, views)
    * @param {(locked: boolean) => void} deps.onLock         navigation/engine locked while solving
+   * @param {(gameId: number, ply: number) => void} deps.onOpenGame  open one of your games at a move
    */
-  constructor({ game, board, render, onModeChange, onLock }) {
-    Object.assign(this, { game, board, render, onModeChange, onLock });
+  constructor({ game, board, render, onModeChange, onLock, onOpenGame }) {
+    Object.assign(this, { game, board, render, onModeChange, onLock, onOpenGame });
+    this.mode = 'lichess'; // or 'mine': puzzles from your own games
     this.run = null;
     this.active = false;
     this.theme = null;
@@ -53,6 +93,7 @@ export class PuzzleController {
       next: $('puzzle-next'),
       retry: $('puzzle-retry'),
       gameLink: $('puzzle-game'),
+      openGame: $('puzzle-open-game'),
       stop: $('puzzle-stop'),
     };
     this.el.stop.addEventListener('click', () => this.stop());
@@ -60,6 +101,10 @@ export class PuzzleController {
     this.el.retry.addEventListener('click', () => this.retry());
     this.el.reveal.addEventListener('click', () => this.reveal());
     this.el.skip.addEventListener('click', () => this.skip());
+    this.el.openGame.addEventListener('click', () => {
+      const own = this.run?.puzzle.own;
+      if (own) this.onOpenGame(own.game_id, own.ply - 1);
+    });
   }
 
   /** Solving (the board belongs to the puzzle; navigation and engine locked). */
@@ -75,14 +120,27 @@ export class PuzzleController {
 
   /** Start solving puzzles near your rating (optionally one theme). */
   async start(theme = null) {
+    this.mode = 'lichess';
     this.theme = theme;
     this.seen = [];
     this.session = { solved: 0, failed: 0 };
     await this.next();
   }
 
+  /** Practise puzzles from your own games (spaced repetition): the list given, in order. */
+  startOwn(list) {
+    if (!list.length) return;
+    this.mode = 'mine';
+    this.queue = list.slice();
+    this.total = list.length;
+    this.reviewedOwn = new Set(); // only the first go in a session counts
+    this.session = { solved: 0, failed: 0 };
+    this.next();
+  }
+
   /** Open one puzzle by id (e.g. a retry from the Puzzles tab). */
   async open(puzzleId) {
+    this.mode = 'lichess';
     let p;
     try {
       p = await api.puzzle(puzzleId);
@@ -96,6 +154,16 @@ export class PuzzleController {
 
   async next() {
     clearTimeout(this.timer);
+    if (this.mode === 'mine') {
+      if (!this.queue.length) {
+        const s = this.session;
+        this.stop();
+        toast(`Done: ${s.solved} found, ${s.failed} missed.`);
+        return;
+      }
+      this._begin(ownToRun(this.queue.shift()));
+      return;
+    }
     let p;
     try {
       p = await api.nextPuzzle(this.theme, this.seen.slice(-50));
@@ -110,7 +178,7 @@ export class PuzzleController {
 
   _begin(p) {
     clearTimeout(this.timer);
-    this.seen.push(p.id);
+    if (p.kind !== 'mine') this.seen.push(p.id);
     this.run = new PuzzleRun(p);
     this.lastResult = null;
     if (!this.active) {
@@ -122,7 +190,12 @@ export class PuzzleController {
     this._shapes(null);
     this.el.end.hidden = true;
     this.el.playing.hidden = false;
-    this.el.title.textContent = `Puzzle · rated ${p.rating}${p.tried ? ' · retry (not rated)' : ''}`;
+    if (p.own) {
+      const repeat = this.reviewedOwn?.has(p.id) ? ' · practice' : '';
+      this.el.title.textContent = `From your game v ${p.own.opponent || '?'} · move ${p.own.move_number}${repeat}`;
+    } else {
+      this.el.title.textContent = `Puzzle · rated ${p.rating}${p.tried ? ' · retry (not rated)' : ''}`;
+    }
     this._progress();
     this.game.load(p.fen);
     this.board.setOrientation(this.run.color);
@@ -136,7 +209,11 @@ export class PuzzleController {
       if (this.run !== run) return;
       this._play(run.setupMove());
       this.busy = false;
-      this._message(`Your move: find the best move for ${run.color === 'white' ? 'White' : 'Black'}.`);
+      this._message(
+        run.puzzle.own
+          ? `Your move in the game. Find the best move for ${run.color === 'white' ? 'White' : 'Black'}.`
+          : `Your move: find the best move for ${run.color === 'white' ? 'White' : 'Black'}.`,
+      );
       this.render();
     }, SETUP_DELAY_MS);
   }
@@ -233,6 +310,10 @@ export class PuzzleController {
   /** Skip: counts as failed if you've started (a move made), otherwise just moves on. */
   async skip() {
     const run = this.run;
+    if (this.mode === 'mine') {
+      await this.next(); // not recorded
+      return;
+    }
     if (run && run.index > 1 && !run.failed) {
       run.failed = true;
       await this._report();
@@ -241,13 +322,29 @@ export class PuzzleController {
   }
 
   retry() {
-    if (this.run) this._begin({ ...this.run.puzzle, tried: (this.run.puzzle.tried ?? 0) + 1 });
+    if (!this.run) return;
+    const p = this.run.puzzle;
+    this._begin(p.own ? p : { ...p, tried: (p.tried ?? 0) + 1 });
   }
 
   async _report() {
     const run = this.run;
     const r = run.result();
     if (!r) return;
+    const own = run.puzzle.own;
+    if (own) {
+      if (this.reviewedOwn.has(own.id)) return; // a repeat in the same session
+      this.reviewedOwn.add(own.id);
+      try {
+        this.lastResult = { own: true, ...(await api.gamePuzzleReview(own.id, r.solved)) };
+        this.session[r.solved ? 'solved' : 'failed'] += 1;
+        if (this.run === run) this._progress();
+        if (this.run === run && run.done) this._showEnd();
+      } catch (err) {
+        toast(`Result not saved: ${err.message}`, 'error');
+      }
+      return;
+    }
     try {
       this.lastResult = await api.puzzleAttempt(run.puzzle.id, r.solved, r.seconds);
       if (this.lastResult.rated) this.session[r.solved ? 'solved' : 'failed'] += 1;
@@ -273,6 +370,11 @@ export class PuzzleController {
     const run = this.run;
     const p = run.puzzle;
     const r = this.lastResult;
+    this.el.openGame.hidden = !p.own;
+    if (p.own) {
+      this._showOwnEnd(run, p.own, r);
+      return;
+    }
     const rating = r ? (r.rated ? `Rating ${r.rating_after} (${signed(r.change)})` : 'Not rated: you’ve tried it before.') : '';
     this.el.result.textContent = run.solved ? `✓ Solved! ${rating}` : `✗ ${run.revealed ? 'Solution shown.' : 'Failed.'} ${rating}`;
     this.el.result.className = `train-result ${run.solved ? 'good' : 'bad'}`;
@@ -281,13 +383,40 @@ export class PuzzleController {
     facts.push(`${p.nb_plays.toLocaleString('en-GB')} plays`);
     this.el.info.textContent = facts.filter(Boolean).join(' · ');
     this.el.gameLink.hidden = !p.game_url;
+    this.el.next.textContent = 'Next puzzle';
     this.el.gameLink.href = p.game_url || '#';
     this.el.end.hidden = false;
     this.el.playing.hidden = true;
     this.el.next.focus();
   }
 
+  _showOwnEnd(run, own, r) {
+    const when = r?.own ? (run.solved ? ` Next review ${dueText(r.next_review_on)}.` : ' It comes back today.') : '';
+    this.el.result.textContent = run.solved
+      ? `✓ Found it: ${own.best_san}.${when}`
+      : `✗ The move was ${own.best_san}.${when}`;
+    this.el.result.className = `train-result ${run.solved ? 'good' : 'bad'}`;
+    const line = lineSan(own.fen, own.best_pv);
+    const facts = [
+      `In the game you played ${own.played_san}: your winning chances ${Math.round(own.before)}% → ${Math.round(own.after)}% (${own.label}).`,
+      line ? `Engine line: ${line}.` : '',
+      [own.competition, own.played_on].filter(Boolean).join(', '),
+    ];
+    this.el.info.textContent = facts.filter(Boolean).join(' ');
+    this.el.gameLink.hidden = true;
+    this.el.next.textContent = this.queue.length ? 'Next puzzle' : 'Finish';
+    this.el.end.hidden = false;
+    this.el.playing.hidden = true;
+    this.el.next.focus();
+  }
+
   _progress() {
+    if (this.mode === 'mine') {
+      const s = this.session;
+      const at = this.total - this.queue.length;
+      this.el.progress.textContent = `Puzzle ${at} of ${this.total}` + (s.solved + s.failed ? ` · ${s.solved} found, ${s.failed} missed` : '');
+      return;
+    }
     const r = this.lastResult;
     const s = this.session ?? { solved: 0, failed: 0 };
     const parts = [];
@@ -313,9 +442,12 @@ export class PuzzlesView {
    * @param {object} deps
    * @param {(theme: string|null) => void} deps.onStart
    * @param {(puzzleId: string) => void} deps.onRetry
+   * @param {(list: object[]) => void} deps.onStartOwn     practise puzzles from your games
+   * @param {{pause: Function, resume: Function}} deps.analysis  the live engine, paused while scanning
    */
-  constructor({ onStart, onRetry }) {
-    Object.assign(this, { onStart, onRetry });
+  constructor({ onStart, onRetry, onStartOwn, analysis }) {
+    Object.assign(this, { onStart, onRetry, onStartOwn, analysis });
+    this.scanner = null;
     this.visible = false;
     this.timer = null;
     this.el = {
@@ -333,7 +465,21 @@ export class PuzzlesView {
       themesEmpty: $('pz-themes-empty'),
       recent: $('pz-recent'),
       recentEmpty: $('pz-recent-empty'),
+      gpText: $('gp-text'),
+      gpDue: $('gp-due'),
+      gpAll: $('gp-all'),
+      gpScan: $('gp-scan'),
+      gpProgressBox: $('gp-progress-box'),
+      gpBar: $('gp-bar'),
+      gpProgress: $('gp-progress'),
+      gpCancel: $('gp-cancel'),
+      gpNames: $('gp-names'),
+      gpList: $('gp-list'),
     };
+    this.el.gpDue.addEventListener('click', () => this.practiseOwn(true));
+    this.el.gpAll.addEventListener('click', () => this.practiseOwn(false));
+    this.el.gpScan.addEventListener('click', () => this.scanGames());
+    this.el.gpCancel.addEventListener('click', () => this.scanner?.cancel());
     this.el.start.addEventListener('click', () => this.onStart(this.el.theme.value || null));
     this.el.theme.addEventListener('change', () => store.set('puzzleTheme', this.el.theme.value));
     this.el.import.addEventListener('click', () => this.startImport());
@@ -350,7 +496,154 @@ export class PuzzlesView {
         /* offered next time */
       }
     }
-    await Promise.all([this.loadStatus(), this.loadSummary()]);
+    await Promise.all([this.loadStatus(), this.loadSummary(), this.loadOwn()]);
+  }
+
+  // ---- puzzles from your own games -------------------------------------------------
+
+  async loadOwn() {
+    let st;
+    let list;
+    try {
+      [st, list] = await Promise.all([api.gamePuzzleStatus(), api.gamePuzzles(false)]);
+    } catch (err) {
+      this.el.gpText.textContent = `Couldn’t load: ${err.message}`;
+      return;
+    }
+    this.ownStatus = st;
+    const e = this.el;
+    const due = list.filter((p) => daysFromToday(p.next_review_on) <= 0).length;
+    e.gpText.textContent = list.length
+      ? `${plural(list.length, 'puzzle')} from your games, ${due} due today.`
+      : st.scanned
+        ? 'No mistakes found in your games so far. Well played, or play more games.'
+        : 'Find the moves where you went wrong in your own games, then practise them like your repertoire lines.';
+    e.gpDue.disabled = !due || Boolean(this.scanner);
+    e.gpDue.textContent = due ? `Practise due (${due})` : 'Nothing due';
+    e.gpAll.disabled = !list.length || Boolean(this.scanner);
+    const n = st.to_scan.length;
+    e.gpScan.disabled = !n || Boolean(this.scanner);
+    e.gpScan.textContent = n ? `Find puzzles in my games (${plural(n, 'game')})` : 'All games checked';
+    this._names(st);
+    this._ownList(list);
+  }
+
+  _names(st) {
+    const box = this.el.gpNames;
+    box.innerHTML = '';
+    const names = st.names.length ? st.names.join(', ') : 'not set';
+    box.append(el('span', '', `You play as: ${names}${st.names_set ? '' : ' (guessed)'}. `));
+    const change = el('button', 'link-button', 'Change');
+    change.type = 'button';
+    change.addEventListener('click', () => this.changeNames());
+    box.appendChild(change);
+    if (st.unknown.length) {
+      box.append(el('span', 'meta', ` · ${plural(st.unknown.length, 'game')} where neither player matches: skipped.`));
+    }
+  }
+
+  async changeNames() {
+    const r = await formDialog({
+      title: 'Your names in games',
+      message: 'The player names that are you, separated by commas (your Lichess username, your name in PGNs…). Used to tell which side you played.',
+      fields: [{ name: 'names', label: 'Names', value: (this.ownStatus?.names ?? []).join(', '), maxLength: 300 }],
+    });
+    if (!r) return;
+    const names = r.names.split(',').map((s) => s.trim()).filter(Boolean);
+    try {
+      await api.setMyNames(names);
+    } catch (err) {
+      toast(err.message, 'error');
+      return;
+    }
+    await this.loadOwn();
+  }
+
+  _ownList(list) {
+    const ul = this.el.gpList;
+    ul.innerHTML = '';
+    for (const p of list) {
+      const li = el('li', 'gp-row');
+      const dueIn = daysFromToday(p.next_review_on);
+      li.append(
+        el('span', `pz-mark ${p.label === 'blunder' ? 'bad' : 'warn'}`, p.label === 'blunder' ? '??' : '?'),
+        el('span', 'gp-main', `v ${p.opponent || '?'} · move ${p.move_number}: you played ${p.played_san}`),
+        el('span', 'meta gp-due', dueIn <= 0 ? 'due' : dueText(p.next_review_on)),
+      );
+      const go = el('button', 'small', 'Practise');
+      go.type = 'button';
+      go.addEventListener('click', () => this.onStartOwn([p]));
+      const rm = el('button', 'small', 'Remove');
+      rm.type = 'button';
+      rm.title = 'Not a useful puzzle: remove it (it won’t come back unless the game is rescanned)';
+      rm.addEventListener('click', async () => {
+        if (!(await confirmDialog('Remove puzzle', `Remove the puzzle from move ${p.move_number} v ${p.opponent || '?'}?`, 'Remove'))) return;
+        try {
+          await api.deleteGamePuzzle(p.id);
+        } catch (err) {
+          toast(err.message, 'error');
+          return;
+        }
+        await this.loadOwn();
+      });
+      li.append(go, rm);
+      ul.appendChild(li);
+    }
+  }
+
+  async practiseOwn(dueOnly) {
+    let list;
+    try {
+      list = await api.gamePuzzles(dueOnly);
+    } catch (err) {
+      toast(err.message, 'error');
+      return;
+    }
+    if (!list.length) {
+      toast(dueOnly ? 'Nothing due today.' : 'No puzzles yet.');
+      return;
+    }
+    if (!dueOnly) list.sort(() => Math.random() - 0.5);
+    this.onStartOwn(list);
+  }
+
+  async scanGames() {
+    const games = this.ownStatus?.to_scan ?? [];
+    if (!games.length || this.scanner) return;
+    const e = this.el;
+    let newOnes = 0;
+    this.scanner = new GameScanner({
+      onProgress: ({ game, gameIndex, games: n, done, total }) => {
+        const frac = (gameIndex + (total ? done / total : 1)) / n;
+        e.gpBar.style.width = `${(frac * 100).toFixed(1)}%`;
+        e.gpProgress.textContent = `Game ${gameIndex + 1} of ${n}: ${game.white} v ${game.black}, position ${done + 1} of ${total}`;
+      },
+      onGameDone: (r) => (newOnes += r.new),
+    });
+    e.gpProgressBox.hidden = false;
+    e.gpBar.style.width = '0%';
+    e.gpProgress.textContent = 'Starting the engine…';
+    e.gpScan.disabled = e.gpDue.disabled = e.gpAll.disabled = true;
+    this.analysis?.pause('scan'); // one engine at a time
+    let wakeLock = null;
+    try {
+      wakeLock = await navigator.wakeLock?.request('screen');
+    } catch {
+      /* not allowed: fine */
+    }
+    let result = null;
+    try {
+      result = await this.scanner.scan(games);
+    } catch (err) {
+      toast(`Scan stopped: ${err.message}`, 'error');
+    } finally {
+      wakeLock?.release().catch(() => {});
+      this.analysis?.resume('scan');
+      this.scanner = null;
+      e.gpProgressBox.hidden = true;
+    }
+    if (result) toast(`${result.cancelled ? 'Stopped. ' : ''}${plural(newOnes, 'new puzzle')} from your games.`);
+    await this.loadOwn();
   }
 
   hide() {

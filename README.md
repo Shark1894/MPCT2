@@ -30,6 +30,7 @@ The full plan, decisions and data model are in the project's
 | — | Bookmarked lines; engine review of the moves on the board | Done |
 | — | Repertoire in the wild: watched positions in tournament games | Done |
 | — | Puzzles: the Lichess puzzle database, your own puzzle rating | Done |
+| — | Puzzles from your own games, with spaced repetition | Done |
 
 ## Using the board
 
@@ -295,6 +296,28 @@ The **Puzzles** tab: tactics from the [Lichess puzzle database](https://database
 - **Tab:** your rating and record (today too), rating history (last rating of each day), themes to work on (rated
   results per theme once you've done 5, weakest first, with **Practise**), and recent puzzles with **Retry**.
 
+### From your games
+
+The **From your games** card on the Puzzles tab turns your own mistakes into puzzles.
+
+- **Finding them:** **Find puzzles in my games** checks each saved game not yet checked (or edited since) with the
+  engine in the browser, about a second per position, reusing analysis already saved (by **Review**, say) and saving
+  what it works out for next time. **Stop** keeps the games finished so far. A move becomes a puzzle when it was
+  yours, lost at least 20 points of winning chances (a mistake; 30 is a blunder), there was one clearly best move
+  (20 points better than the next), you weren't already losing (under 15%), and it isn't a move from your repertoire.
+- **Which side was you:** the names you play under, set with **Change** (your Lichess username, your name in PGNs…);
+  guessed from the name in most of your games until you set them. Games where neither player matches are skipped.
+- **Practising:** spaced repetition, the same schedule as your repertoire lines. **Practise due** gives today's;
+  **Practise all** the lot in random order; or **Practise** one from the list. The board starts just before your
+  move, after the opponent's move: find the best one. Only your first go in a session counts; **Retry** is practice.
+  Afterwards: when it's next due, what you played and what it cost, the engine's line, and **Open the game** at that
+  move. **Remove** drops one that isn't useful.
+
+API: `GET /api/game-puzzles/status`, `GET /api/game-puzzles/summary`, `PUT /api/game-puzzles/names`
+(`{"names"}`), `POST /api/game-puzzles/scans` (`{"game_id", "moves_hash", "movetime_ms", "candidates"}`),
+`POST /api/game-puzzles/rescan`, `GET /api/game-puzzles?due=&game_id=`, `POST /api/game-puzzles/{id}/reviews`
+(`{"correct"}`), `DELETE /api/game-puzzles/{id}`.
+
 The test-site refresh (`scripts/refresh_test_db.sh`) leaves the puzzle database out; download it there separately if
 you want puzzles on the test site.
 
@@ -401,6 +424,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/review.e2e.cjs       # empty data
 # empty database, server started with WILD_FETCH=false; loads games with the import tool:
 MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/wild.e2e.cjs
 MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/puzzles.e2e.cjs   # empty database
+MPCT_URL=http://localhost:8010/ node tests/e2e/gamepuzzles.e2e.cjs  # empty database, real engine
 ```
 
 ## Deploy on the home server

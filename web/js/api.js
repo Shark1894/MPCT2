@@ -127,6 +127,15 @@ export const api = {
   puzzle: (id) => request('GET', `/puzzles/${id}`),
   puzzleAttempt: (id, solved, seconds) => request('POST', `/puzzles/${id}/attempts`, { body: { solved, seconds } }),
 
+  gamePuzzleStatus: () => request('GET', '/game-puzzles/status'),
+  gamePuzzleSummary: () => request('GET', '/game-puzzles/summary'),
+  gamePuzzles: (due = false) => request('GET', '/game-puzzles', { params: due ? { due: true } : {} }),
+  setMyNames: (names) => request('PUT', '/game-puzzles/names', { body: { names } }),
+  saveGameScan: (gameId, movesHash, movetimeMs, candidates) =>
+    request('POST', '/game-puzzles/scans', { body: { game_id: gameId, moves_hash: movesHash, movetime_ms: movetimeMs, candidates } }),
+  gamePuzzleReview: (id, correct) => request('POST', `/game-puzzles/${id}/reviews`, { body: { correct } }),
+  deleteGamePuzzle: (id) => request('DELETE', `/game-puzzles/${id}`),
+
   comment: (repId, fen) => request('GET', `/repertoires/${repId}/comment`, { params: { fen } }),
   saveComment: (repId, fen, comment) => request('PUT', `/repertoires/${repId}/comment`, { body: { fen, comment } }),
 };
