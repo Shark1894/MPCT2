@@ -23,5 +23,12 @@ class Settings(BaseSettings):
     # history builds up from here as new games are fetched.
     wild_since: date = date(2026, 1, 1)
 
+    # Repertoire gap finder: the Lichess opening explorer needs a personal API token (free,
+    # no scopes: https://lichess.org/account/oauth/token). Keep it in .env, never in code.
+    lichess_token: str | None = None
+    lichess_explorer_url: str = "https://explorer.lichess.org"
+    # Cached explorer answers older than this are asked for again.
+    explorer_cache_days: int = 180
+
 
 settings = Settings()

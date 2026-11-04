@@ -33,6 +33,7 @@ The full plan, decisions and data model are in the project's
 | — | Puzzles from your own games, with spaced repetition | Done |
 | — | Play on against the engine from the end of a training line | Done |
 | — | Position drill: random repertoire positions without the moves before them | Done |
+| — | Repertoire gap finder: masters replies your repertoire doesn't cover | Done |
 
 ## Using the board
 
@@ -260,6 +261,32 @@ API: `PUT /api/lines/{id}/bookmark` with `{"note": "..."}` (bookmarks, or change
 Practice retries (of a line already played correctly) are left out of everything here. Hover or tap a bar, segment
 or day for its numbers.
 
+### Repertoire gaps
+
+The **Repertoire gaps** card lists replies that strong players actually play but the selected opening doesn't
+answer, from the Lichess opening explorer's masters database (over-the-board games between 2200+ players).
+
+- **Check with Lichess masters** looks up every position in the opening where it's your opponent's move and your
+  repertoire already has at least one reply. Line ends (where you chose to stop) and the starting position (an
+  opening for Black answers one first move on purpose) aren't checked; the starting position is still looked up,
+  for how often the first move is played. Answers are cached on the server for 180 days, so a position is looked up
+  once; requests go one at a time, about a second apart, in the background (progress bar, **Stop**). A stopped or
+  failed check keeps what it got, and **Check again** fetches only what's missing (e.g. after adding lines).
+- A reply is covered if **any** opening of the same colour in the repertoire plays it from that position, so
+  transpositions into your other openings aren't gaps.
+- Shown: replies played in at least 5% of the position's masters games (2% / 10% in the menu; at least 5 games),
+  most often met first: the chance of reaching the position (the masters share of each opponent move on the way,
+  your moves always played) times the reply's share there. Each says what your repertoire plays there.
+- **Show** puts the position and the reply on the board, so you can add a line from there with **Add line**.
+
+Needs a Lichess personal API token on the server (the explorer has required one since 2026): create one, free with
+no scopes, at https://lichess.org/account/oauth/token, add `LICHESS_TOKEN=lip_…` to `.env` and restart
+(`docker compose up -d`). Without it the card says so and the button is off. `LICHESS_EXPLORER_URL` overrides the
+explorer address (default `https://explorer.lichess.org`).
+
+API: `GET /api/openings/{id}/gaps?min_share=5&min_games=5`, `POST /api/openings/{id}/gaps/check` (starts a
+background check; 409 without a token or while one runs), `GET /api/explorer/status`, `POST /api/explorer/stop`.
+
 API: `GET /api/openings/{id}/dashboard` (stats, stages, forecast, problem positions, lines),
 `GET /api/repertoires/{id}/overview`, `GET /api/activity?tz=Europe/London&days=182`, `POST /api/lines/{id}/reset`, `POST /api/openings/{id}/reset`,
 `DELETE /api/openings/{id}/lines`.
@@ -481,6 +508,9 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/review.e2e.cjs       # empty data
 MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/wild.e2e.cjs
 MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/puzzles.e2e.cjs   # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/gamepuzzles.e2e.cjs  # empty database, real engine (reviews + puzzles)
+# empty database; the server talks to the fake explorer (python tests/e2e/fake_explorer.py 8099 &) and is
+# started with LICHESS_TOKEN=lip_e2e LICHESS_EXPLORER_URL=http://127.0.0.1:8099:
+MPCT_URL=http://localhost:8010/ node tests/e2e/gaps.e2e.cjs
 ```
 
 ## Deploy on the home server

@@ -382,6 +382,23 @@
         </section>
       </div>
 
+      <section class="dash-card gaps-card" aria-labelledby="gaps-title">
+        <div class="gaps-head">
+          <h2 id="gaps-title" class="dash-h">Repertoire gaps <span class="meta">masters replies you don’t cover</span></h2>
+          <div class="gaps-controls">
+            <select id="gaps-min" aria-label="Show replies played in at least this share of masters games"></select>
+            <button id="gaps-check" type="button" class="small">Check with Lichess masters</button>
+            <button id="gaps-stop" type="button" class="small" hidden>Stop</button>
+          </div>
+        </div>
+        <p id="gaps-status" class="meta" aria-live="polite"></p>
+        <div id="gaps-progress" class="pz-progress" hidden><div id="gaps-bar"></div></div>
+        <p id="gaps-error" class="gaps-error" hidden></p>
+        <ol id="gaps-list" class="pp-list gaps-list"></ol>
+        <p id="gaps-empty" class="meta" hidden></p>
+        <button id="gaps-more" type="button" class="small" hidden>Show more</button>
+      </section>
+
       <div class="dash-toolbar">
         <label>Sort
           <select id="dash-sort">

@@ -2,6 +2,7 @@
 // per-line and per-opening actions. Follows the repertoire panel's selected opening.
 
 import { api } from './api.js';
+import { GapsCard } from './gaps.js';
 import { confirmDialog, describeDue, daysFromToday, fillOpeningSelect, formDialog, plural, store, toast } from './ui.js';
 import {
   enableTips,
@@ -33,6 +34,7 @@ export class DashboardView {
   constructor({ repertoire, onTrain, onShowLine }) {
     Object.assign(this, { repertoire, onTrain, onShowLine });
     this.data = null;
+    this.gaps = new GapsCard({ onShow: (sans) => this.onShowLine(sans) });
     this.view = { sort: 'due', filter: 'all', search: '', ...store.get('dashView', {}) };
     this.el = {
       opening: $('dash-opening'),
@@ -130,6 +132,7 @@ export class DashboardView {
       return;
     }
     sel.value = String(opening.id);
+    this.gaps.setOpening(opening);
 
     const tags = this.repertoire.tags;
     const tagSel = this.el.tag;

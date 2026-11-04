@@ -2316,6 +2316,40 @@ button.star[aria-pressed='true'] {
   justify-content: center;
 }
 
+.gaps-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.gaps-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.gaps-controls select {
+  width: auto;
+  min-height: 32px;
+}
+
+.gaps-card .pz-progress {
+  margin: 6px 0 10px;
+}
+
+.gaps-error {
+  color: var(--error);
+  font-size: 13px;
+  margin: 4px 0 10px;
+}
+
+.gaps-list {
+  margin-top: 8px;
+}
+
 /* line list controls */
 .dash-toolbar {
   display: flex;
@@ -2835,7 +2869,8 @@ body.puzzle-locked .engine {
   font-size: 13px;
 }
 
-#games-review-bar {
+#games-review-bar,
+#gaps-bar {
   height: 100%;
   width: 0;
   background: var(--blue);

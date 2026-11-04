@@ -97,6 +97,10 @@ export const api = {
     return `/api/pgn/games${qs ? `?${qs}` : ''}`;
   },
 
+  gaps: (openingId, minShare) => request('GET', `/openings/${openingId}/gaps`, { params: { min_share: minShare } }),
+  gapsCheck: (openingId) => request('POST', `/openings/${openingId}/gaps/check`),
+  explorerStatus: () => request('GET', '/explorer/status'),
+  explorerStop: () => request('POST', '/explorer/stop'),
   drill: (params) => request('GET', '/drill', { params }),
   drillResults: (results) => request('POST', '/drill/results', { body: { results } }),
   evalsLookup: (fens, minMovetimeMs = 0) => request('POST', '/evals/lookup', { body: { fens, min_movetime_ms: minMovetimeMs } }),
