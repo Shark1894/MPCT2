@@ -161,6 +161,25 @@ class MoveAttempt(Base):
     review: Mapped[LineReview] = relationship(back_populates="attempts")
 
 
+class DrillAttempt(Base):
+    """One position answered in the position drill (practice: never touches the schedule).
+
+    `correct` = right on the first try; `wrong` = the wrong moves tried, in order. These
+    feed the dashboard's problem positions alongside training mistakes.
+    """
+
+    __tablename__ = "drill_attempts"
+    __table_args__ = (Index("ix_drill_attempts_opening_position", "opening_id", "position_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    opening_id: Mapped[int] = mapped_column(ForeignKey("openings.id", ondelete="CASCADE"))
+    position_id: Mapped[int] = mapped_column(ForeignKey("positions.id", ondelete="CASCADE"))
+    expected_uci: Mapped[str] = mapped_column(String(5))
+    correct: Mapped[bool] = mapped_column(Boolean)
+    wrong: Mapped[list[str]] = mapped_column(ARRAY(String(5)), server_default="{}")
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class OpeningTag(Base):
     """A named branch of an opening: every line in the opening that passes through
     the tagged position carries the tag (including lines added later)."""

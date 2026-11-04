@@ -1198,9 +1198,26 @@ body.playing .fen-actions #btn-fen-load {
   gap: 6px;
 }
 
-/* "Play on vs engine" gets its own full-width row under Next line / Retry. */
-#train-continue {
+/* "Play on vs engine" and "Position drill" get their own full-width rows. */
+#train-continue,
+#train-drill {
   grid-column: 1 / -1;
+}
+
+.drill-missed {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.drill-missed li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 14px;
 }
 
 .training {

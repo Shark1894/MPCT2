@@ -12,7 +12,7 @@ import chess
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Line, LineReview, Move, MoveAttempt, Opening, Position
+from app.db.models import DrillAttempt, Line, LineReview, Move, MoveAttempt, Opening, Position
 from app.repositories.repertoire import get_repertoire
 from app.repositories.training import current_streaks
 
@@ -64,9 +64,34 @@ def forecast(review_dates: list[date], today: date | None = None, days: int = FO
     return {"days": [{"date": today + timedelta(days=i), "due": n} for i, n in enumerate(counts)], "later": later}
 
 
+def _add_drill_answers(s: Session, line_ids: list[int], groups: dict, since: datetime) -> None:
+    """Fold position-drill answers for these lines' positions into the problem groups."""
+    where_move = {}
+    for pos_id, uci, ply, line_id in s.execute(
+        select(Move.position_before_id, Move.uci, Move.ply, Move.line_id).where(Move.line_id.in_(line_ids)).order_by(Move.ply, Move.line_id)
+    ).all():
+        where_move.setdefault((pos_id, uci), (ply, line_id))
+    opening_ids = set(s.scalars(select(Line.opening_id).where(Line.id.in_(line_ids)).distinct()))
+    rows = s.execute(
+        select(DrillAttempt.id, DrillAttempt.position_id, DrillAttempt.expected_uci, DrillAttempt.correct, DrillAttempt.wrong, DrillAttempt.attempted_at).where(
+            DrillAttempt.opening_id.in_(opening_ids or {-1}), DrillAttempt.position_id.in_({pos for pos, _ in where_move} or {-1})
+        )
+    ).all()
+    for attempt_id, pos_id, uci, correct, wrong, at in rows:
+        if (pos_id, uci) not in where_move:
+            continue
+        ply, line_id = where_move[(pos_id, uci)]
+        g = groups.setdefault((pos_id, uci), {"ply": ply, "line_id": line_id, "reviews": {}, "wrong": Counter()})
+        g["reviews"][("drill", attempt_id)] = {"at": at, "wrong": not correct}
+        if not correct and at >= since:
+            for played in wrong:
+                g["wrong"][played] += 1
+
+
 def problem_positions(s: Session, line_ids: list[int], moves_by_line: dict[int, list[dict]], now: datetime | None = None) -> list[dict]:
     """Your moves you most often get wrong, grouped by position (so the same move in
-    several lines counts once), with the wrong moves you played instead."""
+    several lines counts once), with the wrong moves you played instead. Training
+    reviews and position-drill answers both count (each answer is one "review")."""
     if not line_ids:
         return []
     rows = s.execute(
@@ -97,9 +122,11 @@ def problem_positions(s: Session, line_ids: list[int], moves_by_line: dict[int, 
             if at >= since:
                 g["wrong"][played] += 1
 
+    _add_drill_answers(s, line_ids, groups, since)
+
     found = []
     for (pos_id, uci), g in groups.items():
-        reviews = list(g["reviews"].values())  # oldest first
+        reviews = sorted(g["reviews"].values(), key=lambda r: r["at"])  # oldest first
         wrong_reviews = [r for r in reviews if r["wrong"] and r["at"] >= since]
         if not wrong_reviews:
             continue

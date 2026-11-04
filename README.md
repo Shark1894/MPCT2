@@ -32,6 +32,7 @@ The full plan, decisions and data model are in the project's
 | — | Puzzles: the Lichess puzzle database, your own puzzle rating | Done |
 | — | Puzzles from your own games, with spaced repetition | Done |
 | — | Play on against the engine from the end of a training line | Done |
+| — | Position drill: random repertoire positions without the moves before them | Done |
 
 ## Using the board
 
@@ -203,6 +204,27 @@ API: `GET/POST /api/openings/{id}/tags` (`{"name", "fen"}`), `PATCH/DELETE /api/
   message says how many lines were left); so does anything else that ends the game, such as starting other
   training. A reload keeps the game but not the waiting session.
 
+## Position drill
+
+**Position drill** (under Train due / Train all) tests whether you know a position on its own, without the
+move order as a crutch. It asks where the positions come from (the whole repertoire, both colours; the selected
+opening; or one of its branch tags, from the tagged position on) and how many (10, 20 or 50; fewer if the scope
+has fewer). Each one is set up on the board with no moves before it and your side to move; the starting position
+is left out. Hints as in training: the piece after 2 wrong tries, the move after 3; **Show answer** gives it away
+(counts as missed). Comments stay hidden until you've answered. After each answer: **Next position**, or **Play the
+rest of the line** to carry on through one of the lines from there (not recorded).
+
+The summary lists the positions you missed, with **Show** (leave the drill and put the line up to that position on
+the board) and **Drill missed again**.
+
+Practice only: schedules and streaks never change. Each answer is stored (`drill_attempts`) and counts as a review
+for **problem positions** on the Dashboard, so positions you keep missing in the drill show up there too (and drop
+off after 3 right in a row, as with training).
+
+API: `GET /api/drill?repertoire_id=|opening_id=|tag_id=&count=` (random positions with the repertoire move(s), a
+line through each and the SAN path to it), `POST /api/drill/results` (`{"results": [{opening_id, position_id,
+expected_uci, correct, wrong: [uci, ...]}]}`).
+
 ## Dashboard
 
 The **Dashboard** tab (top bar), from top to bottom:
@@ -219,7 +241,7 @@ The **Dashboard** tab (top bar), from top to bottom:
 - **Problem positions**: your moves you get wrong most often in the last 90 days, grouped by position so a move
   shared by several lines counts once. Each shows the moves leading there, what you played instead, how often, and
   **Show** (puts the position on the board) / **Train** (the lines through that move). A position drops off once
-  you get it right 3 reviews in a row.
+  you get it right 3 reviews in a row. Position-drill answers count too (each answer is one review).
 - **Lines**: sort (next review, weakest, lowest streak, move order), show (all, due, not reviewed yet, recent
   mistakes, bookmarked) and search by move (`Bf5`, `3.e5`). Choices are remembered. Each line shows its next review,
   streak and last 5 results, with **☆** (bookmark), **Train**, **Show**, **Reset** (clears its history, due today)
@@ -450,6 +472,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/engine.e2e.cjs       # runs the r
 MPCT_URL=http://localhost:8010/ node tests/e2e/games.e2e.cjs        # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/play.e2e.cjs         # empty database, real engine
 MPCT_URL=http://localhost:8010/ node tests/e2e/gamefilters.e2e.cjs   # empty database (filters; reviewed game shows its graph)
+MPCT_URL=http://localhost:8010/ node tests/e2e/drill.e2e.cjs        # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/continue.e2e.cjs     # empty database, real engine (play on after a line)
 MPCT_URL=http://localhost:8010/ node tests/e2e/insights.e2e.cjs     # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/bookmarks.e2e.cjs    # empty database

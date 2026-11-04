@@ -97,6 +97,8 @@ export const api = {
     return `/api/pgn/games${qs ? `?${qs}` : ''}`;
   },
 
+  drill: (params) => request('GET', '/drill', { params }),
+  drillResults: (results) => request('POST', '/drill/results', { body: { results } }),
   evalsLookup: (fens, minMovetimeMs = 0) => request('POST', '/evals/lookup', { body: { fens, min_movetime_ms: minMovetimeMs } }),
   saveEvals: (evals) => request('POST', '/evals', { body: { evals } }),
 

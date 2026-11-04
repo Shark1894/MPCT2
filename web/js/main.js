@@ -6,6 +6,7 @@ import { BoardView } from './board.js';
 import { renderMoveList } from './movelist.js';
 import { RepertoirePanel } from './repertoire.js';
 import { TrainingController } from './training.js';
+import { DrillController } from './drill.js';
 import { DashboardView } from './dashboard.js';
 import { AnalysisPanel } from './analysis.js';
 import { GamePanel, GamesView } from './games.js';
@@ -46,19 +47,20 @@ const repertoire = new RepertoirePanel({
   onOrientation: (color) => board.setOrientation(color),
   onTrain: (opening, mode, tag) => startTraining(opening, mode, null, tag),
   onJump: (ply) => {
-    if (trainer.active) return;
+    if (locked()) return;
     game.goTo(ply);
     render();
   },
   onShowTag: (tag) => showTagPosition(tag),
 });
+repertoire.onDrill = (scope) => startDrill(scope);
 
 /**
  * Move the board to a branch tag's position. If the moves on the board already pass through
  * it, just jump there (keeping the moves after it); otherwise set up the tag's moves from the start.
  */
 async function showTagPosition(tag) {
-  if (trainer.active) return;
+  if (locked()) return;
   const key = (fen) => fen.split(' ').slice(0, 4).join(' ');
   if (key(game.startFen) === key(START_FEN)) {
     const ply = game.moves.findIndex((m) => key(m.fen) === tag.key) + 1;
@@ -157,8 +159,27 @@ const puzzles = new PuzzleController({
   },
 });
 
-/** The board belongs to a training line or an unsolved puzzle: no navigation or free moves. */
-const locked = () => trainer.active || puzzles.locked;
+const drill = new DrillController({
+  game,
+  board,
+  panel: repertoire,
+  render: () => render(),
+  onModeChange: (active) => trainingMode(active, 'Drill'),
+  onShowLine: (sans) => {
+    game.load(START_FEN);
+    for (const san of sans) if (!game.playSan(san)) break;
+    render();
+  },
+});
+
+async function startDrill(scope) {
+  if (puzzles.active) puzzles.stop();
+  if (!(await startBoardMode())) return;
+  await drill.setup(scope);
+}
+
+/** The board belongs to a training line, a drilled position or an unsolved puzzle: no navigation or free moves. */
+const locked = () => trainer.active || drill.active || puzzles.locked;
 
 const puzzlesView = new PuzzlesView({
   onStart: async (theme) => {
@@ -305,6 +326,7 @@ async function startBoardMode() {
 
 async function startTraining(opening, mode, lineId, tag, label) {
   if (puzzles.active) puzzles.stop();
+  if (drill.active) drill.stop();
   if (!(await startBoardMode())) return;
   trainer.start(opening, mode, lineId, tag, label);
 }
@@ -315,7 +337,7 @@ const VIEWS = { board: 'main.layout', dashboard: '#dashboard', games: '#games-vi
 let view = 'board';
 
 function setView(next) {
-  if (next !== 'board' && (trainer.active || puzzles.active)) return;
+  if (next !== 'board' && (trainer.active || drill.active || puzzles.active)) return;
   view = next;
   for (const [name, sel] of Object.entries(VIEWS)) {
     document.querySelector(sel).hidden = view !== name;
@@ -365,7 +387,7 @@ function moveSound() {
 function render() {
   moveSound();
   board.show(game, {
-    canMove: trainer.active ? trainer.canMove() : puzzles.locked ? puzzles.canMove() : play?.active ? play.canMove() : true,
+    canMove: trainer.active ? trainer.canMove() : drill.active ? drill.canMove() : puzzles.locked ? puzzles.canMove() : play?.active ? play.canMove() : true,
   });
   const status = game.status();
   ui.status.textContent = status.text;
@@ -429,6 +451,10 @@ async function onBoardMove(from, to) {
   }
   if (trainer.active) {
     trainer.onUserMove(from, to, promotion);
+    return;
+  }
+  if (drill.active) {
+    drill.onUserMove(from, to, promotion);
     return;
   }
   if (puzzles.locked) {
@@ -574,4 +600,4 @@ repertoire.init().then(async () => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, sounds, repertoire, trainer, puzzles, puzzlesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval };
+window.mpct = { game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval };

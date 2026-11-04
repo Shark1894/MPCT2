@@ -132,6 +132,33 @@
           </div>
         </div>
 
+        <div id="drill" class="training drill" hidden>
+          <div class="train-head">
+            <h2 id="drill-title">Position drill</h2>
+            <button id="drill-stop" type="button" class="small">Stop</button>
+          </div>
+          <p id="drill-progress" class="meta"></p>
+          <p id="drill-message" class="train-message" aria-live="polite"></p>
+          <div class="train-end-actions" id="drill-playing">
+            <button id="drill-reveal" type="button" title="Show the repertoire move (counts as missed)">Show answer</button>
+          </div>
+          <div id="drill-end" class="train-end" hidden>
+            <p id="drill-result" class="train-result" aria-live="polite"></p>
+            <div class="train-end-actions">
+              <button id="drill-next" type="button" class="primary">Next position</button>
+              <button id="drill-line" type="button" title="Play on from here to the end of a line through this position (not recorded)">Play the rest of the line</button>
+            </div>
+          </div>
+          <div id="drill-summary" class="train-summary" hidden>
+            <p id="drill-summary-text"></p>
+            <ul id="drill-missed" class="drill-missed"></ul>
+            <div class="train-end-actions">
+              <button id="drill-again" type="button" class="primary">Drill missed again</button>
+              <button id="drill-done" type="button">Done</button>
+            </div>
+          </div>
+        </div>
+
         <div id="puzzle" class="training puzzle" hidden>
           <div class="train-head">
             <h2 id="puzzle-title">Puzzle</h2>
@@ -178,6 +205,7 @@
           <div class="train-actions">
             <button id="train-due" type="button" class="primary">Train due</button>
             <button id="train-all" type="button">Train all</button>
+            <button id="train-drill" type="button" class="train-drill" title="Random positions from your repertoire, without the moves that led there (practice)">Position drill</button>
           </div>
           <details class="manage">
             <summary>Manage repertoire and opening</summary>

@@ -64,6 +64,7 @@ export class RepertoirePanel {
       build: $('rep-build'),
       trainDue: $('train-due'),
       trainAll: $('train-all'),
+      trainDrill: $('train-drill'),
       comments: $('comments'),
       tagFilter: $('train-tag'),
       tagFilterBox: $('train-tag-box'),
@@ -92,6 +93,14 @@ export class RepertoirePanel {
     e.lineDelete.addEventListener('click', () => this.deleteLines());
     e.trainDue.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'due', this.currentTag()));
     e.trainAll.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'all', this.currentTag()));
+    e.trainDrill.addEventListener('click', () =>
+      this.onDrill?.({
+        repertoire: this.repertoires.find((r) => r.id === this.repId) ?? null,
+        opening: this._opening(),
+        tags: this._opening() ? this.tags : [],
+        tag: this.currentTag(),
+      }),
+    );
     e.tagFilter.addEventListener('change', () => {
       this.setTagFilter(e.tagFilter.value ? Number(e.tagFilter.value) : null);
       const tag = this.currentTag();
@@ -270,6 +279,7 @@ export class RepertoirePanel {
     this.el.trainDue.textContent = o ? `Train due (${due})` : 'Train due';
     this.el.trainDue.disabled = !o || due === 0;
     this.el.trainAll.disabled = !o || lines === 0;
+    this.el.trainDrill.disabled = !this.repId || !this.openings.some((x) => x.lines > 0);
     if (!o) {
       this.el.openingInfo.textContent = '';
       return;
