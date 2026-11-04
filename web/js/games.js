@@ -43,6 +43,31 @@ function errorsText(c) {
   return [c.blunder ? plural(c.blunder, 'blunder') : '', c.mistake ? plural(c.mistake, 'mistake') : ''].filter(Boolean).join(', ');
 }
 
+// ---- filters ---------------------------------------------------------------------
+
+/** Result filter choices: the chosen player's own results, or results by colour. */
+export function resultOptions(player) {
+  return player
+    ? [['', 'Any result'], ['won', 'Won'], ['lost', 'Lost'], ['drawn', 'Drawn'], ['unfinished', 'Unfinished']]
+    : [['', 'Any result'], ['white', 'White won'], ['black', 'Black won'], ['draw', 'Draw'], ['unfinished', 'Unfinished']];
+}
+
+/** Filters made consistent: colour needs a player; a result carries over between the two option sets where it can. */
+export function normaliseFilters({ player = '', color = '', result = '', reviewed = '' } = {}) {
+  if (player) {
+    if (result === 'draw') result = 'drawn';
+    if (result === 'white' || result === 'black') result = '';
+  } else {
+    color = '';
+    if (result === 'drawn') result = 'draw';
+    if (result === 'won' || result === 'lost') result = '';
+  }
+  if (!resultOptions(player).some(([v]) => v === result)) result = '';
+  if (!['', 'white', 'black'].includes(color)) color = '';
+  if (!['', 'yes', 'no'].includes(reviewed)) reviewed = '';
+  return { player, color, result, reviewed };
+}
+
 /** SAN list -> "1.d4 d5 2.c4" */
 function preview(sans) {
   return sans.map((san, i) => (i % 2 === 0 ? `${i / 2 + 1}.${san}` : san)).join(' ');
@@ -58,8 +83,8 @@ export class GamePanel {
    * @param {() => void} deps.render
    * @param {() => void} deps.onClosed
    */
-  constructor({ game, getOpening, render, onClosed }) {
-    Object.assign(this, { game, getOpening, render, onClosed });
+  constructor({ game, getOpening, render, onClosed, onOpened }) {
+    Object.assign(this, { game, getOpening, render, onClosed, onOpened });
     this.current = null; // { id, saved: snapshot }
     this.el = {
       panel: $('game-panel'),
@@ -203,6 +228,7 @@ export class GamePanel {
     this.el.panel.hidden = false;
     this.render();
     this.updateState();
+    this.onOpened?.(data);
     return true;
   }
 
@@ -390,7 +416,19 @@ export class GamesView {
       reviewBar: $('games-review-bar'),
       reviewProgress: $('games-review-progress'),
       reviewStop: $('games-review-stop'),
+      player: $('games-player'),
+      color: $('games-color'),
+      result: $('games-result'),
+      reviewed: $('games-reviewed'),
+      clear: $('games-clear'),
     };
+    this.filters = normaliseFilters(store.get('gamesFilters', {}));
+    this.players = [];
+    for (const key of ['player', 'color', 'result', 'reviewed']) {
+      this.el[key].addEventListener('change', () => this.setFilters({ ...this.filters, [key]: this.el[key].value }));
+    }
+    this.el.clear.addEventListener('click', () => this.setFilters({}));
+    this._renderFilters();
     this.el.review.addEventListener('click', () => this.reviewAll());
     this.el.reviewStop.addEventListener('click', () => this.reviewer?.cancel());
     let timer;
@@ -402,23 +440,65 @@ export class GamesView {
     this.el.importPgn.addEventListener('click', () => this.importPgn());
   }
 
+  setFilters(filters) {
+    this.filters = normaliseFilters(filters);
+    store.set('gamesFilters', this.filters);
+    this._renderFilters();
+    this.refresh();
+  }
+
+  _renderFilters() {
+    const f = this.filters;
+    const e = this.el;
+    const names = this.players.map((p) => p.name);
+    e.player.innerHTML = '';
+    e.player.appendChild(new Option('All players', ''));
+    // A remembered player with no games left still shows, so the list isn't silently unfiltered.
+    if (f.player && !names.some((n) => n.toLowerCase() === f.player.toLowerCase())) e.player.appendChild(new Option(f.player, f.player));
+    for (const p of this.players) e.player.appendChild(new Option(`${p.name} (${p.games})`, p.name));
+    const match = [...e.player.options].find((o) => o.value.toLowerCase() === f.player.toLowerCase());
+    e.player.value = match ? match.value : '';
+    e.color.hidden = !f.player;
+    e.color.value = f.color;
+    e.result.innerHTML = '';
+    for (const [v, label] of resultOptions(f.player)) e.result.appendChild(new Option(label, v));
+    e.result.value = f.result;
+    e.reviewed.value = f.reviewed;
+    e.clear.hidden = !Object.values(f).some(Boolean);
+    for (const key of ['player', 'color', 'result', 'reviewed']) e[key].classList.toggle('active', Boolean(f[key]));
+  }
+
+  async _loadPlayers() {
+    try {
+      this.players = await api.gamePlayers();
+    } catch {
+      return; // the filter keeps its last list
+    }
+    this._renderFilters();
+  }
+
   async refresh() {
     const q = this.el.search.value.trim();
-    this.el.exportAll.href = api.allGamesPgnUrl(q);
+    const filters = this.filters;
+    const filtered = Boolean(q) || Object.values(filters).some(Boolean);
+    this.el.exportAll.href = api.allGamesPgnUrl(q, filters);
+    this._loadPlayers();
     let games;
     try {
-      games = await api.games(q);
+      games = await api.games(q, filters);
     } catch (err) {
       this.el.list.innerHTML = '';
       this.el.empty.hidden = false;
       this.el.empty.textContent = `Couldn't load games: ${err.message}`;
       return;
     }
-    if (q !== this.el.search.value.trim()) return; // search changed meanwhile
-    this.el.count.textContent = q ? `${plural(games.length, 'game')} found` : plural(games.length, 'game');
+    if (q !== this.el.search.value.trim() || filters !== this.filters) return; // changed meanwhile
+    this.el.count.textContent = filtered ? `${plural(games.length, 'game')} found` : plural(games.length, 'game');
     this.el.list.innerHTML = '';
     this.el.empty.hidden = games.length > 0;
-    this.el.empty.textContent = q ? 'No games match the search.' : 'No games yet. Add one with New game, or import a PGN.';
+    this.el.empty.textContent = filtered
+      ? 'No games match the search and filters.'
+      : 'No games yet. Add one with New game, or import a PGN.';
     this.el.exportAll.hidden = games.length === 0;
     for (const g of games) this.el.list.appendChild(this._row(g));
     this._reviewButton();

@@ -583,6 +583,31 @@ body.engine-on {
   gap: 8px;
 }
 
+.games-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0;
+}
+
+.games-filters select {
+  min-height: 36px;
+  max-width: 240px;
+}
+
+/* A filter that's narrowing the list stands out. */
+.games-filters select.active {
+  border-color: var(--blue);
+}
+
+@media (max-width: 640px) {
+  .games-filters select {
+    flex: 1 1 calc(50% - 4px);
+    max-width: none;
+  }
+}
+
 .games-list {
   background: var(--surface);
   border: 1px solid var(--border);

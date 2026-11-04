@@ -27,6 +27,12 @@ const SAVE_BATCH = 5;
 const SIDE = { w: 'White', b: 'Black' };
 const pct = (x) => `${Math.round(x)}%`;
 
+/** The review speed for a thinking time (the longest speed not above it; Standard if unknown). */
+export function speedFor(ms) {
+  const fits = Object.entries(SPEEDS).filter(([, s]) => s.ms <= ms);
+  return fits.length ? fits.at(-1)[0] : ms ? 'quick' : 'standard';
+}
+
 export class ReviewController {
   /**
    * @param {object} deps
@@ -165,16 +171,40 @@ export class ReviewController {
   async restore() {
     const saved = store.get('review');
     const g = this.game;
+    if (this.review) return; // already shown (a reviewed game was reopened)
     if (!saved || !reviewStillApplies(saved, g.startFen, g.moves.map((m) => m.uci))) return;
+    await this._fromSaved(saved);
+  }
+
+  /**
+   * Show the saved review of the whole game on the board (a reviewed saved game was opened):
+   * graph, move marks and summary from the stored analysis, without running the engine.
+   * movetimeMs is the review's thinking time. Returns true if shown.
+   */
+  async showSaved(movetimeMs) {
+    if (this.running || this.isBusy()) return false;
+    const g = this.game;
+    const ucis = g.moves.map((m) => m.uci);
+    if (!ucis.length) return false;
+    const r = this.review;
+    if (r && r.startFen === g.startFen && r.ucis.join(' ') === ucis.join(' ')) return true; // already showing it
+    const speed = speedFor(movetimeMs);
+    const shown = await this._fromSaved({ startFen: g.startFen, ucis, speed });
+    if (shown) this._persist();
+    return shown;
+  }
+
+  async _fromSaved(saved) {
+    const g = this.game;
     const moves = g.moves.slice(0, saved.ucis.length).map((m) => ({ san: m.san, uci: m.uci }));
     const positions = reviewPositions(g.startFen, g.moves, saved.ucis.length);
     let found;
     try {
       found = (await api.evalsLookup(positions, 0)).evals.map(normaliseEval);
     } catch {
-      return;
+      return false;
     }
-    if (!reviewStillApplies(saved, this.game.startFen, this.game.moves.map((m) => m.uci))) return; // changed meanwhile
+    if (this.running || !reviewStillApplies(saved, this.game.startFen, this.game.moves.map((m) => m.uci))) return false; // changed meanwhile
     const ms = SPEEDS[saved.speed]?.ms ?? SPEEDS.standard.ms;
     this.review = {
       startFen: g.startFen,
@@ -192,6 +222,8 @@ export class ReviewController {
     this._checkBook();
     this.el.box.hidden = false;
     this.update();
+    this.onChanged();
+    return true;
   }
 
   // ---- running -------------------------------------------------------------

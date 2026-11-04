@@ -3,6 +3,7 @@ from datetime import date
 import pytest
 
 from tests.conftest import count
+from tests.test_game_puzzles import COUNTS
 
 ITALIAN = ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5"]
 PGN_TWO = """[Event "Glasgow League"]
@@ -199,3 +200,52 @@ def test_export_all_pgn(client):
     assert r.text.count("[Event ") == 2
     only = client.get("/api/pgn/games", params={"q": "new"}).text
     assert only.count("[Event ") == 1 and '[White "New"]' in only
+
+
+def test_filters_player_colour_result(client):
+    ids = lambda **p: [g["id"] for g in client.get("/api/games", params=p).json()]  # noqa: E731
+    a = make(client, white="Jason", black="Peter", result="1-0", played_on="2026-10-04")
+    b = make(client, white="Peter", black="jason ", result="1-0", played_on="2026-10-03")
+    c = make(client, white="Jason", black="Anna", result="1/2-1/2", played_on="2026-10-02")
+    d = make(client, white="Anna", black="Peter", result="0-1", played_on="2026-10-01")
+    e = make(client, white="Anna", black="Jason", result="*", played_on="2026-09-30")
+    assert ids(player="JASON") == [a["id"], b["id"], c["id"], e["id"]]  # any case, trimmed
+    assert ids(player="jason", color="white") == [a["id"], c["id"]]
+    assert ids(player="jason", color="black") == [b["id"], e["id"]]
+    assert ids(player="jason", result="won") == [a["id"]]
+    assert ids(player="jason", result="lost") == [b["id"]]
+    assert ids(player="jason", result="drawn") == [c["id"]]
+    assert ids(player="peter", result="won") == [b["id"], d["id"]]
+    assert ids(player="jason", color="black", result="lost") == [b["id"]]
+    assert ids(result="white") == [a["id"], b["id"]]
+    assert ids(result="black") == [d["id"]]
+    assert ids(result="draw") == [c["id"]]
+    assert ids(result="unfinished") == [e["id"]]
+    assert ids(player="nobody") == []
+    assert ids(player="anna", q="peter") == [d["id"]]  # search still applies
+    # colour or own result without a player, or an unknown value, is refused
+    for bad in ({"result": "won"}, {"color": "white"}, {"result": "x"}, {"reviewed": "maybe"}, {"player": "jason", "color": "red"}):
+        assert client.get("/api/games", params=bad).status_code == 422, bad
+    pgn = client.get("/api/pgn/games", params={"player": "jason", "result": "won"}).text
+    assert pgn.count("[Event ") == 1 and '[Black "Peter"]' in pgn
+
+
+def test_players_list(client):
+    make(client, white="Jason", black="Peter")
+    make(client, white="Peter", black="Jason")
+    make(client, white="jason", black="Anna")
+    make(client, white="", black="Anna")
+    players = client.get("/api/games/players").json()
+    assert players == [{"name": "Jason", "games": 3}, {"name": "Anna", "games": 2}, {"name": "Peter", "games": 2}]
+
+
+def test_filter_reviewed(client):
+    a = make(client)
+    b = make(client, black="Peter")
+    client.post(
+        f"/api/game-reviews/{a['id']}",
+        json={"moves": ITALIAN, "movetime_ms": 300, "accuracy": {"w": 90, "b": 80}, "counts": COUNTS, "candidates": []},
+    )
+    reviewed = [g["id"] for g in client.get("/api/games", params={"reviewed": "yes"}).json()]
+    unreviewed = [g["id"] for g in client.get("/api/games", params={"reviewed": "no"}).json()]
+    assert (reviewed, unreviewed) == ([a["id"]], [b["id"]])

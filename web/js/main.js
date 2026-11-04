@@ -191,6 +191,10 @@ const gamePanel = new GamePanel({
   onClosed: () => {
     if (view === 'games') gamesView.refresh();
   },
+  // A reviewed game opens with its evaluation graph and move marks (from the saved analysis).
+  onOpened: (data) => {
+    if (data.review) review.showSaved(data.review.movetime_ms);
+  },
 });
 
 const gamesView = new GamesView({
@@ -320,6 +324,7 @@ function setView(next) {
   store.set('view', view);
   if (view === 'board') {
     board.redraw();
+    review.update(); // a graph drawn while the board was hidden is resized to its panel
     analysis.resume('away');
   } else {
     analysis.pause('away'); // the board isn't visible

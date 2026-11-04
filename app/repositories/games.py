@@ -34,9 +34,71 @@ def _summary(game: Game, n_moves: int, opening: list[str], review: dict | None =
     }
 
 
-def list_games(s: Session, q: str | None = None) -> list[dict]:
-    """All games, newest first; q searches players, teams and competition."""
-    query = select(Game)
+RESULTS = {"1-0", "0-1", "1/2-1/2", "*"}
+RESULT_FILTERS = {"white", "black", "draw", "unfinished", "won", "lost", "drawn"}
+COLOR_FILTERS = {"white", "black"}
+REVIEW_FILTERS = {"yes", "no"}
+
+
+class BadFilter(ValueError):
+    pass
+
+
+def list_players(s: Session) -> list[dict]:
+    """Every player name in the games (white or black), most games first. Names compare case-insensitively."""
+    spellings: dict[str, dict[str, int]] = {}  # lower-case name -> spelling -> games
+    for col in (Game.white, Game.black):
+        for name, n in s.execute(select(func.trim(col), func.count()).group_by(func.trim(col))).all():
+            if name:
+                by = spellings.setdefault(name.lower(), {})
+                by[name] = by.get(name, 0) + n
+    counts = {
+        key: {"name": max(by, key=lambda sp: (by[sp], sp)), "games": sum(by.values())}  # most used spelling
+        for key, by in spellings.items()
+    }
+    return sorted(counts.values(), key=lambda p: (-p["games"], p["name"].lower()))
+
+
+def _filter_query(query, player: str | None, color: str | None, result: str | None):
+    """Player (exact name, any case), the colour they played, and the result (absolute, or theirs)."""
+    player = (player or "").strip().lower() or None
+    if color and color not in COLOR_FILTERS:
+        raise BadFilter(f"Unknown colour filter: {color}")
+    if result and result not in RESULT_FILTERS:
+        raise BadFilter(f"Unknown result filter: {result}")
+    if (color or result in {"won", "lost", "drawn"}) and not player:
+        raise BadFilter("Choose a player to filter by their colour or their result")
+    is_white = func.lower(func.trim(Game.white)) == player
+    is_black = func.lower(func.trim(Game.black)) == player
+    if player:
+        query = query.where(is_white if color == "white" else is_black if color == "black" else or_(is_white, is_black))
+    absolute = {"white": "1-0", "black": "0-1", "draw": "1/2-1/2", "drawn": "1/2-1/2", "unfinished": "*"}
+    if result in absolute:
+        query = query.where(Game.result == absolute[result])
+    elif result in {"won", "lost"}:
+        white_wins = Game.result == "1-0"
+        black_wins = Game.result == "0-1"
+        if result == "won":
+            query = query.where(or_(is_white & white_wins, is_black & black_wins))
+        else:
+            query = query.where(or_(is_white & black_wins, is_black & white_wins))
+    return query
+
+
+def list_games(
+    s: Session,
+    q: str | None = None,
+    player: str | None = None,
+    color: str | None = None,
+    result: str | None = None,
+    reviewed: str | None = None,
+) -> list[dict]:
+    """All games, newest first; q searches players, teams and competition. The other filters:
+    player (exact name), color (that player's colour), result (white/black/draw/unfinished, or
+    won/lost/drawn for the player) and reviewed (yes/no: has a current engine review)."""
+    if reviewed and reviewed not in REVIEW_FILTERS:
+        raise BadFilter(f"Unknown review filter: {reviewed}")
+    query = _filter_query(select(Game), player, color, result)
     if q and q.strip():
         like = f"%{q.strip()}%"
         query = query.where(
@@ -62,6 +124,8 @@ def list_games(s: Session, q: str | None = None) -> list[dict]:
         ):
             first.setdefault(game_id, []).append(san)
     reviews = current_reviews(s, list(games))
+    if reviewed:
+        games = [g for g in games if (g.id in reviews) == (reviewed == "yes")]
     return [_summary(g, counts.get(g.id, 0), first.get(g.id, []), reviews.get(g.id)) for g in games]
 
 
@@ -126,9 +190,9 @@ def export_pgn(s: Session, game_id: int) -> str:
     return _pgn(_get(s, game_id))
 
 
-def export_all_pgn(s: Session, q: str | None = None) -> str:
-    """Every game (or those matching q), oldest first, as one PGN file."""
-    ids = [g["id"] for g in reversed(list_games(s, q))]
+def export_all_pgn(s: Session, q: str | None = None, **filters) -> str:
+    """Every game (or those matching q and the filters, as list_games), oldest first, as one PGN file."""
+    ids = [g["id"] for g in reversed(list_games(s, q, **filters))]
     return "\n".join(_pgn(_get(s, game_id)) for game_id in ids)
 
 

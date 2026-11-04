@@ -8,6 +8,11 @@ export class ApiError extends Error {
   }
 }
 
+/** Search text and game filters as query parameters, leaving out empty ones. */
+export function gameParams(q = '', filters = {}) {
+  return Object.fromEntries(Object.entries({ q, ...filters }).filter(([, v]) => v));
+}
+
 async function request(method, path, { body, params } = {}) {
   const url = new URL(`/api${path}`, window.location.origin);
   for (const [k, v] of Object.entries(params ?? {})) url.searchParams.set(k, v);
@@ -78,7 +83,8 @@ export const api = {
   setBookmark: (lineId, note = null) => request('PUT', `/lines/${lineId}/bookmark`, { body: { note } }),
   removeBookmark: (lineId) => request('DELETE', `/lines/${lineId}/bookmark`),
 
-  games: (q = '') => request('GET', '/games', { params: q ? { q } : {} }),
+  games: (q = '', filters = {}) => request('GET', '/games', { params: gameParams(q, filters) }),
+  gamePlayers: () => request('GET', '/games/players'),
   game: (id) => request('GET', `/games/${id}`),
   createGame: (data) => request('POST', '/games', { body: data }),
   updateGame: (id, data) => request('PATCH', `/games/${id}`, { body: data }),
@@ -86,7 +92,10 @@ export const api = {
   importPgn: (pgn) => request('POST', '/games/import-pgn', { body: { pgn } }),
   checkGame: (openingId, moves) => request('POST', `/openings/${openingId}/check`, { body: { moves } }),
   gamePgnUrl: (id) => `/api/games/${id}/pgn`,
-  allGamesPgnUrl: (q = '') => `/api/pgn/games${q ? `?q=${encodeURIComponent(q)}` : ''}`,
+  allGamesPgnUrl: (q = '', filters = {}) => {
+    const qs = new URLSearchParams(gameParams(q, filters)).toString();
+    return `/api/pgn/games${qs ? `?${qs}` : ''}`;
+  },
 
   evalsLookup: (fens, minMovetimeMs = 0) => request('POST', '/evals/lookup', { body: { fens, min_movetime_ms: minMovetimeMs } }),
   saveEvals: (evals) => request('POST', '/evals', { body: { evals } }),

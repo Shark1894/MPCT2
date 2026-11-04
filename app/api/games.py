@@ -4,7 +4,7 @@ import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy.orm import Session
 
@@ -96,16 +96,52 @@ class CheckOut(BaseModel):
     repertoire: list[str]
 
 
+class PlayerOut(BaseModel):
+    name: str
+    games: int
+
+
+def _filters(player, color, result, reviewed) -> dict:
+    return {"player": player, "color": color, "result": result, "reviewed": reviewed}
+
+
 @router.get("/games", response_model=list[GameSummary])
-def list_games(s: Db, q: str | None = None):
-    return repo.list_games(s, q)
+def list_games(
+    s: Db,
+    q: str | None = None,
+    player: str | None = None,
+    color: str | None = None,
+    result: str | None = None,
+    reviewed: str | None = None,
+):
+    try:
+        return repo.list_games(s, q, **_filters(player, color, result, reviewed))
+    except repo.BadFilter as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/games/players", response_model=list[PlayerOut])
+def list_players(s: Db):
+    """Player names in the games (for the filter), most games first."""
+    return repo.list_players(s)
 
 
 @router.get("/pgn/games")
-def export_all_pgn(s: Db, q: str | None = None):
-    """All games (or those matching q) as one PGN download."""
+def export_all_pgn(
+    s: Db,
+    q: str | None = None,
+    player: str | None = None,
+    color: str | None = None,
+    result: str | None = None,
+    reviewed: str | None = None,
+):
+    """All games (or those matching q and the filters) as one PGN download."""
+    try:
+        text = repo.export_all_pgn(s, q, **_filters(player, color, result, reviewed))
+    except repo.BadFilter as exc:
+        raise HTTPException(422, str(exc)) from exc
     return Response(
-        repo.export_all_pgn(s, q),
+        text,
         media_type="application/x-chess-pgn",
         headers={"Content-Disposition": 'attachment; filename="mpct-games.pgn"'},
     )

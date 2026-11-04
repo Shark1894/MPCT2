@@ -350,6 +350,14 @@ API: `GET /api/puzzles/status`, `POST /api/puzzles/import`, `GET /api/puzzles/th
 The **Games** tab lists your games newest first (date, players with teams, competition, opening moves, result),
 with a search box that matches players, teams and competition.
 
+Filters under the search box narrow the list further, and are remembered on the device:
+
+- **Player**: every name in your games, most games first (names match whatever their capitals). With a player
+  chosen, **As White / As Black** appears, and the result filter becomes theirs: **Won**, **Lost**, **Drawn**.
+- **Result** without a player: **White won**, **Black won**, **Draw**, or **Unfinished**.
+- **Reviewed** / **Not reviewed** (has a current engine review).
+- **Clear filters** resets them. Export PGN downloads exactly the filtered list.
+
 - **New game** asks for the details (date defaults to today) and can keep the moves already on the board.
 - **Import PGN** takes pasted text or a `.pgn` file. Only the main line is kept; `WhiteTeam`/`BlackTeam`, `Event`
   and `Date` tags are read. Games already in the app (same players, date and moves) are skipped, and games with
@@ -357,12 +365,15 @@ with a search box that matches players, teams and competition.
 - **Export PGN** downloads every game matching the search; **PGN** on a row downloads one game.
 - **Open** loads a game on the board. A panel above the move buttons holds its details. Play or take back moves,
   edit the details and **Save**; unsaved changes are marked, and closing the game, starting training or leaving
-  the page asks first. The open game is reopened after a reload.
+  the page asks first. The open game is reopened after a reload. A reviewed game opens with its review showing:
+  the evaluation graph, move marks and per-side summary, rebuilt from the saved analysis (no engine run).
 - **Compare with repertoire** checks the game against the selected opening and reports where it left the book,
   whose move it was and what the repertoire plays, with **Show that position**.
 
-API: `GET/POST /api/games` (`?q=` search), `GET/PATCH/DELETE /api/games/{id}`, `GET /api/games/{id}/pgn`,
-`GET /api/pgn/games?q=` (all matching games), `POST /api/games/import-pgn` (`{"pgn": "..."}`),
+API: `GET/POST /api/games` (`?q=` search; filters `player`, `color` = white|black (needs a player),
+`result` = white|black|draw|unfinished or won|lost|drawn (needs a player), `reviewed` = yes|no),
+`GET /api/games/players` (names with game counts), `GET/PATCH/DELETE /api/games/{id}`, `GET /api/games/{id}/pgn`,
+`GET /api/pgn/games` (all matching games, same search and filters), `POST /api/games/import-pgn` (`{"pgn": "..."}`),
 `POST /api/openings/{id}/check` (`{"moves": ["e2e4", ...]}`).
 
 ## Importing from the desktop app
@@ -438,6 +449,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/tags.e2e.cjs         # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/engine.e2e.cjs       # runs the real engine
 MPCT_URL=http://localhost:8010/ node tests/e2e/games.e2e.cjs        # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/play.e2e.cjs         # empty database, real engine
+MPCT_URL=http://localhost:8010/ node tests/e2e/gamefilters.e2e.cjs   # empty database (filters; reviewed game shows its graph)
 MPCT_URL=http://localhost:8010/ node tests/e2e/continue.e2e.cjs     # empty database, real engine (play on after a line)
 MPCT_URL=http://localhost:8010/ node tests/e2e/insights.e2e.cjs     # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/bookmarks.e2e.cjs    # empty database

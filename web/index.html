@@ -397,6 +397,21 @@
           <a id="games-export" class="button" href="#">Export PGN</a>
         </div>
       </div>
+      <div class="games-filters" role="group" aria-label="Filter games">
+        <select id="games-player" aria-label="Player"><option value="">All players</option></select>
+        <select id="games-color" aria-label="Colour the player had" hidden>
+          <option value="">Either colour</option>
+          <option value="white">As White</option>
+          <option value="black">As Black</option>
+        </select>
+        <select id="games-result" aria-label="Result"></select>
+        <select id="games-reviewed" aria-label="Engine review">
+          <option value="">Reviewed or not</option>
+          <option value="yes">Reviewed</option>
+          <option value="no">Not reviewed</option>
+        </select>
+        <button id="games-clear" type="button" class="small" hidden>Clear filters</button>
+      </div>
       <div class="games-review-bar">
         <p id="games-count" class="meta"></p>
         <button id="games-review" type="button" class="small" hidden>Review games</button>
