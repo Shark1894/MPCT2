@@ -373,17 +373,19 @@ class AppSetting(Base):
     value: Mapped[dict | list | str | None] = mapped_column(JSONB)
 
 
-class GameScan(Base):
-    """A game checked for your mistakes. `moves_hash` notices edits (then it's scanned again)."""
+class GameReview(Base):
+    """A finished engine review of one of your games (every position analysed). It counts only
+    while `moves_hash` matches the game's moves; editing the moves makes the game unreviewed."""
 
-    __tablename__ = "game_scans"
+    __tablename__ = "game_reviews"
 
     game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"), primary_key=True)
     moves_hash: Mapped[str] = mapped_column(String(40))
-    color: Mapped[str] = mapped_column(String(5))
     movetime_ms: Mapped[int]
-    found: Mapped[int]
-    scanned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    white_accuracy: Mapped[float | None]
+    black_accuracy: Mapped[float | None]
+    counts: Mapped[dict] = mapped_column(JSONB)  # {"w": {"inaccuracy", "mistake", "blunder"}, "b": {...}}
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class GamePuzzle(Base):
@@ -412,6 +414,7 @@ class GamePuzzle(Base):
     before: Mapped[float]  # your winning chances with the best move (0-100)
     after: Mapped[float]  # after the move you played
     label: Mapped[str] = mapped_column(String(10))  # mistake | blunder
+    dismissed: Mapped[bool] = mapped_column(server_default="false")  # removed by you: not shown again
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     streak: Mapped[int] = mapped_column(server_default="0")
     next_review_on: Mapped[date] = mapped_column(Date, server_default=func.current_date())

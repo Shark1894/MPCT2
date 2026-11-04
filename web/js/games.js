@@ -4,6 +4,8 @@
 
 import { api } from './api.js';
 import { START_FEN } from './game.js';
+import { BATCH_MS, GameReviewer } from './gamereview.js';
+import { describeDuration } from './review-core.js';
 import { confirmDialog, formDialog, plural, store, toast } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -27,6 +29,18 @@ function playersText(g) {
 
 function resultText(r) {
   return r === '1/2-1/2' ? '½-½' : r;
+}
+
+const accText = (x) => (x === null || x === undefined ? '—' : `${Math.round(x)}%`);
+
+/** "White 84% · Black 71%" from a game's review. */
+export function accuracyText(review) {
+  return `White ${accText(review.white_accuracy)} · Black ${accText(review.black_accuracy)}`;
+}
+
+/** "1 blunder, 2 mistakes" for one side's counts ('' if none). */
+function errorsText(c) {
+  return [c.blunder ? plural(c.blunder, 'blunder') : '', c.mistake ? plural(c.mistake, 'mistake') : ''].filter(Boolean).join(', ');
 }
 
 /** SAN list -> "1.d4 d5 2.c4" */
@@ -61,6 +75,7 @@ export class GamePanel {
       whiteTeamLabel: $('game-white-team-label'),
       blackTeamLabel: $('game-black-team-label'),
       competitionLabel: $('game-competition-label'),
+      reviewInfo: $('game-review-info'),
       fields: Object.fromEntries(META.map((f) => [f, $(`game-${f.replace('_', '-')}`)])),
     };
     for (const [value, label] of RESULTS) this.el.fields.result.appendChild(new Option(label, value));
@@ -180,7 +195,7 @@ export class GamePanel {
     for (const f of META) this.el.fields[f].value = data[f] ?? '';
     this.el.pgn.href = api.gamePgnUrl(id);
     this.el.compareResult.innerHTML = '';
-    this.current = { id, saved: null };
+    this.current = { id, saved: null, review: data.review, savedMoves: data.moves.map((m) => m.uci).join(' ') };
     this._setMode(false);
     this.current.saved = this._snapshot();
     store.set('openWild', null);
@@ -249,14 +264,54 @@ export class GamePanel {
     const dirty = this.isDirty();
     this.el.dirty.hidden = !dirty;
     this.el.save.disabled = !dirty;
+    this._showReview();
+  }
+
+  /** The open saved game's id and moves, if the board shows exactly its saved moves (else null). */
+  savedGameOnBoard() {
+    if (!this.isOpen || this.isWild) return null;
+    const ucis = this.game.moves.map((m) => m.uci);
+    return ucis.join(' ') === this.current.savedMoves ? { id: this.current.id, ucis } : null;
+  }
+
+  /** A review of the open game was saved (or the game's review changed). */
+  setReview(review) {
+    if (!this.isOpen || this.isWild) return;
+    this.current.review = review;
+    this._showReview();
+  }
+
+  _showReview() {
+    const box = this.el.reviewInfo;
+    if (!this.isOpen || this.isWild) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    const r = this.current.review;
+    const movesChanged = this.game.moves.map((m) => m.uci).join(' ') !== this.current.savedMoves;
+    box.classList.toggle('reviewed', Boolean(r) && !movesChanged);
+    if (movesChanged) {
+      box.textContent = 'Moves changed: save the game, then review it with the engine.';
+    } else if (r) {
+      const errs = [['White', r.counts.w], ['Black', r.counts.b]]
+        .map(([side, c]) => (errorsText(c) ? `${side} ${errorsText(c)}` : ''))
+        .filter(Boolean)
+        .join('; ');
+      box.textContent = `✓ Reviewed: accuracy ${accuracyText(r)}${errs ? ` · ${errs}` : ''}`;
+    } else {
+      box.textContent = 'Not reviewed yet: Review in the engine panel analyses every move (puzzles come from reviewed games).';
+    }
   }
 
   async save() {
     if (!this.isOpen) return;
     const body = { ...this._meta(), start_fen: this.game.startFen, moves: this.game.moves.map((m) => m.uci) };
     try {
-      await api.updateGame(this.current.id, body);
+      const saved = await api.updateGame(this.current.id, body);
       this.current.saved = this._snapshot();
+      this.current.savedMoves = body.moves.join(' ');
+      if (saved && 'review' in saved) this.current.review = saved.review;
       this.updateState();
       toast('Game saved');
     } catch (err) {
@@ -317,9 +372,11 @@ export class GamesView {
    * @param {GamePanel} deps.panel
    * @param {import('./game.js').Game} deps.game
    * @param {(id: number) => void} deps.onOpen  open a game on the board
+   * @param {{pause: Function, resume: Function}} deps.analysis  the live engine, paused while reviewing
    */
-  constructor({ panel, game, onOpen }) {
-    Object.assign(this, { panel, game, onOpen });
+  constructor({ panel, game, onOpen, analysis }) {
+    Object.assign(this, { panel, game, onOpen, analysis });
+    this.reviewer = null;
     this.el = {
       search: $('games-search'),
       list: $('games-list'),
@@ -328,7 +385,14 @@ export class GamesView {
       newGame: $('games-new'),
       importPgn: $('games-import'),
       exportAll: $('games-export'),
+      review: $('games-review'),
+      reviewBox: $('games-review-box'),
+      reviewBar: $('games-review-bar'),
+      reviewProgress: $('games-review-progress'),
+      reviewStop: $('games-review-stop'),
     };
+    this.el.review.addEventListener('click', () => this.reviewAll());
+    this.el.reviewStop.addEventListener('click', () => this.reviewer?.cancel());
     let timer;
     this.el.search.addEventListener('input', () => {
       clearTimeout(timer);
@@ -357,6 +421,81 @@ export class GamesView {
     this.el.empty.textContent = q ? 'No games match the search.' : 'No games yet. Add one with New game, or import a PGN.';
     this.el.exportAll.hidden = games.length === 0;
     for (const g of games) this.el.list.appendChild(this._row(g));
+    this._reviewButton();
+  }
+
+  async _reviewButton() {
+    let queue;
+    try {
+      queue = await api.gameReviewQueue();
+    } catch {
+      return;
+    }
+    this.queue = queue;
+    const b = this.el.review;
+    b.hidden = !queue.length || Boolean(this.reviewer);
+    b.textContent = `Review ${plural(queue.length, 'unreviewed game')}`;
+  }
+
+  /** Review every game without a current review, one after another, with the engine in this browser. */
+  async reviewAll() {
+    if (this.reviewer) return;
+    const queue = await api.gameReviewQueue().catch(() => []);
+    if (!queue.length) return;
+    const positions = queue.reduce((n, g) => n + g.moves.length + 1, 0);
+    const ok = await formDialog({
+      title: 'Review games with the engine',
+      message:
+        `Analyses every move of ${plural(queue.length, 'game')} (${plural(positions, 'position')}) at ${BATCH_MS / 1000} s per position: ` +
+        `up to ${describeDuration(Math.ceil((positions * (BATCH_MS + 150)) / 1000))}, less where positions were analysed before. ` +
+        `Each finished game gets its accuracy and its puzzles straight away; Stop keeps the games already done.\n\n` +
+        `The engine runs in this browser: keep this tab open until it finishes.`,
+      submit: 'Start',
+    });
+    if (!ok) return;
+    const e = this.el;
+    let lastRefresh = 0;
+    this.reviewer = new GameReviewer({
+      onProgress: ({ game, gameIndex, games: n, done, total }) => {
+        const frac = (gameIndex + (total ? done / total : 1)) / n;
+        e.reviewBar.style.width = `${(frac * 100).toFixed(1)}%`;
+        e.reviewProgress.textContent = `Game ${gameIndex + 1} of ${n}: ${game.white || '?'} v ${game.black || '?'}` +
+          (total ? `, position ${Math.min(done + 1, total)} of ${total}` : '');
+      },
+      onGameDone: (r) => {
+        if (this.panel.current?.id === r.game.id) api.game(r.game.id).then((g) => this.panel.setReview(g.review)).catch(() => {});
+        if (Date.now() - lastRefresh > 2000) {
+          lastRefresh = Date.now();
+          this.refresh();
+        }
+      },
+    });
+    e.review.hidden = true;
+    e.reviewBox.hidden = false;
+    e.reviewBar.style.width = '0%';
+    e.reviewProgress.textContent = 'Starting the engine…';
+    this.analysis?.pause('batch-review'); // one engine at a time
+    let wakeLock = null;
+    try {
+      wakeLock = await navigator.wakeLock?.request('screen');
+    } catch {
+      /* not allowed: fine */
+    }
+    let result = null;
+    try {
+      result = await this.reviewer.review(queue);
+    } catch (err) {
+      toast(`Review stopped: ${err.message}`, 'error');
+    } finally {
+      wakeLock?.release().catch(() => {});
+      this.analysis?.resume('batch-review');
+      this.reviewer = null;
+      e.reviewBox.hidden = true;
+    }
+    if (result) {
+      toast(`${result.cancelled ? 'Stopped. ' : ''}Reviewed ${plural(result.reviewed, 'game')}: ${plural(result.newPuzzles, 'new puzzle')} from your mistakes.`);
+    }
+    await this.refresh();
   }
 
   _row(g) {
@@ -378,7 +517,16 @@ export class GamesView {
     sub.textContent = [g.competition, g.opening.length ? `${preview(g.opening)}${g.plies > g.opening.length ? '…' : ''}` : 'No moves', g.plies ? `${Math.ceil(g.plies / 2)} moves` : '']
       .filter(Boolean)
       .join(' · ');
-    main.append(players, sub);
+    const rv = document.createElement('div');
+    if (g.review) {
+      rv.className = 'game-reviewed yes';
+      rv.textContent = `✓ Reviewed · ${accuracyText(g.review)}`;
+      rv.title = `Engine review at ${g.review.movetime_ms / 1000} s per position`;
+    } else {
+      rv.className = 'game-reviewed';
+      rv.textContent = g.plies >= 4 ? 'Not reviewed' : '';
+    }
+    main.append(players, sub, rv);
 
     const result = document.createElement('div');
     result.className = 'game-result';

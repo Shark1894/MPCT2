@@ -15,7 +15,8 @@ import { SavedEval } from './saved-eval.js';
 import { WildView } from './wild.js';
 import { Sounds, movedOneForward } from './sounds.js';
 import { PuzzleController, PuzzlesView } from './puzzles.js';
-import { isModalOpen, store, toast } from './ui.js';
+import { isModalOpen, plural, store, toast } from './ui.js';
+import { reviewComplete, reviewPayload } from './gamereview.js';
 import { api } from './api.js';
 
 const $ = (id) => document.getElementById(id);
@@ -156,7 +157,10 @@ const puzzlesView = new PuzzlesView({
     setView('board');
     puzzles.startOwn(list);
   },
-  analysis,
+  onReviewGames: () => {
+    setView('games');
+    gamesView.reviewAll();
+  },
 });
 
 // ---- games -------------------------------------------------------------------
@@ -177,6 +181,7 @@ const gamesView = new GamesView({
     if (!(await play.confirmStop())) return;
     if (await gamePanel.open(id)) setView('board');
   },
+  analysis,
 });
 
 // ---- repertoire in the wild ------------------------------------------------------
@@ -244,7 +249,29 @@ const review = new ReviewController({
   },
   onChanged: () => render(),
   onSaved: (fen, ev) => savedEval.remember(fen, ev),
+  onComplete: (r) => saveGameReview(r),
 });
+
+/** A finished review of an open saved game's moves becomes that game's review (accuracy, puzzles). */
+async function saveGameReview(r) {
+  const g = gamePanel.savedGameOnBoard();
+  if (!g || r.startFen !== game.startFen) return;
+  if (r.ucis.join(' ') !== g.ucis.join(' ')) {
+    if (g.ucis.join(' ').startsWith(r.ucis.join(' '))) {
+      toast('This review stopped at the board position. Go to the end of the game and review it to mark the game reviewed.');
+    }
+    return;
+  }
+  if (!reviewComplete(r.judged, r.ucis.length)) return;
+  try {
+    const res = await api.saveGameReview(g.id, reviewPayload(r.ucis, r.ms, r.judged, r.evals));
+    gamePanel.setReview((await api.game(g.id)).review);
+    const found = res.puzzles ? ` ${plural(res.puzzles, 'puzzle')} from your mistakes${res.new ? ` (${res.new} new)` : ''}.` : '';
+    toast(`Game marked reviewed.${found}`);
+  } catch (err) {
+    toast(`Review not saved to the game: ${err.message}`, 'error');
+  }
+}
 
 /** Training and puzzles replace the board's moves, so an open game is closed first (asking if unsaved). */
 async function startBoardMode() {

@@ -119,8 +119,17 @@ part of a game.
 - **How moves are judged**, the same for both sides, by the drop in the mover's winning chances (Lichess's curve):
   4.5+ points `?!` inaccuracy (about half a pawn from a level position; Lichess uses 10), 20+ `?` mistake,
   30+ `??` blunder. `!` = only move: the engine's best move, at least
-  20 points better than the second best. Accuracy per move uses Lichess's formula; the side's figure is the average.
+  20 points better than the second best. Accuracy per move uses Lichess's formula. Each side's game accuracy is
+  Lichess's too: the mean of (a) the move accuracies weighted by how much the winning chances swung around each move
+  and (b) their harmonic mean. A plain average (used before v0.21.0) let a long game of easy moves hide a game-losing
+  blunder and gave 95%+ to players who lost badly.
 - The review stays while you look through the moves and survives a reload; playing a different move closes it.
+- **Reviewed games:** when a review of a saved game's whole game finishes (open it from Games, go to the end, then
+  Review), the game is marked reviewed: its accuracy shows in the Games list and the game panel, and its mistakes
+  become puzzles (see Puzzles › From your games). A review that stops at an earlier move doesn't count. Editing the
+  moves makes the game unreviewed again ("Moves changed: save the game, then review it"). **Review N unreviewed
+  games** in the Games tab reviews them all one after another (1 s per position, reusing saved analysis), with
+  progress and Stop (finished games are kept).
 - **Saved evaluation**: whenever the board shows a position any review has analysed before (in any game or line,
   however it was reached), the engine panel shows White's winning chances and the score, even with the review
   closed. Hidden while the review panel is open or the live engine is on (they show the evaluation themselves), in
@@ -300,23 +309,25 @@ The **Puzzles** tab: tactics from the [Lichess puzzle database](https://database
 
 The **From your games** card on the Puzzles tab turns your own mistakes into puzzles.
 
-- **Finding them:** **Find puzzles in my games** checks each saved game not yet checked (or edited since) with the
-  engine in the browser, about a second per position, reusing analysis already saved (by **Review**, say) and saving
-  what it works out for next time. **Stop** keeps the games finished so far. A move becomes a puzzle when it was
-  yours, lost at least 20 points of winning chances (a mistake; 30 is a blunder), there was one clearly best move
-  (20 points better than the next), you weren't already losing (under 15%), and it isn't a move from your repertoire.
+- **Where they come from:** only games reviewed with the engine (see Engine review › Reviewed games). The card
+  says how many of your games are reviewed, and **Review them** goes to the Games tab to review the rest. A move
+  becomes a puzzle when it lost at least 20 points of winning chances (a mistake; 30 is a blunder), there was one
+  clearly best move (20 points better than the next), the player wasn't already losing (under 15%), and it isn't a
+  move from your repertoire. Both sides' mistakes are kept; the ones on your side are shown.
 - **Which side was you:** the names you play under, set with **Change** (your Lichess username, your name in PGNs…);
-  guessed from the name in most of your games until you set them. Games where neither player matches are skipped.
+  guessed from the name in most of your games until you set them. Changing them needs no new review. Reviewed games
+  where neither player matches give no puzzles (the card counts them).
 - **Practising:** spaced repetition, the same schedule as your repertoire lines. **Practise due** gives today's;
   **Practise all** the lot in random order; or **Practise** one from the list. The board starts just before your
   move, after the opponent's move: find the best one. Only your first go in a session counts; **Retry** is practice.
   Afterwards: when it's next due, what you played and what it cost, the engine's line, and **Open the game** at that
-  move. **Remove** drops one that isn't useful.
+  move. **Remove** drops one that isn't useful, for good (reviewing the game again won't bring it back).
 
-API: `GET /api/game-puzzles/status`, `GET /api/game-puzzles/summary`, `PUT /api/game-puzzles/names`
-(`{"names"}`), `POST /api/game-puzzles/scans` (`{"game_id", "moves_hash", "movetime_ms", "candidates"}`),
-`POST /api/game-puzzles/rescan`, `GET /api/game-puzzles?due=&game_id=`, `POST /api/game-puzzles/{id}/reviews`
-(`{"correct"}`), `DELETE /api/game-puzzles/{id}`.
+API: `GET /api/game-reviews/queue` (games without a current review), `POST /api/game-reviews/{game_id}`
+(`{"moves", "movetime_ms", "accuracy": {"w", "b"}, "counts", "candidates"}`; `moves` must be the game's saved moves),
+`GET /api/game-puzzles/status`, `PUT /api/game-puzzles/names` (`{"names"}`), `GET /api/game-puzzles?due=&game_id=`,
+`POST /api/game-puzzles/{id}/reviews` (`{"correct"}`), `DELETE /api/game-puzzles/{id}`. Games include `review`
+(accuracy, counts) when they have a current one.
 
 The test-site refresh (`scripts/refresh_test_db.sh`) leaves the puzzle database out; download it there separately if
 you want puzzles on the test site.
@@ -424,7 +435,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/review.e2e.cjs       # empty data
 # empty database, server started with WILD_FETCH=false; loads games with the import tool:
 MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/wild.e2e.cjs
 MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/puzzles.e2e.cjs   # empty database
-MPCT_URL=http://localhost:8010/ node tests/e2e/gamepuzzles.e2e.cjs  # empty database, real engine
+MPCT_URL=http://localhost:8010/ node tests/e2e/gamepuzzles.e2e.cjs  # empty database, real engine (reviews + puzzles)
 ```
 
 ## Deploy on the home server

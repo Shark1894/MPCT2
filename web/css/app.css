@@ -2709,19 +2709,13 @@ body.puzzle-locked .engine {
   margin: 0 0 10px;
 }
 
-#gp-bar {
-  height: 100%;
-  width: 0;
-  background: var(--copper);
-  transition: width 0.4s;
-}
-
-.gp-progress-box {
-  margin: 0 0 10px;
-}
-
-.gp-progress-box p {
+.gp-reviewed {
+  font-size: 13px;
   margin: 0 0 6px;
+}
+
+.gp-warn {
+  color: var(--copper);
 }
 
 .gp-names {
@@ -2771,6 +2765,55 @@ body.puzzle-locked .engine {
 
 .pz-mark.warn { color: var(--copper); font-weight: 700; }
 .gp-row .pz-mark.bad { color: var(--error); }
+
+/* engine reviews of games */
+.games-review-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+}
+
+.games-review-bar p {
+  margin: 0;
+}
+
+.games-review-box {
+  margin: 0 0 12px;
+}
+
+.games-review-box p {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+#games-review-bar {
+  height: 100%;
+  width: 0;
+  background: var(--blue);
+  transition: width 0.4s;
+}
+
+.game-reviewed {
+  font-size: 12px;
+  color: var(--copper);
+  margin-top: 2px;
+}
+
+.game-reviewed.yes {
+  color: var(--ok);
+}
+
+.game-review-info {
+  font-size: 13px;
+  margin: 0 0 8px;
+  color: var(--copper);
+}
+
+.game-review-info.reviewed {
+  color: var(--ok);
+}
 
 @media (max-width: 600px) {
   .pz-start,

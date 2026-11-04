@@ -129,6 +129,8 @@ export function judgeMoves(positions, moves, evals) {
       side,
       san: move.san,
       uci: move.uci,
+      whiteBefore: wBefore, // White's winning chances before and after the move (for game accuracy)
+      whiteAfter: wAfter,
       before: moverBefore, // mover's winning chances with best play
       after: moverAfter, // mover's winning chances after the move played
       loss,
@@ -141,22 +143,55 @@ export function judgeMoves(positions, moves, evals) {
   });
 }
 
-/** Per-side totals: label counts, average accuracy, moves judged. */
+const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+const stdDev = (xs) => {
+  const m = mean(xs);
+  return Math.sqrt(mean(xs.map((x) => (x - m) ** 2)));
+};
+
+/**
+ * Lichess's game accuracy for each side from judged moves (in game order). A plain average lets a
+ * long game of easy moves hide a game-losing blunder, so, as on Lichess, it's the mean of
+ *  - a weighted mean of move accuracies, each weighted by how much White's winning chances swung
+ *    around that move (standard deviation over a window, 0.5..12), so critical moments count most;
+ *  - the harmonic mean of move accuracies, which a single very bad move drags right down.
+ * Returns { w, b } (null for a side with no judged moves).
+ */
+export function gameAccuracy(judged) {
+  const moves = judged.filter(Boolean);
+  const out = { w: null, b: null };
+  if (!moves.length) return out;
+  const series = [moves[0].whiteBefore, ...moves.map((m) => m.whiteAfter)];
+  const size = Math.max(2, Math.min(8, Math.floor(series.length / 10)));
+  const head = series.slice(0, size);
+  const windows = [];
+  for (let i = 0; i < size - 2; i++) windows.push(head);
+  for (let i = 0; i + size <= series.length; i++) windows.push(series.slice(i, i + size));
+  while (windows.length < moves.length) windows.push(series); // very short games
+  const weights = windows.map((w) => Math.max(0.5, Math.min(12, stdDev(w))));
+  for (const side of ['w', 'b']) {
+    const mine = moves.map((m, i) => [m, weights[i]]).filter(([m]) => m.side === side);
+    if (!mine.length) continue;
+    const weighted = mine.reduce((a, [m, w]) => a + m.accuracy * w, 0) / mine.reduce((a, [, w]) => a + w, 0);
+    const harmonic = mine.length / mine.reduce((a, [m]) => a + 1 / Math.max(1, m.accuracy), 0);
+    out[side] = (weighted + harmonic) / 2;
+  }
+  return out;
+}
+
+/** Per-side totals: label counts, game accuracy (see gameAccuracy), moves judged. */
 export function summarise(judged) {
   const blank = () => ({ moves: 0, inaccuracy: 0, mistake: 0, blunder: 0, only: 0, best: 0, accuracy: null });
   const out = { w: blank(), b: blank() };
-  const acc = { w: [], b: [] };
   for (const j of judged) {
     if (!j) continue;
     const s = out[j.side];
     s.moves += 1;
     if (j.label) s[j.label] += 1;
     if (j.isBest) s.best += 1;
-    acc[j.side].push(j.accuracy);
   }
-  for (const side of ['w', 'b']) {
-    if (acc[side].length) out[side].accuracy = acc[side].reduce((a, b) => a + b, 0) / acc[side].length;
-  }
+  const game = gameAccuracy(judged);
+  for (const side of ['w', 'b']) out[side].accuracy = game[side];
   return out;
 }
 

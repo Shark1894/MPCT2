@@ -10,6 +10,7 @@ from app.core.pgn import ParsedGame, parse_pgn, to_pgn
 from app.core.positions import InvalidPosition, position_key, walk_line
 from app.core.scheduling import user_plays_ply
 from app.db.models import Game, GameMove, Line, Move, Position
+from app.repositories.game_puzzles import current_reviews
 from app.repositories.repertoire import NotFound, get_opening
 
 META_FIELDS = ("white", "black", "white_team", "black_team", "competition", "played_on", "result")
@@ -22,13 +23,14 @@ def _get(s: Session, game_id: int) -> Game:
     return game
 
 
-def _summary(game: Game, n_moves: int, opening: list[str]) -> dict:
+def _summary(game: Game, n_moves: int, opening: list[str], review: dict | None = None) -> dict:
     return {
         "id": game.id,
         **{f: getattr(game, f) for f in META_FIELDS},
         "start_fen": game.start_fen,
         "plies": n_moves,
         "opening": opening,
+        "review": review,  # the current engine review (None = not reviewed, or moves changed since)
     }
 
 
@@ -59,13 +61,15 @@ def list_games(s: Session, q: str | None = None) -> list[dict]:
             .order_by(GameMove.game_id, GameMove.ply)
         ):
             first.setdefault(game_id, []).append(san)
-    return [_summary(g, counts.get(g.id, 0), first.get(g.id, [])) for g in games]
+    reviews = current_reviews(s, list(games))
+    return [_summary(g, counts.get(g.id, 0), first.get(g.id, []), reviews.get(g.id)) for g in games]
 
 
 def get_game(s: Session, game_id: int) -> dict:
     game = _get(s, game_id)
     moves = [{"ply": m.ply, "uci": m.uci, "san": m.san} for m in game.moves]
-    return {**_summary(game, len(moves), [m["san"] for m in moves[:6]]), "moves": moves}
+    review = current_reviews(s, [game], {game.id: [m["uci"] for m in moves]}).get(game.id)
+    return {**_summary(game, len(moves), [m["san"] for m in moves[:6]], review), "moves": moves}
 
 
 def _store_moves(s: Session, game: Game, ucis: list[str]) -> None:

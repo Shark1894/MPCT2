@@ -11,6 +11,7 @@ import {
   reviewPositions,
   reviewStillApplies,
   summarise,
+  gameAccuracy,
   terminalEval,
   winChance,
 } from '../../web/js/review-core.js';
@@ -154,4 +155,27 @@ test('inaccuracy starts at a 4.5-point drop: half a pawn from a level position',
   assert.equal(at(50).label, 'inaccuracy'); // +0.50: ~4.6
   assert.equal(at(210).label, 'inaccuracy'); // +2.10: ~18.4
   assert.equal(at(280).label, 'mistake'); // +2.80: ~23.7
+});
+
+test('game accuracy: one game-losing blunder among easy moves is not 97%', () => {
+  // White plays 30 accurate moves holding a level position, then blunders it away (50 → 5).
+  const judged = [];
+  for (let i = 0; i < 60; i++) {
+    const side = i % 2 ? 'b' : 'w';
+    judged.push({ side, whiteBefore: 50, whiteAfter: 50, accuracy: moveAccuracy(0) });
+  }
+  judged.push({ side: 'w', whiteBefore: 50, whiteAfter: 5, accuracy: moveAccuracy(45) });
+  for (let i = 0; i < 6; i++) judged.push({ side: i % 2 ? 'w' : 'b', whiteBefore: 5, whiteAfter: 5, accuracy: moveAccuracy(0) });
+  const plain = judged.filter((j) => j.side === 'w').reduce((a, j) => a + j.accuracy, 0) / judged.filter((j) => j.side === 'w').length;
+  const acc = gameAccuracy(judged);
+  assert.ok(plain > 96, `plain average ${plain}`);
+  assert.ok(acc.w < 82, `white ${acc.w}`); // about 80, as Lichess would give
+  assert.ok(acc.b > 99, `black ${acc.b}`);
+});
+
+test('game accuracy: perfect play is 100, nothing judged is null', () => {
+  const judged = [0, 1, 2, 3].map((i) => ({ side: i % 2 ? 'b' : 'w', whiteBefore: 60, whiteAfter: 60, accuracy: moveAccuracy(0) }));
+  const acc = gameAccuracy(judged);
+  assert.ok(Math.abs(acc.w - 100) < 0.01 && Math.abs(acc.b - 100) < 0.01);
+  assert.deepEqual(gameAccuracy([null]), { w: null, b: null });
 });

@@ -1,7 +1,7 @@
 """Games API: list/search, create, update, delete, PGN import/export, repertoire check."""
 
 import re
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Response
@@ -47,11 +47,26 @@ class GamePatch(BaseModel):
     moves: list[Uci] | None = Field(default=None, max_length=1000)
 
 
+class SideCountsOut(BaseModel):
+    inaccuracy: int
+    mistake: int
+    blunder: int
+
+
+class GameReviewInfo(BaseModel):
+    white_accuracy: float | None
+    black_accuracy: float | None
+    counts: dict[str, SideCountsOut]
+    movetime_ms: int
+    reviewed_at: datetime
+
+
 class GameSummary(GameMeta):
     id: int
     start_fen: str | None
     plies: int
     opening: list[str]  # first few moves (SAN)
+    review: GameReviewInfo | None = None  # current engine review
 
 
 class GameOut(GameSummary):

@@ -5,7 +5,6 @@
 import { api } from './api.js';
 import { Chess } from '../vendor/chess.js/chess.js';
 import { PuzzleRun, historyPath } from './puzzle.js';
-import { GameScanner } from './gamescan.js';
 import { confirmDialog, daysFromToday, formDialog, plural, store, toast } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -443,11 +442,10 @@ export class PuzzlesView {
    * @param {(theme: string|null) => void} deps.onStart
    * @param {(puzzleId: string) => void} deps.onRetry
    * @param {(list: object[]) => void} deps.onStartOwn     practise puzzles from your games
-   * @param {{pause: Function, resume: Function}} deps.analysis  the live engine, paused while scanning
+   * @param {() => void} deps.onReviewGames               go and review the games not reviewed yet
    */
-  constructor({ onStart, onRetry, onStartOwn, analysis }) {
-    Object.assign(this, { onStart, onRetry, onStartOwn, analysis });
-    this.scanner = null;
+  constructor({ onStart, onRetry, onStartOwn, onReviewGames }) {
+    Object.assign(this, { onStart, onRetry, onStartOwn, onReviewGames });
     this.visible = false;
     this.timer = null;
     this.el = {
@@ -468,18 +466,13 @@ export class PuzzlesView {
       gpText: $('gp-text'),
       gpDue: $('gp-due'),
       gpAll: $('gp-all'),
-      gpScan: $('gp-scan'),
-      gpProgressBox: $('gp-progress-box'),
-      gpBar: $('gp-bar'),
-      gpProgress: $('gp-progress'),
-      gpCancel: $('gp-cancel'),
+      gpReviewed: $('gp-reviewed'),
       gpNames: $('gp-names'),
       gpList: $('gp-list'),
     };
     this.el.gpDue.addEventListener('click', () => this.practiseOwn(true));
     this.el.gpAll.addEventListener('click', () => this.practiseOwn(false));
-    this.el.gpScan.addEventListener('click', () => this.scanGames());
-    this.el.gpCancel.addEventListener('click', () => this.scanner?.cancel());
+
     this.el.start.addEventListener('click', () => this.onStart(this.el.theme.value || null));
     this.el.theme.addEventListener('change', () => store.set('puzzleTheme', this.el.theme.value));
     this.el.import.addEventListener('click', () => this.startImport());
@@ -515,17 +508,32 @@ export class PuzzlesView {
     const due = list.filter((p) => daysFromToday(p.next_review_on) <= 0).length;
     e.gpText.textContent = list.length
       ? `${plural(list.length, 'puzzle')} from your games, ${due} due today.`
-      : st.scanned
-        ? 'No mistakes found in your games so far. Well played, or play more games.'
-        : 'Find the moves where you went wrong in your own games, then practise them like your repertoire lines.';
-    e.gpDue.disabled = !due || Boolean(this.scanner);
+      : st.reviewed
+        ? 'No mistakes of yours in your reviewed games so far.'
+        : 'Your mistakes in your own games, practised like your repertoire lines. They come from games reviewed with the engine.';
+    e.gpDue.disabled = !due;
     e.gpDue.textContent = due ? `Practise due (${due})` : 'Nothing due';
-    e.gpAll.disabled = !list.length || Boolean(this.scanner);
-    const n = st.to_scan.length;
-    e.gpScan.disabled = !n || Boolean(this.scanner);
-    e.gpScan.textContent = n ? `Find puzzles in my games (${plural(n, 'game')})` : 'All games checked';
+    e.gpAll.disabled = !list.length;
+    this._reviewed(st);
     this._names(st);
     this._ownList(list);
+  }
+
+  _reviewed(st) {
+    const box = this.el.gpReviewed;
+    box.innerHTML = '';
+    if (!st.games) {
+      box.textContent = 'No games yet: add or import games in the Games tab, then review them.';
+      return;
+    }
+    box.append(el('span', '', `${st.reviewed} of ${plural(st.games, 'game')} reviewed. `));
+    if (st.unreviewed) {
+      box.append(el('span', 'gp-warn', `${plural(st.unreviewed, 'game')} not reviewed yet: no puzzles from ${st.unreviewed === 1 ? 'it' : 'them'} until ${st.unreviewed === 1 ? 'it is' : 'they are'}. `));
+      const go = el('button', 'link-button', st.unreviewed === 1 ? 'Review it' : 'Review them');
+      go.type = 'button';
+      go.addEventListener('click', () => this.onReviewGames());
+      box.appendChild(go);
+    }
   }
 
   _names(st) {
@@ -537,8 +545,8 @@ export class PuzzlesView {
     change.type = 'button';
     change.addEventListener('click', () => this.changeNames());
     box.appendChild(change);
-    if (st.unknown.length) {
-      box.append(el('span', 'meta', ` · ${plural(st.unknown.length, 'game')} where neither player matches: skipped.`));
+    if (st.unknown) {
+      box.append(el('span', 'meta', ` · ${plural(st.unknown, 'reviewed game')} where neither player matches: no puzzles from ${st.unknown === 1 ? 'it' : 'them'}.`));
     }
   }
 
@@ -575,7 +583,7 @@ export class PuzzlesView {
       go.addEventListener('click', () => this.onStartOwn([p]));
       const rm = el('button', 'small', 'Remove');
       rm.type = 'button';
-      rm.title = 'Not a useful puzzle: remove it (it won’t come back unless the game is rescanned)';
+      rm.title = 'Not a useful puzzle: remove it for good';
       rm.addEventListener('click', async () => {
         if (!(await confirmDialog('Remove puzzle', `Remove the puzzle from move ${p.move_number} v ${p.opponent || '?'}?`, 'Remove'))) return;
         try {
@@ -605,45 +613,6 @@ export class PuzzlesView {
     }
     if (!dueOnly) list.sort(() => Math.random() - 0.5);
     this.onStartOwn(list);
-  }
-
-  async scanGames() {
-    const games = this.ownStatus?.to_scan ?? [];
-    if (!games.length || this.scanner) return;
-    const e = this.el;
-    let newOnes = 0;
-    this.scanner = new GameScanner({
-      onProgress: ({ game, gameIndex, games: n, done, total }) => {
-        const frac = (gameIndex + (total ? done / total : 1)) / n;
-        e.gpBar.style.width = `${(frac * 100).toFixed(1)}%`;
-        e.gpProgress.textContent = `Game ${gameIndex + 1} of ${n}: ${game.white} v ${game.black}, position ${done + 1} of ${total}`;
-      },
-      onGameDone: (r) => (newOnes += r.new),
-    });
-    e.gpProgressBox.hidden = false;
-    e.gpBar.style.width = '0%';
-    e.gpProgress.textContent = 'Starting the engine…';
-    e.gpScan.disabled = e.gpDue.disabled = e.gpAll.disabled = true;
-    this.analysis?.pause('scan'); // one engine at a time
-    let wakeLock = null;
-    try {
-      wakeLock = await navigator.wakeLock?.request('screen');
-    } catch {
-      /* not allowed: fine */
-    }
-    let result = null;
-    try {
-      result = await this.scanner.scan(games);
-    } catch (err) {
-      toast(`Scan stopped: ${err.message}`, 'error');
-    } finally {
-      wakeLock?.release().catch(() => {});
-      this.analysis?.resume('scan');
-      this.scanner = null;
-      e.gpProgressBox.hidden = true;
-    }
-    if (result) toast(`${result.cancelled ? 'Stopped. ' : ''}${plural(newOnes, 'new puzzle')} from your games.`);
-    await this.loadOwn();
   }
 
   hide() {

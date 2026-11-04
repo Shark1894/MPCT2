@@ -24,7 +24,7 @@ from app.core.positions import InvalidLine, InvalidPosition
 from app.db.session import DatabaseNotConfigured, database_status
 from app.repositories.repertoire import Conflict, NotFound
 from app.repositories.tags import InvalidTag
-from app.repositories.game_puzzles import InvalidScan
+from app.repositories.game_puzzles import InvalidGameReview
 from app.repositories.puzzles import InvalidPuzzle, PuzzlesUnavailable
 from app.repositories.training import InvalidReview
 
@@ -89,10 +89,10 @@ def create_app() -> FastAPI:
     app.add_exception_handler(Conflict, _error(409))
     app.add_exception_handler(InvalidLine, _error(422))
     app.add_exception_handler(InvalidPosition, _error(422))
-    app.add_exception_handler(InvalidReview, _error(422))
+    app.add_exception_handler(InvalidGameReview, _error(422))
     app.add_exception_handler(InvalidTag, _error(422))
     app.add_exception_handler(InvalidPuzzle, _error(422))
-    app.add_exception_handler(InvalidScan, _error(422))
+    app.add_exception_handler(InvalidReview, _error(422))
     app.add_exception_handler(PuzzlesUnavailable, _error(409))
     app.add_exception_handler(DatabaseNotConfigured, _error(503))
 
@@ -129,6 +129,7 @@ def create_app() -> FastAPI:
     app.include_router(wild.router)
     app.include_router(puzzles.router)
     app.include_router(game_puzzles.router)
+    app.include_router(game_puzzles.reviews_router)
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     @app.get("/index.html", response_class=HTMLResponse, include_in_schema=False)

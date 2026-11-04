@@ -49,6 +49,7 @@
           <span id="game-dirty" class="game-dirty" hidden>Unsaved</span>
         </div>
         <p id="game-source" class="meta game-source" hidden></p>
+        <p id="game-review-info" class="game-review-info" hidden></p>
         <details class="game-details" open>
           <summary>Details</summary>
           <div class="game-fields">
@@ -394,7 +395,15 @@
           <a id="games-export" class="button" href="#">Export PGN</a>
         </div>
       </div>
-      <p id="games-count" class="meta"></p>
+      <div class="games-review-bar">
+        <p id="games-count" class="meta"></p>
+        <button id="games-review" type="button" class="small" hidden>Review games</button>
+      </div>
+      <div id="games-review-box" class="games-review-box" hidden>
+        <div class="pz-progress"><div id="games-review-bar"></div></div>
+        <p id="games-review-progress" class="meta" aria-live="polite"></p>
+        <button id="games-review-stop" type="button" class="small">Stop</button>
+      </div>
       <div id="games-list" class="games-list"></div>
       <p id="games-empty" class="dash-empty" hidden></p>
     </main>
@@ -462,13 +471,8 @@
         <div class="gp-buttons">
           <button id="gp-due" type="button" class="primary">Practise due</button>
           <button id="gp-all" type="button">Practise all</button>
-          <button id="gp-scan" type="button">Find puzzles in my games</button>
         </div>
-        <div id="gp-progress-box" class="gp-progress-box" hidden>
-          <div class="pz-progress"><div id="gp-bar"></div></div>
-          <p id="gp-progress" class="meta" aria-live="polite"></p>
-          <button id="gp-cancel" type="button" class="small">Stop</button>
-        </div>
+        <p id="gp-reviewed" class="meta gp-reviewed"></p>
         <p id="gp-names" class="meta gp-names"></p>
         <ul id="gp-list" class="gp-list"></ul>
       </section>

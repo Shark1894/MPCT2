@@ -1,13 +1,17 @@
-"""Puzzles from your own games: which games to scan, storing the mistakes the browser's
-engine found, and practising them with spaced repetition (the repertoire's schedule).
+"""Engine reviews of your games, and puzzles from your mistakes in them.
 
+A game counts as reviewed once the browser has analysed every position in it (the server
+is too small for Stockfish) and sent the result here: each side's accuracy, the counts of
+inaccuracies, mistakes and blunders, and the candidate mistakes (moves that lost a lot,
+where one move was clearly best). A review stays current while the game's moves are
+unchanged.
+
+Puzzles come only from reviewed games: the candidates are kept for both sides, minus moves
+in your repertoire and positions already lost, and the ones shown are those on your side.
 Your side in a game is the one whose player name is one of "your names" (an app setting;
-by default the name that appears in most of your games, plus "You", which games against
-the engine use). The browser analyses the games (the server is too small for Stockfish)
-and sends back candidate mistakes; the server drops moves that are in your repertoire and
-positions you were already losing, works out the SAN and the opponent's previous move
-(to show the puzzle like a Lichess one), and keeps the review history when a game is
-scanned again.
+by default the name in most of your games, plus "You", which games against the engine
+use), so changing your names needs no new review. Puzzles are practised with spaced
+repetition (the repertoire's schedule); history is kept when a game is reviewed again.
 """
 
 import hashlib
@@ -15,22 +19,23 @@ from collections import Counter
 from datetime import date, datetime, timezone
 
 import chess
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.positions import position_key
 from app.core.scheduling import next_review_on, next_streak
-from app.db.models import AppSetting, Game, GameMove, GamePuzzle, GameScan, Line, Move, Opening, Position
+from app.db.models import AppSetting, Game, GameMove, GamePuzzle, GameReview, Line, Move, Opening, Position
 from app.repositories.repertoire import NotFound
 
-ALREADY_LOST = 15.0  # your winning chances (with best play) below this: no puzzle
+ALREADY_LOST = 15.0  # the mover's winning chances (with best play) below this: no puzzle
 MIN_LOSS = 20.0  # mistakes and blunders (Jason's choice)
 BLUNDER = 30.0
+MIN_PLIES = 4  # shorter games aren't worth reviewing for puzzles
 ENGINE_NAMES = ("Stockfish",)  # games vs the engine: the other side is never you
 LIST_LIMIT = 200
 
 
-class InvalidScan(ValueError):
+class InvalidGameReview(ValueError):
     pass
 
 
@@ -83,7 +88,7 @@ def my_color(game: Game, names: list[str]) -> str | None:
     return None
 
 
-# ---- games to scan --------------------------------------------------------------------------
+# ---- reviews ----------------------------------------------------------------------------------
 
 
 def moves_hash(start_fen: str | None, ucis: list[str]) -> str:
@@ -100,46 +105,49 @@ def _game_moves(s: Session, game_ids: list[int]) -> dict[int, list[str]]:
     return out
 
 
-def scan_status(s: Session) -> dict:
-    """Games still to scan (new or edited since), and games where your side isn't known."""
-    names, set_by_you = my_names(s)
-    games = s.scalars(select(Game).order_by(Game.played_on.desc().nulls_last(), Game.id.desc())).all()
-    moves = _game_moves(s, [g.id for g in games])
-    scans = {sc.game_id: sc for sc in s.scalars(select(GameScan)).all()}
-    todo, unknown = [], []
-    for g in games:
-        if len(moves[g.id]) < 4:
-            continue
-        color = my_color(g, names)
-        if color is None:
-            unknown.append({"id": g.id, "white": g.white, "black": g.black})
-            continue
-        h = moves_hash(g.start_fen, moves[g.id])
-        if g.id in scans and scans[g.id].moves_hash == h:
-            continue
-        todo.append(
-            {
-                "id": g.id,
-                "white": g.white,
-                "black": g.black,
-                "played_on": g.played_on,
-                "competition": g.competition,
-                "color": color,
-                "start_fen": g.start_fen or chess.STARTING_FEN,
-                "moves": moves[g.id],
-                "moves_hash": h,
-            }
-        )
+def _review_dict(r: GameReview) -> dict:
     return {
-        "names": names,
-        "names_set": set_by_you,
-        "to_scan": todo,
-        "unknown": unknown,
-        "scanned": len(scans),
+        "white_accuracy": r.white_accuracy,
+        "black_accuracy": r.black_accuracy,
+        "counts": r.counts,
+        "movetime_ms": r.movetime_ms,
+        "reviewed_at": r.reviewed_at,
     }
 
 
-# ---- storing a scan -------------------------------------------------------------------------------
+def current_reviews(s: Session, games: list[Game], moves: dict[int, list[str]] | None = None) -> dict[int, dict]:
+    """game id -> its review, for games whose review still matches their moves."""
+    ids = [g.id for g in games]
+    if not ids:
+        return {}
+    reviews = {r.game_id: r for r in s.scalars(select(GameReview).where(GameReview.game_id.in_(ids))).all()}
+    if not reviews:
+        return {}
+    moves = moves if moves is not None else _game_moves(s, list(reviews))
+    return {
+        g.id: _review_dict(reviews[g.id])
+        for g in games
+        if g.id in reviews and reviews[g.id].moves_hash == moves_hash(g.start_fen, moves.get(g.id, []))
+    }
+
+
+def review_queue(s: Session) -> list[dict]:
+    """Games (with at least MIN_PLIES moves) that have no current review, newest first."""
+    games = s.scalars(select(Game).order_by(Game.played_on.desc().nulls_last(), Game.id.desc())).all()
+    moves = _game_moves(s, [g.id for g in games])
+    done = current_reviews(s, games, moves)
+    return [
+        {
+            "id": g.id,
+            "white": g.white,
+            "black": g.black,
+            "played_on": g.played_on,
+            "start_fen": g.start_fen or chess.STARTING_FEN,
+            "moves": moves[g.id],
+        }
+        for g in games
+        if g.id not in done and len(moves[g.id]) >= MIN_PLIES
+    ]
 
 
 def _in_repertoire(s: Session, key: str, uci: str, color: str) -> bool:
@@ -159,27 +167,30 @@ def _san(board: chess.Board, uci: str) -> str:
     try:
         move = chess.Move.from_uci(uci)
     except ValueError as exc:
-        raise InvalidScan(f"'{uci}' is not a move") from exc
+        raise InvalidGameReview(f"'{uci}' is not a move") from exc
     if move not in board.legal_moves:
-        raise InvalidScan(f"{uci} is illegal here")
+        raise InvalidGameReview(f"{uci} is illegal here")
     return board.san(move)
 
 
-def save_scan(s: Session, game_id: int, sent_hash: str, movetime_ms: int, candidates: list[dict]) -> dict:
-    """Store the mistakes found in a game. candidates: [{ply, best_uci, best_pv, before, after}]
-    for your moves; everything else is worked out here from the game itself."""
+def save_review(
+    s: Session,
+    game_id: int,
+    ucis_sent: list[str],
+    movetime_ms: int,
+    accuracy: dict,
+    counts: dict,
+    candidates: list[dict],
+) -> dict:
+    """Store a finished review of a game. candidates: [{ply, best_uci, best_pv, before, after}]
+    for either side (before/after = the mover's winning chances); the rest is worked out here."""
     game = s.get(Game, game_id)
     if game is None:
         raise NotFound(f"Game {game_id} not found")
-    names, _ = my_names(s)
-    color = my_color(game, names)
-    if color is None:
-        raise InvalidScan("Your side in this game isn't known: check your names")
     ucis = _game_moves(s, [game_id])[game_id]
-    if moves_hash(game.start_fen, ucis) != sent_hash:
-        raise InvalidScan("The game has changed since it was analysed: scan it again")
+    if ucis_sent != ucis:
+        raise InvalidGameReview("These aren't the game's saved moves: save the game, then review it")
 
-    # Replay the game: the position before each move, and the move that led to it.
     board = chess.Board(game.start_fen or chess.STARTING_FEN)
     fens = []
     for uci in ucis:
@@ -191,10 +202,8 @@ def save_scan(s: Session, game_id: int, sent_hash: str, movetime_ms: int, candid
     for c in candidates:
         ply = int(c["ply"])
         if not (2 <= ply <= len(ucis)):
-            raise InvalidScan(f"Move {ply} is not in this game")
+            raise InvalidGameReview(f"Move {ply} is not in this game")
         mover = "white" if fens[ply - 1].split()[1] == "w" else "black"
-        if mover != color:
-            raise InvalidScan(f"Move {ply} isn't yours")
         before, after = float(c["before"]), float(c["after"])
         if before < ALREADY_LOST:
             skipped["lost"] += 1
@@ -204,14 +213,14 @@ def save_scan(s: Session, game_id: int, sent_hash: str, movetime_ms: int, candid
             continue
         b = chess.Board(fens[ply - 1])
         played = ucis[ply - 1]
-        if _in_repertoire(s, position_key(b), played, color):
-            skipped["repertoire"] += 1
-            continue
         best_san = _san(b, c["best_uci"])
         if c["best_uci"] == played:
             continue
+        if _in_repertoire(s, position_key(b), played, mover):
+            skipped["repertoire"] += 1
+            continue
         keep[ply] = {
-            "color": color,
+            "color": mover,
             "fen": fens[ply - 1],
             "setup_fen": fens[ply - 2],
             "setup_uci": ucis[ply - 2],
@@ -226,27 +235,60 @@ def save_scan(s: Session, game_id: int, sent_hash: str, movetime_ms: int, candid
         }
 
     existing = {p.ply: p for p in s.scalars(select(GamePuzzle).where(GamePuzzle.game_id == game_id)).all()}
+    same = lambda p, d: p.fen == d["fen"] and p.played_uci == d["played_uci"]  # noqa: E731
     for ply, p in existing.items():
-        if ply not in keep or keep[ply]["fen"] != p.fen or keep[ply]["played_uci"] != p.played_uci:
-            s.delete(p)  # the game was edited: that puzzle no longer applies
+        if ply not in keep or not same(p, keep[ply]):
+            s.delete(p)  # the game was edited, or the new analysis disagrees
     s.flush()
-    new = 0
+    names, _ = my_names(s)
+    mine = my_color(game, names)
+    found = new = 0
     for ply, data in keep.items():
         p = existing.get(ply)
-        if p is not None and p.fen == data["fen"] and p.played_uci == data["played_uci"]:
+        if p is not None and same(p, data):
             for k, v in data.items():
-                setattr(p, k, v)  # fresher analysis, review history kept
+                setattr(p, k, v)  # fresher analysis; review history (and a removal) kept
+            fresh = False
         else:
             s.add(GamePuzzle(game_id=game_id, ply=ply, **data))
-            new += 1
-    scan = s.get(GameScan, game_id)
-    if scan is None:
-        s.add(GameScan(game_id=game_id, moves_hash=sent_hash, color=color, movetime_ms=movetime_ms, found=len(keep)))
+            fresh = True
+        if data["color"] == mine and not (p is not None and same(p, data) and p.dismissed):
+            found += 1
+            new += fresh
+
+    review = s.get(GameReview, game_id)
+    fields = {
+        "moves_hash": moves_hash(game.start_fen, ucis),
+        "movetime_ms": movetime_ms,
+        "white_accuracy": accuracy.get("w"),
+        "black_accuracy": accuracy.get("b"),
+        "counts": counts,
+    }
+    if review is None:
+        s.add(GameReview(game_id=game_id, **fields))
     else:
-        scan.moves_hash, scan.color, scan.movetime_ms, scan.found = sent_hash, color, movetime_ms, len(keep)
-        scan.scanned_at = func.now()
+        for k, v in fields.items():
+            setattr(review, k, v)
+        review.reviewed_at = func.now()
     s.flush()
-    return {"game_id": game_id, "found": len(keep), "new": new, "skipped": skipped}
+    return {"game_id": game_id, "puzzles": found, "new": new, "skipped": skipped}
+
+
+def status(s: Session) -> dict:
+    """Your names, and how many games are reviewed / still to review / of unknown side."""
+    names, set_by_you = my_names(s)
+    games = s.scalars(select(Game)).all()
+    moves = _game_moves(s, [g.id for g in games])
+    done = current_reviews(s, games, moves)
+    reviewable = [g for g in games if len(moves[g.id]) >= MIN_PLIES]
+    return {
+        "names": names,
+        "names_set": set_by_you,
+        "games": len(reviewable),
+        "reviewed": sum(1 for g in reviewable if g.id in done),
+        "unreviewed": sum(1 for g in reviewable if g.id not in done),
+        "unknown": sum(1 for g in reviewable if g.id in done and my_color(g, names) is None),
+    }
 
 
 # ---- practising ------------------------------------------------------------------------------------
@@ -282,36 +324,26 @@ def _puzzle_dict(p: GamePuzzle, g: Game) -> dict:
     }
 
 
-def list_puzzles(s: Session, due: bool = False, game_id: int | None = None) -> list[dict]:
-    q = select(GamePuzzle, Game).join(Game, Game.id == GamePuzzle.game_id)
-    if due:
-        q = q.where(GamePuzzle.next_review_on <= date.today()).order_by(GamePuzzle.next_review_on, GamePuzzle.id)
-    else:
-        q = q.order_by(Game.played_on.desc().nulls_last(), Game.id.desc(), GamePuzzle.ply)
+def _visible(s: Session, game_id: int | None = None) -> list[tuple[GamePuzzle, Game]]:
+    """Puzzles on your side, from games whose review is current, not removed."""
+    q = select(GamePuzzle, Game).join(Game, Game.id == GamePuzzle.game_id).where(GamePuzzle.dismissed.is_(False))
     if game_id is not None:
         q = q.where(GamePuzzle.game_id == game_id)
-    return [_puzzle_dict(p, g) for p, g in s.execute(q.limit(LIST_LIMIT)).all()]
+    rows = s.execute(q).all()
+    games = list({g.id: g for _, g in rows}.values())
+    current = current_reviews(s, games)
+    names, _ = my_names(s)
+    return [(p, g) for p, g in rows if g.id in current and p.color == my_color(g, names)]
 
 
-def summary(s: Session) -> dict:
-    total, due, blunders = s.execute(
-        select(
-            func.count(),
-            func.count().filter(GamePuzzle.next_review_on <= date.today()),
-            func.count().filter(GamePuzzle.label == "blunder"),
-        )
-    ).one()
-    st = scan_status(s)
-    return {
-        "puzzles": total,
-        "due": due,
-        "blunders": blunders,
-        "names": st["names"],
-        "names_set": st["names_set"],
-        "to_scan": len(st["to_scan"]),
-        "unknown": len(st["unknown"]),
-        "scanned": st["scanned"],
-    }
+def list_puzzles(s: Session, due: bool = False, game_id: int | None = None) -> list[dict]:
+    rows = _visible(s, game_id)
+    if due:
+        today = date.today()
+        rows = sorted((r for r in rows if r[0].next_review_on <= today), key=lambda r: (r[0].next_review_on, r[0].id))
+    else:
+        rows.sort(key=lambda r: (-(r[1].played_on or date.min).toordinal(), -r[1].id, r[0].ply))
+    return [_puzzle_dict(p, g) for p, g in rows[:LIST_LIMIT]]
 
 
 def record_review(s: Session, puzzle_id: int, correct: bool) -> dict:
@@ -328,14 +360,9 @@ def record_review(s: Session, puzzle_id: int, correct: bool) -> dict:
 
 
 def delete_puzzle(s: Session, puzzle_id: int) -> None:
-    """Not a real mistake: remove it (a later scan of an unchanged game won't bring it back)."""
+    """Not a useful puzzle: hide it for good (a later review of the same game won't bring it back)."""
     p = s.get(GamePuzzle, puzzle_id)
-    if p is None:
+    if p is None or p.dismissed:
         raise NotFound(f"Puzzle {puzzle_id} not found")
-    s.delete(p)
+    p.dismissed = True
     s.flush()
-
-
-def reset_scans(s: Session) -> int:
-    """Scan every game again next time (puzzles and their history are kept where unchanged)."""
-    return s.execute(delete(GameScan)).rowcount

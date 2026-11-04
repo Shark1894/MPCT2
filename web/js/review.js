@@ -38,9 +38,10 @@ export class ReviewController {
    * @param {(ply: number) => void} deps.onJump
    * @param {() => void} deps.onChanged           results changed: redraw the move list
    * @param {(fen: string, ev: object) => void} deps.onSaved  a position's analysis was saved
+   * @param {(review: object) => void} deps.onComplete  a review finished with every move judged
    */
-  constructor({ game, board, analysis, getOpening, isBusy, onJump, onChanged, onSaved }) {
-    Object.assign(this, { game, board, analysis, getOpening, isBusy, onJump, onChanged, onSaved });
+  constructor({ game, board, analysis, getOpening, isBusy, onJump, onChanged, onSaved, onComplete }) {
+    Object.assign(this, { game, board, analysis, getOpening, isBusy, onJump, onChanged, onSaved, onComplete });
     this.review = null;
     this.run = null;
     this.wakeLock = null;
@@ -235,6 +236,7 @@ export class ReviewController {
         if (run.cancelled) toast(`Review stopped after ${plural(run.done, 'position')}. Review again to continue.`);
         this.update();
         this.onChanged();
+        if (!run.cancelled && r.fresh.every(Boolean)) this.onComplete?.(r);
       }
     }
   }
