@@ -43,6 +43,8 @@ const rows = (p) => p.$$eval('#gaps-list .pp-path', (els) => els.map((e) => e.te
   await settle(page, 300);
   await page.click('#view-dashboard');
   await settle(page, 800);
+  await page.click('#dash-tab-gaps');
+  await settle(page, 300);
 
   // ---- before checking ------------------------------------------------------------------
   check(await page.isVisible('.gaps-card'), 'Repertoire gaps card on the Dashboard');
@@ -112,6 +114,8 @@ const rows = (p) => p.$$eval('#gaps-list .pp-path', (els) => els.map((e) => e.te
   await settle(phone, 600);
   await phone.click('#view-dashboard');
   await settle(phone, 900);
+  await phone.click('#dash-tab-gaps');
+  await settle(phone, 300);
   const fit = await phone.evaluate(() => ({
     overflow: document.documentElement.scrollWidth > window.innerWidth,
     rows: document.querySelectorAll('#gaps-list li').length,

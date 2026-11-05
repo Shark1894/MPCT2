@@ -65,6 +65,15 @@ async function seed(page) {
   await page.click('#view-dashboard');
   await settle(page, 900);
 
+  // ---- sub-tabs -------------------------------------------------------------------
+  const selected = () => page.$$eval('.dash-tab', (els) => els.filter((e) => e.getAttribute('aria-selected') === 'true').map((e) => e.textContent));
+  check(JSON.stringify(await page.$$eval('.dash-tab', (els) => els.map((e) => e.textContent))) === '["Lines","Progress","Gaps","Overview"]', 'four sub-tabs');
+  check(JSON.stringify(await selected()) === '["Lines"]' && (await page.isVisible('#dash-lines')) && (await page.isHidden('#fc-chart')) && (await page.isHidden('.gaps-card')) && (await page.isHidden('#ov-list')), 'Lines tab first, others hidden');
+  check((await page.isVisible('#dash-train-due')) && (await page.isVisible('#stat-lines')), 'picker, Train buttons and stats above the tabs');
+  await page.click('#dash-tab-overview');
+  await settle(page, 200);
+  check(JSON.stringify(await selected()) === '["Overview"]' && (await page.isVisible('#ov-list')) && (await page.isHidden('#dash-lines')), 'Overview tab shows openings + activity');
+
   // ---- overview -------------------------------------------------------------------
   const ov = await page.$$eval('.ov-row', (rows) => rows.map((r) => r.textContent));
   check(ov.length === 2 && ov[0].startsWith('London') && ov[1].startsWith('Caro-Kann'), 'overview lists openings, White first: ' + ov);
@@ -73,6 +82,8 @@ async function seed(page) {
   check((await text(page, '#ov-rep')) === '· Main', 'repertoire named');
 
   // ---- learning progress -------------------------------------------------------------
+  await page.click('#dash-tab-progress');
+  await settle(page, 200);
   check((await text(page, '#dash-mastery .mastery-text')) === '1 mastered · 1 known · 2 learning', 'progress: ' + (await text(page, '#dash-mastery .mastery-text')));
   check((await page.$$('#dash-mastery .seg')).length === 3, 'three stage segments');
   await page.hover('#dash-mastery .seg.m-mastered');
@@ -98,11 +109,15 @@ async function seed(page) {
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/dash-insights.png`, fullPage: true });
 
   // ---- activity ------------------------------------------------------------------------
+  await page.click('#dash-tab-overview');
+  await settle(page, 200);
   check((await page.$$('.act-week')).length >= 26, 'activity grid: 26+ weeks');
   check((await page.$$('.cell.today.l3')).length === 1, 'today shaded for 11 reviews');
   check((await text(page, '#act-summary')).startsWith('Current run: 1 day. Longest: 1 day. 1 day trained.'), 'activity summary: ' + (await text(page, '#act-summary')));
 
   // ---- line list: sort, filter, search -------------------------------------------------
+  await page.click('#dash-tab-lines');
+  await settle(page, 200);
   check((await text(page, '#dash-train-weak')) === 'Train weakest (2)', 'Train weakest counts lines with recent mistakes');
   await page.selectOption('#dash-sort', 'weak');
   await settle(page, 200);
@@ -121,6 +136,10 @@ async function seed(page) {
   await page.reload();
   await settle(page, 1000);
   check((await page.inputValue('#dash-sort')) === 'weak', 'sort choice remembered');
+  await page.click('#dash-tab-overview');
+  await page.reload();
+  await settle(page, 1000);
+  check(JSON.stringify(await selected()) === '["Overview"]', 'sub-tab remembered after reload');
 
   // ---- overview switches opening ----------------------------------------------------------
   await page.click('.ov-row:has-text("London")');

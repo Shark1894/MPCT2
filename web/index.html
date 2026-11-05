@@ -313,27 +313,6 @@
     </main>
 
     <main id="dashboard" class="dashboard" hidden>
-      <div class="dash-band">
-        <section class="dash-card" aria-labelledby="ov-title">
-          <h2 id="ov-title" class="dash-h">Openings <span id="ov-rep" class="meta"></span></h2>
-          <div id="ov-list" class="ov-list"></div>
-          <div class="mastery-legend" aria-hidden="true">
-            <span><i class="sw m-mastered"></i>Mastered (streak 5+)</span>
-            <span><i class="sw m-known"></i>Known (2–4)</span>
-            <span><i class="sw m-learning"></i>Learning (0–1)</span>
-            <span><i class="sw m-new"></i>New</span>
-          </div>
-        </section>
-        <section class="dash-card" aria-labelledby="act-title">
-          <h2 id="act-title" class="dash-h">Training activity <span class="meta">last 26 weeks</span></h2>
-          <div class="act-scroll"><div id="act-grid" class="act-grid" role="img"></div></div>
-          <div class="act-foot">
-            <p id="act-summary" class="act-summary"></p>
-            <span class="act-legend" aria-hidden="true">Less <i class="cell l0"></i><i class="cell l1"></i><i class="cell l2"></i><i class="cell l3"></i><i class="cell l4"></i> More</span>
-          </div>
-        </section>
-      </div>
-
       <div class="dash-head">
         <div class="dash-title">
           <label for="dash-opening" class="sr-only">Opening</label>
@@ -365,64 +344,100 @@
         <div class="stat"><span class="stat-label">Accuracy</span><span id="stat-accuracy" class="stat-value">—</span></div>
       </div>
 
-      <section class="dash-card" aria-label="Learning progress">
-        <div id="dash-mastery" class="dash-mastery"></div>
-      </section>
+      <nav class="dash-tabs" role="tablist" aria-label="Dashboard sections">
+        <button id="dash-tab-lines" type="button" role="tab" class="dash-tab" data-pane="lines" aria-controls="dash-pane-lines">Lines</button>
+        <button id="dash-tab-progress" type="button" role="tab" class="dash-tab" data-pane="progress" aria-controls="dash-pane-progress">Progress</button>
+        <button id="dash-tab-gaps" type="button" role="tab" class="dash-tab" data-pane="gaps" aria-controls="dash-pane-gaps">Gaps</button>
+        <button id="dash-tab-overview" type="button" role="tab" class="dash-tab" data-pane="overview" aria-controls="dash-pane-overview">Overview</button>
+      </nav>
 
-      <section class="dash-card" aria-labelledby="fc-title">
-        <h2 id="fc-title" class="dash-h">Due over the next 2 weeks</h2>
-        <div id="fc-chart" class="fc-chart"></div>
-        <p id="fc-note" class="meta fc-note"></p>
-      </section>
-
-      <section class="dash-card gaps-card" aria-labelledby="gaps-title">
-        <div class="gaps-head">
-          <h2 id="gaps-title" class="dash-h">Repertoire gaps <span class="meta">masters replies you don’t cover</span></h2>
-          <div class="gaps-controls">
-            <select id="gaps-min" aria-label="Show replies played in at least this share of masters games"></select>
-            <button id="gaps-check" type="button" class="small">Check with Lichess masters</button>
-            <button id="gaps-stop" type="button" class="small" hidden>Stop</button>
-          </div>
+      <div id="dash-pane-lines" class="dash-pane" role="tabpanel" aria-labelledby="dash-tab-lines">
+        <div class="dash-toolbar">
+          <label>Sort
+            <select id="dash-sort">
+              <option value="due">Next review</option>
+              <option value="weak">Weakest first</option>
+              <option value="streak">Lowest streak</option>
+              <option value="moves">Move order</option>
+            </select>
+          </label>
+          <label>Show
+            <select id="dash-filter">
+              <option value="all">All lines</option>
+              <option value="due">Due now</option>
+              <option value="new">Not reviewed yet</option>
+              <option value="mistakes">Recent mistakes</option>
+              <option value="bookmarked">Bookmarked</option>
+            </select>
+          </label>
+          <label class="dash-search">Move
+            <input id="dash-search" type="search" placeholder="e.g. Bf5 or 3.e5" autocomplete="off" spellcheck="false" />
+          </label>
+          <span id="dash-showing" class="meta"></span>
+          <button id="dash-train-shown" type="button" class="small" hidden>Train shown</button>
         </div>
-        <p id="gaps-status" class="meta" aria-live="polite"></p>
-        <div id="gaps-progress" class="pz-progress" hidden><div id="gaps-bar"></div></div>
-        <p id="gaps-error" class="gaps-error" hidden></p>
-        <ol id="gaps-list" class="pp-list gaps-list"></ol>
-        <p id="gaps-empty" class="meta" hidden></p>
-        <button id="gaps-more" type="button" class="small" hidden>Show more</button>
-      </section>
 
-      <div class="dash-toolbar">
-        <label>Sort
-          <select id="dash-sort">
-            <option value="due">Next review</option>
-            <option value="weak">Weakest first</option>
-            <option value="streak">Lowest streak</option>
-            <option value="moves">Move order</option>
-          </select>
-        </label>
-        <label>Show
-          <select id="dash-filter">
-            <option value="all">All lines</option>
-            <option value="due">Due now</option>
-            <option value="new">Not reviewed yet</option>
-            <option value="mistakes">Recent mistakes</option>
-            <option value="bookmarked">Bookmarked</option>
-          </select>
-        </label>
-        <label class="dash-search">Move
-          <input id="dash-search" type="search" placeholder="e.g. Bf5 or 3.e5" autocomplete="off" spellcheck="false" />
-        </label>
-        <span id="dash-showing" class="meta"></span>
-        <button id="dash-train-shown" type="button" class="small" hidden>Train shown</button>
+        <div class="dash-table">
+          <div class="dash-line dash-header" aria-hidden="true">
+            <div>Line</div><div>Next review</div><div>Streak</div><div>Last 5</div><div></div>
+          </div>
+          <div id="dash-lines"></div>
+          <p id="dash-empty" class="dash-empty" hidden></p>
+        </div>
       </div>
 
-      <div class="dash-table">
-        <div class="dash-line dash-header" aria-hidden="true">
-          <div>Line</div><div>Next review</div><div>Streak</div><div>Last 5</div><div></div>
+      <div id="dash-pane-progress" class="dash-pane" role="tabpanel" aria-labelledby="dash-tab-progress" hidden>
+        <section class="dash-card" aria-label="Learning progress">
+          <div id="dash-mastery" class="dash-mastery"></div>
+        </section>
+
+        <section class="dash-card" aria-labelledby="fc-title">
+          <h2 id="fc-title" class="dash-h">Due over the next 2 weeks</h2>
+          <div id="fc-chart" class="fc-chart"></div>
+          <p id="fc-note" class="meta fc-note"></p>
+        </section>
+      </div>
+
+      <div id="dash-pane-gaps" class="dash-pane" role="tabpanel" aria-labelledby="dash-tab-gaps" hidden>
+        <section class="dash-card gaps-card" aria-labelledby="gaps-title">
+          <div class="gaps-head">
+            <h2 id="gaps-title" class="dash-h">Repertoire gaps <span class="meta">masters replies you don’t cover</span></h2>
+            <div class="gaps-controls">
+              <select id="gaps-min" aria-label="Show replies played in at least this share of masters games"></select>
+              <button id="gaps-check" type="button" class="small">Check with Lichess masters</button>
+              <button id="gaps-stop" type="button" class="small" hidden>Stop</button>
+            </div>
+          </div>
+          <p id="gaps-status" class="meta" aria-live="polite"></p>
+          <div id="gaps-progress" class="pz-progress" hidden><div id="gaps-bar"></div></div>
+          <p id="gaps-error" class="gaps-error" hidden></p>
+          <ol id="gaps-list" class="pp-list gaps-list"></ol>
+          <p id="gaps-empty" class="meta" hidden></p>
+          <button id="gaps-more" type="button" class="small" hidden>Show more</button>
+        </section>
+      </div>
+
+      <div id="dash-pane-overview" class="dash-pane" role="tabpanel" aria-labelledby="dash-tab-overview" hidden>
+        <div class="dash-band">
+          <section class="dash-card" aria-labelledby="ov-title">
+            <h2 id="ov-title" class="dash-h">Openings <span id="ov-rep" class="meta"></span></h2>
+            <div id="ov-list" class="ov-list"></div>
+            <div class="mastery-legend" aria-hidden="true">
+              <span><i class="sw m-mastered"></i>Mastered (streak 5+)</span>
+              <span><i class="sw m-known"></i>Known (2–4)</span>
+              <span><i class="sw m-learning"></i>Learning (0–1)</span>
+              <span><i class="sw m-new"></i>New</span>
+            </div>
+          </section>
+          <section class="dash-card" aria-labelledby="act-title">
+            <h2 id="act-title" class="dash-h">Training activity <span class="meta">last 26 weeks</span></h2>
+            <div class="act-scroll"><div id="act-grid" class="act-grid" role="img"></div></div>
+            <div class="act-foot">
+              <p id="act-summary" class="act-summary"></p>
+              <span class="act-legend" aria-hidden="true">Less <i class="cell l0"></i><i class="cell l1"></i><i class="cell l2"></i><i class="cell l3"></i><i class="cell l4"></i> More</span>
+            </div>
+          </section>
         </div>
-        <div id="dash-lines"></div>
-        <p id="dash-empty" class="dash-empty" hidden></p>
       </div>
     </main>
 

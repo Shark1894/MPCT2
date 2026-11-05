@@ -97,6 +97,20 @@ export class DashboardView {
     e.sort.addEventListener('change', changeView);
     e.filter.addEventListener('change', changeView);
     e.search.addEventListener('input', changeView);
+    this.tabs = [...document.querySelectorAll('#dashboard .dash-tab')];
+    for (const t of this.tabs) t.addEventListener('click', () => this.showTab(t.dataset.pane));
+    $('dashboard')
+      .querySelector('.dash-tabs')
+      .addEventListener('keydown', (ev) => {
+        const i = this.tabs.findIndex((t) => t.dataset.pane === this.tab);
+        const step = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+        if (!step) return;
+        ev.preventDefault();
+        const next = this.tabs[(i + step + this.tabs.length) % this.tabs.length];
+        this.showTab(next.dataset.pane);
+        next.focus();
+      });
+    this.showTab(store.get('dashTab', 'lines'));
     enableTips(document.getElementById('dashboard'));
     e.resetAll.addEventListener('click', () => this._closeMenu() || this.resetAll());
     e.deleteAll.addEventListener('click', () => this._closeMenu() || this.deleteAll());
@@ -105,6 +119,25 @@ export class DashboardView {
 
   _opening() {
     return this.repertoire._opening();
+  }
+
+  /** Switch sub-tab: lines | progress | gaps | overview (remembered per device). */
+  showTab(name) {
+    if (!this.tabs.some((t) => t.dataset.pane === name)) name = 'lines';
+    this.tab = name;
+    store.set('dashTab', name);
+    for (const t of this.tabs) {
+      const on = t.dataset.pane === name;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      $(`dash-pane-${t.dataset.pane}`).hidden = !on;
+    }
+    if (name === 'overview') this._scrollActivity();
+  }
+
+  _scrollActivity() {
+    const scroller = this.el.actGrid.parentElement;
+    scroller.scrollLeft = scroller.scrollWidth; // most recent weeks in view on narrow screens
   }
 
   _closeMenu() {
@@ -166,8 +199,7 @@ export class DashboardView {
     this._renderOverview();
     if (act) {
       renderActivity(this.el.actGrid, this.el.actSummary, act);
-      const scroller = this.el.actGrid.parentElement;
-      scroller.scrollLeft = scroller.scrollWidth; // most recent weeks in view on narrow screens
+      this._scrollActivity();
     }
   }
 

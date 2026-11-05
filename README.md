@@ -227,22 +227,25 @@ expected_uci, correct, wrong: [uci, ...]}]}`).
 
 ## Dashboard
 
-The **Dashboard** tab (top bar), from top to bottom:
+The **Dashboard** tab (top bar). At the top, always visible: the selected opening (or one branch of it) with
+**Train due**, **Train weakest** (lines with a mistake in their last 5 reviews, weakest first, up to 15),
+**Train all**, and **More** (Reset all lines, Delete all lines, Delete opening), then its stats: lines, due now,
+next review, total reviews and accuracy (share of reviews without mistakes).
 
-- **Openings**: every opening in the repertoire (White first) with lines, due, accuracy and a learning-progress bar.
-  Click one to select it. **Training activity**: a grid of the last 26 weeks (shade = reviews that day), your
-  current and longest run of consecutive training days, and how many days you trained.
-- The selected opening (or one branch of it): **Train due**, **Train weakest** (lines with a mistake in their last
-  5 reviews, weakest first, up to 15), **Train all**, and **More** (Reset all lines, Delete all lines, Delete opening).
-  Stats: lines, due now, next review, total reviews and accuracy (share of reviews without mistakes).
-- **Learning progress**: lines by stage. New (never reviewed), learning (streak 0–1), known (2–4, comments hidden in
-  training), mastered (5+, next review a month or more away).
-- **Due over the next 2 weeks**: lines due each day (overdue lines count as today), plus how many are due later.
+Below that, four sub-tabs (the last one used is remembered per device; ← → move between them):
+
 - **Lines**: sort (next review, weakest, lowest streak, move order), show (all, due, not reviewed yet, recent
   mistakes, bookmarked) and search by move (`Bf5`, `3.e5`). Choices are remembered. Each line shows its next review,
   streak and last 5 results, with **☆** (bookmark), **Train**, **Show**, **Reset** (clears its history, due today)
   and **Delete**. On phones lines are cards. When Show or the search narrows the list, **Train shown (n)** trains
   exactly those lines in that order (**Train bookmarked (n)** with the Bookmarked filter).
+- **Progress**: **learning progress**, lines by stage. New (never reviewed), learning (streak 0–1), known (2–4,
+  comments hidden in training), mastered (5+, next review a month or more away). **Due over the next 2 weeks**:
+  lines due each day (overdue lines count as today), plus how many are due later.
+- **Gaps**: the repertoire gap finder (see below).
+- **Overview**: **Openings**, every opening in the repertoire (White first) with lines, due, accuracy and a
+  learning-progress bar; click one to select it. **Training activity**: a grid of the last 26 weeks (shade =
+  reviews that day), your current and longest run of consecutive training days, and how many days you trained.
 
 ### Bookmarks
 
