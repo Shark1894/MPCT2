@@ -1,7 +1,7 @@
 // Position drill on the board: random positions from your repertoire where it's your move,
 // shown on their own (no moves leading to them), answered once each. Uses the trainer's
 // hints, can play the rest of a line on, and ends with the positions you missed.
-// Practice only: answers are stored for problem positions but never change a schedule.
+// Practice only: answers are stored but never change a schedule.
 
 import { api } from './api.js';
 import { DrillRun, moveLabel } from './drill-core.js';
@@ -78,7 +78,7 @@ export class DrillController {
       title: 'Position drill',
       message:
         'Random positions from your repertoire where it’s your move, shown without the moves that led there. ' +
-        'Practice only: line schedules don’t change, but mistakes show up as problem positions on the Dashboard.',
+        'Practice only: line schedules don’t change.',
       fields: [
         { name: 'scope', label: 'Positions from', type: 'select', options: scopes, value: scopes.some(([v]) => v === preferred) ? preferred : 'rep' },
         { name: 'count', label: 'How many', type: 'select', options: COUNTS.map((n) => [n, `${n} positions`]), value: saved.count ?? 10 },

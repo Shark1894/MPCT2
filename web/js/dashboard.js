@@ -10,7 +10,6 @@ import {
   renderActivity,
   renderForecast,
   renderOverview,
-  renderProblems,
   viewLines,
   weakestLines,
 } from './insights.js';
@@ -59,8 +58,6 @@ export class DashboardView {
       mastery: $('dash-mastery'),
       fcChart: $('fc-chart'),
       fcNote: $('fc-note'),
-      ppList: $('pp-list'),
-      ppEmpty: $('pp-empty'),
       ovList: $('ov-list'),
       ovRep: $('ov-rep'),
       actGrid: $('act-grid'),
@@ -218,11 +215,6 @@ export class DashboardView {
     e.mastery.innerHTML = '';
     e.mastery.appendChild(masteryBar(stats.mastery));
     renderForecast(e.fcChart, e.fcNote, this.data.forecast);
-    renderProblems(e.ppList, e.ppEmpty, this.data.problems, {
-      hasHistory: stats.reviews > 0,
-      onShow: (sans) => this.onShowLine(sans),
-      onTrain: (p) => this.onTrain(this._opening(), 'all', p.line_ids, null, `${p.expected} problem`),
-    });
     this._renderOverview();
     this._renderLines();
   }

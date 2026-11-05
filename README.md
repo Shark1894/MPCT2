@@ -218,9 +218,8 @@ rest of the line** to carry on through one of the lines from there (not recorded
 The summary lists the positions you missed, with **Show** (leave the drill and put the line up to that position on
 the board) and **Drill missed again**.
 
-Practice only: schedules and streaks never change. Each answer is stored (`drill_attempts`) and counts as a review
-for **problem positions** on the Dashboard, so positions you keep missing in the drill show up there too (and drop
-off after 3 right in a row, as with training).
+Practice only: schedules and streaks never change. Each answer is stored (`drill_attempts`); the API still folds
+them into the dashboard's `problems` list (see Dashboard), though that list is no longer shown.
 
 API: `GET /api/drill?repertoire_id=|opening_id=|tag_id=&count=` (random positions with the repertoire move(s), a
 line through each and the SAN path to it), `POST /api/drill/results` (`{"results": [{opening_id, position_id,
@@ -239,10 +238,6 @@ The **Dashboard** tab (top bar), from top to bottom:
 - **Learning progress**: lines by stage. New (never reviewed), learning (streak 0–1), known (2–4, comments hidden in
   training), mastered (5+, next review a month or more away).
 - **Due over the next 2 weeks**: lines due each day (overdue lines count as today), plus how many are due later.
-- **Problem positions**: your moves you get wrong most often in the last 90 days, grouped by position so a move
-  shared by several lines counts once. Each shows the moves leading there, what you played instead, how often, and
-  **Show** (puts the position on the board) / **Train** (the lines through that move). A position drops off once
-  you get it right 3 reviews in a row. Position-drill answers count too (each answer is one review).
 - **Lines**: sort (next review, weakest, lowest streak, move order), show (all, due, not reviewed yet, recent
   mistakes, bookmarked) and search by move (`Bf5`, `3.e5`). Choices are remembered. Each line shows its next review,
   streak and last 5 results, with **☆** (bookmark), **Train**, **Show**, **Reset** (clears its history, due today)
@@ -287,7 +282,7 @@ explorer address (default `https://explorer.lichess.org`).
 API: `GET /api/openings/{id}/gaps?min_share=5&min_games=5`, `POST /api/openings/{id}/gaps/check` (starts a
 background check; 409 without a token or while one runs), `GET /api/explorer/status`, `POST /api/explorer/stop`.
 
-API: `GET /api/openings/{id}/dashboard` (stats, stages, forecast, problem positions, lines),
+API: `GET /api/openings/{id}/dashboard` (stats, stages, forecast, problem positions (not shown since v0.25.3), lines),
 `GET /api/repertoires/{id}/overview`, `GET /api/activity?tz=Europe/London&days=182`, `POST /api/lines/{id}/reset`, `POST /api/openings/{id}/reset`,
 `DELETE /api/openings/{id}/lines`.
 
@@ -680,7 +675,7 @@ web/              frontend served as-is
   js/trainer.js   training session rules (pure logic, unit tested)
   js/training.js  training mode: board, auto replies, hints, results
   js/dashboard.js dashboard view: stats, lines with history, resets
-  js/insights.js  dashboard insights: progress bars, forecast, activity, problems, line sort/filter
+  js/insights.js  dashboard insights: progress bars, forecast, activity, line sort/filter
   js/engine.js    Stockfish worker client + UCI parsing (helpers unit tested)
   js/analysis.js  engine panel, evaluation bar, engine arrows
   js/games.js     games list view + open-game panel (save, compare, PGN)

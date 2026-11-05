@@ -1,5 +1,5 @@
 // Dashboard insights: learning-stage bars, the due forecast, the activity heatmap,
-// problem positions, and sorting/filtering the line list. The helpers at the top
+// the openings overview, and sorting/filtering the line list. The helpers at the top
 // are pure (unit tested); the render functions build DOM.
 
 import { daysFromToday, plural } from './ui.js';
@@ -238,41 +238,6 @@ export function renderActivity(grid, summary, act) {
   else if (act.trained_today) runText = `Current run: ${plural(run, 'day')}.`;
   else runText = `Current run: ${plural(run, 'day')}. Train today to keep it going.`;
   summary.textContent = `${runText} Longest: ${plural(act.longest_run, 'day')}. ${plural(act.active_days, 'day')} trained.`;
-}
-
-/** Problem positions: where you keep going wrong, with what you play instead. */
-export function renderProblems(list, empty, problems, { onShow, onTrain, hasHistory }) {
-  list.innerHTML = '';
-  empty.hidden = problems.length > 0;
-  empty.textContent = hasHistory
-    ? 'No problem positions: no repeated mistakes in the last 90 days. A position drops off once you get it right 3 times in a row.'
-    : 'Train some lines and the moves you get wrong will show up here.';
-  for (const p of problems) {
-    const li = el('li', 'pp-item');
-    const path = el('div', 'pp-path');
-    path.append(el('span', 'pp-before', p.moves.length ? `${formatMoves(p.moves)} ` : 'Start: '));
-    path.append(el('strong', 'pp-move', formatMoves([p.expected], p.ply)));
-    const wrong = el(
-      'div',
-      'pp-wrong',
-      `You played ${p.wrong.map((w) => (w.count > 1 ? `${w.san} (${w.count}×)` : w.san)).join(', ')} instead of ${p.expected}.`,
-    );
-    const facts = [`Wrong in ${p.times_wrong} of ${plural(p.times_seen, 'review')}`];
-    if (p.right_since) facts.push(`right ${p.right_since}× since`);
-    const meta = el('div', 'meta pp-meta', facts.join(' · '));
-    const actions = el('div', 'pp-actions');
-    const show = el('button', 'small', 'Show');
-    show.type = 'button';
-    show.title = 'Show this position on the board';
-    show.addEventListener('click', () => onShow(p.moves));
-    const train = el('button', 'small primary', `Train ${plural(p.line_ids.length, 'line')}`);
-    train.type = 'button';
-    train.title = 'Train the lines that go through this move';
-    train.addEventListener('click', () => onTrain(p));
-    actions.append(show, train);
-    li.append(path, wrong, meta, actions);
-    list.appendChild(li);
-  }
 }
 
 /** Repertoire overview: one row per opening. Clicking a row selects it. */

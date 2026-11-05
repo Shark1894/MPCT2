@@ -93,11 +93,8 @@ async function seed(page) {
   check(new Set(baselines).size === 1, 'forecast baselines level: ' + baselines.join(','));
   check((await text(page, '#fc-note')) === '3 lines in the next 14 days, 1 later.', 'forecast note: ' + (await text(page, '#fc-note')));
 
-  // ---- problem positions --------------------------------------------------------------
-  const pp = await page.$$eval('.pp-item', (els) => els.map((e) => e.textContent));
-  check(pp.length === 2, 'two problem positions');
-  check(pp[0].includes('1.e4 1...c6') && pp[0].includes('You played e5 (2×) instead of c6') && pp[0].includes('Wrong in 2 of 10 reviews'), 'top problem: ' + pp[0]);
-  check(pp[1].includes('3.exd5 3...cxd5') && pp[1].includes('You played Qxd5 (2×) instead of cxd5'), 'second problem: ' + pp[1]);
+  // ---- problem positions card removed (v0.25.3) ------------------------------------------
+  check((await page.$$('#pp-list, .pp-item')).length === 0 && !(await page.isVisible('text=Problem positions')), 'no problem positions card');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/dash-insights.png`, fullPage: true });
 
   // ---- activity ------------------------------------------------------------------------
@@ -129,23 +126,9 @@ async function seed(page) {
   await page.click('.ov-row:has-text("London")');
   await settle(page, 800);
   check((await page.inputValue('#dash-opening')) === (await page.evaluate(() => String(mpct.repertoire._opening().id))) && (await text(page, '#dash-color')) === 'You play White', 'clicking an overview row selects that opening');
-  check((await text(page, '#pp-empty')).includes('Train some lines'), 'no history: problem list explains');
   await page.click('.ov-row:has-text("Caro-Kann")');
   await settle(page, 800);
 
-  // ---- problem: Show and Train ----------------------------------------------------------------
-  await page.click('.pp-item:nth-child(2) button:has-text("Show")');
-  await settle(page, 600);
-  check(await page.isVisible('main.layout') && (await page.evaluate(() => mpct.game.moves.map((m) => m.san).join(' '))) === 'e4 c6 d4 d5 exd5', 'Show puts the position on the board');
-  await page.click('#view-dashboard');
-  await settle(page, 800);
-  await page.click('.pp-item:first-child button:has-text("Train")');
-  await page.waitForFunction(() => mpct.trainer.active, null, { timeout: 5000 });
-  check((await text(page, '#train-title')) === 'Training: Caro-Kann › c6 problem' && (await text(page, '#train-progress')).endsWith('of 4'), 'Train a problem: lines through it');
-  await page.click('#train-stop');
-  await settle(page);
-  await page.click('#view-dashboard');
-  await settle(page, 800);
   await page.click('#dash-train-weak');
   await page.waitForFunction(() => mpct.trainer.active, null, { timeout: 5000 });
   check((await text(page, '#train-title')) === 'Training: Caro-Kann › weakest lines' && (await text(page, '#train-progress')).endsWith('of 2'), 'Train weakest: 2 lines');
