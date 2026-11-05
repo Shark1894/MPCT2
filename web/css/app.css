@@ -1132,6 +1132,157 @@ body.playing .fen-actions #btn-fen-load {
   padding-top: 10px;
 }
 
+/* masters explorer (board) */
+.masters-box {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.masters-box summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.masters-box summary::-webkit-details-marker {
+  display: none;
+}
+
+.masters-box summary::before {
+  content: '▸';
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.masters-box[open] summary::before {
+  content: '▾';
+}
+
+.masters-box summary h2 {
+  margin: 0;
+}
+
+.masters-box[open] > :not(summary) {
+  margin-top: 8px;
+}
+
+.masters-status {
+  margin: 4px 0;
+}
+
+.masters-status.error {
+  color: var(--error);
+}
+
+.masters-moves {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mx-move {
+  display: grid;
+  grid-template-columns: 3.6em 6.5em minmax(60px, 1fr) 4.2em;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding: 6px 8px;
+  min-height: 36px;
+}
+
+.mx-san {
+  font-weight: 600;
+}
+
+.mx-count,
+.mx-elo {
+  font-size: 13px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.mx-elo {
+  text-align: right;
+}
+
+.mx-bar {
+  display: flex;
+  height: 16px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.mx-bar i {
+  font-style: normal;
+  text-align: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.mx-bar .w {
+  background: #e8e8e8;
+  color: #222;
+}
+
+.mx-bar .d {
+  background: #8a8f99;
+  color: #111;
+}
+
+.mx-bar .b {
+  background: #15171c;
+  color: #ddd;
+}
+
+.masters-sub {
+  font-size: 14px;
+  margin: 12px 0 4px;
+  color: var(--text-dim);
+}
+
+.masters-games {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mx-game {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 6px 8px;
+}
+
+.mx-players {
+  font-weight: 500;
+}
+
+.mx-meta {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+@media (max-width: 420px) {
+  .mx-move {
+    grid-template-columns: 3.2em 5.8em minmax(50px, 1fr);
+  }
+
+  .mx-elo {
+    display: none;
+  }
+}
+
 .branch-path {
   display: flex;
   flex-wrap: wrap;

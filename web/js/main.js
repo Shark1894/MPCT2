@@ -13,6 +13,7 @@ import { GamePanel, GamesView } from './games.js';
 import { PlayController } from './play.js';
 import { ReviewController } from './review.js';
 import { SavedEval } from './saved-eval.js';
+import { MastersPanel } from './masters.js';
 import { WildView } from './wild.js';
 import { Sounds, movedOneForward } from './sounds.js';
 import { PuzzleController, PuzzlesView } from './puzzles.js';
@@ -258,6 +259,22 @@ const wildView = new WildView({
   },
 });
 
+// ---- masters explorer ------------------------------------------------------------
+
+const masters = new MastersPanel({
+  onPlay: (uci) => {
+    if (locked() || play.active) return;
+    if (game.play(uci.slice(0, 2), uci.slice(2, 4), uci[4])) render();
+  },
+  onOpenGame: async (id, key) => {
+    if (!(await play.confirmStop())) return;
+    const g = await gamePanel.openMasters(id, key);
+    if (!g) return;
+    render();
+    toast(`At this position in the game (move ${Math.max(1, Math.ceil(g.ply / 2))}). Step on through it, or Save to Games to keep it.`);
+  },
+});
+
 // ---- play vs engine ------------------------------------------------------------
 
 const play = new PlayController({
@@ -395,6 +412,7 @@ function render() {
   review?.update();
   // Hidden when something else already shows the evaluation (review panel, live engine) or it would give answers away.
   savedEval?.update(game.fen(), Boolean(review?.open) || analysis.settings.on || locked() || Boolean(play?.active));
+  masters?.update(game.fen(), locked() || Boolean(play?.active));
   renderMoveList(
     ui.moves,
     game,
@@ -590,7 +608,8 @@ repertoire.init().then(async () => {
   if (openGameId) await gamePanel.open(openGameId);
   else if (openWild) {
     const ply = game.ply; // keep where you were in it
-    if (await gamePanel.openWild(openWild.id, ply)) render();
+    const opened = openWild.masters ? await gamePanel.openMasters(openWild.id, null, ply) : await gamePanel.openWild(openWild.id, ply);
+    if (opened) render();
   }
   const saved = store.get('view');
   if (saved && saved !== 'board' && VIEWS[saved]) setView(saved);
@@ -600,4 +619,4 @@ repertoire.init().then(async () => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval };
+window.mpct = { game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval, masters };

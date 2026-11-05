@@ -127,6 +127,11 @@ export const api = {
   saveWildGame: (id) => request('POST', `/wild-games/${id}/save`),
   markWildViewed: (id) => request('POST', `/wild-games/${id}/viewed`),
   wildGamePgnUrl: (id) => `/api/wild-games/${id}/pgn`,
+
+  masters: (fen) => request('GET', '/masters', { params: { fen } }),
+  mastersGame: (id) => request('GET', `/masters/games/${encodeURIComponent(id)}`),
+  saveMastersGame: (id) => request('POST', `/masters/games/${encodeURIComponent(id)}/save`),
+  mastersGamePgnUrl: (id) => `/api/masters/games/${encodeURIComponent(id)}/pgn`,
   wildStatus: (repId = null, since = null, minElo = null) =>
     request('GET', '/wild/status', {
       params: { ...(repId ? { repertoire_id: repId } : {}), ...(since ? { since } : {}), ...(minElo ? { min_elo: minElo } : {}) },

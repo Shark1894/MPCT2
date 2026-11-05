@@ -118,7 +118,7 @@ export class GamePanel {
     return this.current !== null;
   }
 
-  /** A tournament game (Wild tab) is shown read-only; Save to Games makes it one of yours. */
+  /** A tournament game (Wild tab) or masters game is shown read-only; Save to Games makes it one of yours. */
   get isWild() {
     return Boolean(this.current?.wild);
   }
@@ -151,10 +151,65 @@ export class GamePanel {
       if (err.status === 404) store.set('openWild', null);
       return null;
     }
-    this.game.load(START_FEN);
-    for (const uci of g.moves) if (!this.game.play(uci.slice(0, 2), uci.slice(2, 4), uci[4])) break;
+    this._loadMoves(g.moves);
     if (ply === null) this.game.toEnd();
     else this.game.goTo(Math.min(ply, this.game.moves.length));
+    this._showReadOnly(g, {
+      source: [
+        'Tournament game',
+        g.round ? `round ${g.round}` : '',
+        g.site,
+        g.source === 'twic' ? 'from The Week in Chess' : 'from a Lichess broadcast',
+      ],
+      pgnUrl: api.wildGamePgnUrl(id),
+      current: { id, wild: true, data: g, saved: null },
+      remember: { id, ply },
+    });
+    return g;
+  }
+
+  /**
+   * Open a game from the Lichess masters database (the board's Masters panel), at the first
+   * position matching `key` (FEN without move counters), else at `ply`, else at the end.
+   */
+  async openMasters(id, key = null, ply = null) {
+    if (!(await this.confirmLeave())) return null;
+    let g;
+    try {
+      g = await api.mastersGame(id);
+    } catch (err) {
+      toast(err.message, 'error');
+      if (err.status === 404) store.set('openWild', null);
+      return null;
+    }
+    this._loadMoves(g.moves);
+    let at = null;
+    if (key) {
+      for (let i = 0; i <= this.game.moves.length && at === null; i++) {
+        this.game.goTo(i);
+        if (this.game.fen().split(' ').slice(0, 4).join(' ') === key) at = i;
+      }
+    }
+    if (at === null && ply !== null) at = Math.min(ply, this.game.moves.length);
+    if (at === null) this.game.toEnd();
+    else this.game.goTo(at);
+    const when = g.played_on ?? g.year ?? '';
+    this._showReadOnly(g, {
+      source: ['Masters game', g.round ? `round ${g.round}` : '', g.site, when ? String(when) : '', 'from the Lichess masters database'],
+      pgnUrl: api.mastersGamePgnUrl(id),
+      current: { id, wild: true, masters: true, data: g, saved: null },
+      remember: { id, ply: this.game.ply, masters: true },
+    });
+    return { ...g, ply: this.game.ply };
+  }
+
+  _loadMoves(ucis) {
+    this.game.load(START_FEN);
+    for (const uci of ucis) if (!this.game.play(uci.slice(0, 2), uci.slice(2, 4), uci[4])) break;
+  }
+
+  /** Show a game that isn't one of yours (tournament or masters) read-only, with Save to Games. */
+  _showReadOnly(g, { source, pgnUrl, current, remember }) {
     const f = this.el.fields;
     f.white.value = g.white;
     f.black.value = g.black;
@@ -163,34 +218,26 @@ export class GamePanel {
     f.competition.value = g.event;
     f.played_on.value = g.played_on ?? '';
     f.result.value = g.result;
-    this.el.source.textContent = [
-      'Tournament game',
-      g.round ? `round ${g.round}` : '',
-      g.site,
-      g.source === 'twic' ? 'from The Week in Chess' : 'from a Lichess broadcast',
-    ]
-      .filter(Boolean)
-      .join(' · ');
-    this.el.pgn.href = api.wildGamePgnUrl(id);
+    this.el.source.textContent = source.filter(Boolean).join(' · ');
+    this.el.pgn.href = pgnUrl;
     this.el.compareResult.innerHTML = '';
-    this.current = { id, wild: true, data: g, saved: null };
+    this.current = current;
     this._setMode(true);
     store.set('openGameId', null);
-    store.set('openWild', { id, ply });
+    store.set('openWild', remember);
     this.el.panel.hidden = false;
     this.render();
     this.updateState();
-    return g;
   }
 
-  /** Copy the open tournament game into Games and carry on with it as one of yours. */
+  /** Copy the open tournament or masters game into Games and carry on with it as one of yours. */
   async saveWild() {
     if (!this.isWild) return;
     const ply = this.game.ply;
     this.el.wildSave.disabled = true;
     let r;
     try {
-      r = await api.saveWildGame(this.current.id);
+      r = this.current.masters ? await api.saveMastersGame(this.current.id) : await api.saveWildGame(this.current.id);
     } catch (err) {
       this.el.wildSave.disabled = false;
       toast(err.message, 'error');

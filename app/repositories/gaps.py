@@ -111,6 +111,20 @@ def store(s: Session, key: str, data: dict) -> None:
             {k: m.get(k) for k in ("uci", "san", "white", "draws", "black", "averageRating")} for m in data.get("moves", [])
         ],
     }
+    if "topGames" in data:  # the Masters panel's game list (absent in entries cached before v0.27.0)
+        keep["topGames"] = [
+            {
+                "id": g.get("id"),
+                "white": {"name": (g.get("white") or {}).get("name"), "rating": (g.get("white") or {}).get("rating")},
+                "black": {"name": (g.get("black") or {}).get("name"), "rating": (g.get("black") or {}).get("rating")},
+                "winner": g.get("winner"),
+                "year": g.get("year"),
+                "month": g.get("month"),
+                "uci": g.get("uci"),
+            }
+            for g in data["topGames"]
+            if g.get("id")
+        ]
     stmt = insert(ExplorerCache).values(key=key, source=SOURCE, data=keep)
     s.execute(stmt.on_conflict_do_update(index_elements=["key", "source"], set_={"data": keep, "fetched_at": stmt.excluded.fetched_at}))
 

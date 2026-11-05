@@ -34,6 +34,7 @@ The full plan, decisions and data model are in the project's
 | — | Play on against the engine from the end of a training line | Done |
 | — | Position drill: random repertoire positions without the moves before them | Done |
 | — | Repertoire gap finder: masters replies your repertoire doesn't cover | Done |
+| — | Masters explorer on the board: masters moves and top games for any position | Done |
 
 ## Using the board
 
@@ -286,6 +287,28 @@ explorer address (default `https://explorer.lichess.org`).
 API: `GET /api/openings/{id}/gaps?min_share=5&min_games=5`, `POST /api/openings/{id}/gaps/check` (starts a
 background check; 409 without a token or while one runs), `GET /api/explorer/status`, `POST /api/explorer/stop`.
 
+## Masters explorer (board)
+
+The **Masters** section on the board (under Branches; tap the heading to open or close it, remembered per device)
+shows what strong players play from the board position, from the same Lichess masters database as the gap finder:
+
+- **Moves**: each masters move with its number of games and share, a White-wins / draws / Black-wins bar and the
+  players' average rating. Tap a move to play it. It works for any position, not just your repertoire.
+- **Top games**: up to 15 of the strongest games that reached the position, with players, ratings, result, year and
+  the move played there. Tap one to open it on the board at this position, in the game panel like a tournament
+  game from the Wild tab: read-only, PGN download, and **Save to Games** to keep it as one of yours.
+- Looked up only while the section is open, once the position has settled (stepping through moves quickly doesn't
+  send a request per move), and kept for the session; the server caches each position for 180 days, shared with
+  the gap finder (one lookup serves both). An opened game is fetched once and kept in `masters_games`.
+- Hidden while training, drilling, solving puzzles or playing the engine, since it would give the answers away.
+
+Needs the same `LICHESS_TOKEN` as the gap finder; without it the section says how to add one. If Lichess is busy
+(HTTP 429) it says so with **Try again** rather than waiting a minute.
+
+API: `GET /api/masters?fen=` (moves, totals and top games; 409 without a token, 502 if Lichess fails),
+`GET /api/masters/games/{id}` (fetched from Lichess the first time), `GET /api/masters/games/{id}/pgn`,
+`POST /api/masters/games/{id}/save` (copies it into Games; saving again opens the existing copy).
+
 API: `GET /api/openings/{id}/dashboard` (stats, stages, forecast, problem positions (not shown since v0.25.3), lines),
 `GET /api/repertoires/{id}/overview`, `GET /api/activity?tz=Europe/London&days=182`, `POST /api/lines/{id}/reset`, `POST /api/openings/{id}/reset`,
 `DELETE /api/openings/{id}/lines`.
@@ -510,6 +533,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/gamepuzzles.e2e.cjs  # empty data
 # empty database; the server talks to the fake explorer (python tests/e2e/fake_explorer.py 8099 &) and is
 # started with LICHESS_TOKEN=lip_e2e LICHESS_EXPLORER_URL=http://127.0.0.1:8099:
 MPCT_URL=http://localhost:8010/ node tests/e2e/gaps.e2e.cjs
+MPCT_URL=http://localhost:8010/ node tests/e2e/masters.e2e.cjs
 ```
 
 ## Deploy on the home server
@@ -684,6 +708,7 @@ web/              frontend served as-is
   js/analysis.js  engine panel, evaluation bar, engine arrows
   js/games.js     games list view + open-game panel (save, compare, PGN)
   js/wild.js      Wild tab: watched positions, spotted tournament games, fetch status
+  js/masters.js   board Masters panel: masters moves and top games for the position
   js/puzzle.js    one puzzle's rules + rating chart path (pure logic, unit tested)
   js/puzzles.js   Puzzles tab + puzzle mode on the board
   js/sounds.js    move sounds (Web Audio; choosing the sound is unit tested)

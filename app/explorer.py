@@ -1,5 +1,6 @@
-"""Looking positions up in the Lichess opening explorer (masters database) for the
-repertoire gap finder. Runs in a background thread when "Check with Lichess masters" is
+"""Looking positions up in the Lichess opening explorer (masters database): the
+repertoire gap finder (below) and the board's Masters panel (app.repositories.masters).
+The gap finder runs in a background thread when "Check with Lichess masters" is
 pressed, one request at a time with a pause between them; a 429 waits a minute, as the
 Lichess API guidelines ask. Each answer is saved as it arrives, so a stopped or failed
 check keeps what it got and the next one carries on.
@@ -38,20 +39,35 @@ class TokenRejected(ExplorerError):
     pass
 
 
+class NotFound(ExplorerError):
+    pass
+
+
 def token_set() -> bool:
     return bool((settings.lichess_token or "").strip())
 
 
-def http_get(url: str, timeout: float = 30) -> dict:
+def http_get(url: str, timeout: float = 30, wait: bool = True, text: bool = False):
+    """GET from the explorer with the token. JSON (or the text when text=True). A 429 waits a
+    minute and tries again (twice), unless wait=False: a request someone is waiting on fails at once."""
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": USER_AGENT, "Accept": "application/json", "Authorization": f"Bearer {settings.lichess_token.strip()}"},
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": "application/x-chess-pgn" if text else "application/json",
+            "Authorization": f"Bearer {settings.lichess_token.strip()}",
+        },
     )
     for attempt in range(3):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as res:
-                return json.loads(res.read().decode("utf-8"))
+                body = res.read().decode("utf-8")
+                return body if text else json.loads(body)
         except urllib.error.HTTPError as exc:
+            if exc.code == 429 and not wait:
+                raise ExplorerError("Lichess is limiting requests right now; try again in a minute") from exc
+            if exc.code == 404:
+                raise NotFound("Lichess doesn't have that") from exc
             if exc.code == 429 and attempt < 2:
                 time.sleep(61)
                 continue
@@ -63,9 +79,17 @@ def http_get(url: str, timeout: float = 30) -> dict:
     raise ExplorerError("Lichess kept answering 429 (too many requests); try again later")
 
 
+TOP_GAMES = 15  # the most Lichess gives; the board's Masters panel lists them
+
+
 def masters_url(key: str) -> str:
-    q = urllib.parse.urlencode({"fen": f"{key} 0 1", "moves": 20, "topGames": 0, "recentGames": 0})
+    """One lookup serves both the gap finder (moves) and the Masters panel (moves + top games)."""
+    q = urllib.parse.urlencode({"fen": f"{key} 0 1", "moves": 20, "topGames": TOP_GAMES, "recentGames": 0})
     return f"{settings.lichess_explorer_url.rstrip('/')}/masters?{q}"
+
+
+def masters_pgn_url(game_id: str) -> str:
+    return f"{settings.lichess_explorer_url.rstrip('/')}/masters/pgn/{urllib.parse.quote(game_id)}"
 
 
 # ---- status shared with the API --------------------------------------------------------

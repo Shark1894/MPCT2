@@ -193,6 +193,31 @@ class ExplorerCache(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class MastersGame(Base):
+    """A game from the Lichess masters database, fetched when it's opened from the board's
+    Masters panel (kept so it opens again without asking Lichess). `pgn` is the text Lichess
+    sent; `moves` the main line in UCI. Dates there are often just a year (played_on is then
+    None and year/month say what is known)."""
+
+    __tablename__ = "masters_games"
+
+    id: Mapped[str] = mapped_column(String(12), primary_key=True)  # Lichess masters game id
+    white: Mapped[str] = mapped_column(String(100), server_default="")
+    black: Mapped[str] = mapped_column(String(100), server_default="")
+    white_elo: Mapped[int | None]
+    black_elo: Mapped[int | None]
+    event: Mapped[str] = mapped_column(String(200), server_default="")
+    site: Mapped[str] = mapped_column(String(200), server_default="")
+    round: Mapped[str] = mapped_column(String(20), server_default="")
+    year: Mapped[int | None]
+    month: Mapped[int | None]
+    played_on: Mapped[date | None] = mapped_column(Date)
+    result: Mapped[str] = mapped_column(String(7))
+    moves: Mapped[str] = mapped_column(Text)
+    pgn: Mapped[str] = mapped_column(Text)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class OpeningTag(Base):
     """A named branch of an opening: every line in the opening that passes through
     the tagged position carries the tag (including lines added later)."""
