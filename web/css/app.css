@@ -1136,6 +1136,7 @@ body.playing .fen-actions #btn-fen-load {
 .masters-box {
   border-top: 1px solid var(--border);
   padding-top: 10px;
+  container-type: inline-size; /* rows adapt to the panel's width, not the screen's */
 }
 
 .masters-box summary {
@@ -1184,9 +1185,10 @@ body.playing .fen-actions #btn-fen-load {
 
 .mx-move {
   display: grid;
-  grid-template-columns: 3.6em 6.5em minmax(60px, 1fr) 4.2em;
+  grid-template-columns: 3.2em 5.4em minmax(48px, 1fr) 3.9em;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
   text-align: left;
   padding: 6px 8px;
   min-height: 36px;
@@ -1222,6 +1224,8 @@ body.playing .fen-actions #btn-fen-load {
   text-align: center;
   overflow: hidden;
   white-space: nowrap;
+  min-width: 0;
+  flex: none;
 }
 
 .mx-bar .w {
@@ -1273,9 +1277,9 @@ body.playing .fen-actions #btn-fen-load {
   color: var(--text-dim);
 }
 
-@media (max-width: 420px) {
+@container (max-width: 330px) {
   .mx-move {
-    grid-template-columns: 3.2em 5.8em minmax(50px, 1fr);
+    grid-template-columns: 3.2em 5.4em minmax(48px, 1fr);
   }
 
   .mx-elo {

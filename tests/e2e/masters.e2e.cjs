@@ -52,6 +52,13 @@ const log = () => fetch(`${FAKE}/log`).then((r) => r.json());
   const e4 = await page.$eval('#masters-moves .mx-move', (b) => ({ count: b.querySelector('.mx-count').textContent, label: b.getAttribute('aria-label'), elo: b.querySelector('.mx-elo').textContent }));
   check(e4.count === '500 · 50%' && e4.elo === 'Ø 2400', 'move row: games, share, average rating: ' + JSON.stringify(e4));
   check(e4.label.includes('White wins 50%, draws 50%, Black wins 0%'), 'results bar described: ' + e4.label);
+  const spill = await page.$$eval('#masters-moves .mx-bar i', (els) => els.filter((i) => i.textContent && i.scrollWidth > i.clientWidth).length);
+  check(spill === 0, 'no bar label spills out of its segment');
+  const rowSpill = await page.$$eval('#masters-moves .mx-move', (els) =>
+    els.filter((b) => [...b.children].some((c) => c.offsetParent && c.getBoundingClientRect().right > b.getBoundingClientRect().right + 0.5)).length,
+  );
+  check(rowSpill === 0, 'nothing sticks out of a move row');
+  check((await page.getAttribute('#masters-moves .mx-move .mx-bar', 'title')) === 'White wins 50% · draws 50% · Black wins 0%', 'bar tooltip gives the full split');
   const games = await page.$$eval('#masters-games .mx-game', (els) => els.map((e) => e.textContent));
   check(games.length === 2 && games[0].startsWith('Carlsen (2700) – Caruana (2650)') && games[0].includes('1-0 · 2019 · played e4'), 'top games: ' + games[0]);
   check(games[1].includes('½-½ · 2005'), 'drawn game shown as ½-½: ' + games[1]);

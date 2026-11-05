@@ -33,6 +33,13 @@ export function shares({ white, draws, black }) {
   return { white: w, draws: Math.max(0, 100 - w - b), black: b };
 }
 
+/** Drop a bar segment's percentage when it doesn't fit inside the segment (narrow bars, small shares). */
+export function fitBarLabels(root) {
+  for (const i of root.querySelectorAll('.mx-bar i')) {
+    if (i.textContent && i.scrollWidth > i.clientWidth) i.textContent = '';
+  }
+}
+
 export class MastersPanel {
   /**
    * @param {object} deps
@@ -129,6 +136,7 @@ export class MastersPanel {
     }
     this.el.total.textContent = `${data.total.toLocaleString()} game${data.total === 1 ? '' : 's'}`;
     for (const m of data.moves) this.el.moves.appendChild(this._moveRow(m, data.total));
+    requestAnimationFrame(() => fitBarLabels(this.el.moves));
     const sanOf = new Map(data.moves.map((m) => [m.uci, m.san]));
     this.el.gamesHead.hidden = data.games.length === 0;
     for (const g of data.games) this.el.games.appendChild(this._gameRow(g, sanOf.get(g.uci), k));
@@ -148,9 +156,10 @@ export class MastersPanel {
     w.style.width = `${s.white}%`;
     d.style.width = `${s.draws}%`;
     b.style.width = `${s.black}%`;
-    w.textContent = s.white >= 18 ? `${s.white}%` : '';
-    d.textContent = s.draws >= 18 ? `${s.draws}%` : '';
-    b.textContent = s.black >= 18 ? `${s.black}%` : '';
+    w.textContent = s.white ? `${s.white}%` : '';
+    d.textContent = s.draws ? `${s.draws}%` : '';
+    b.textContent = s.black ? `${s.black}%` : '';
+    btn.querySelector('.mx-bar').title = `White wins ${s.white}% · draws ${s.draws}% · Black wins ${s.black}%`;
     btn.querySelector('.mx-elo').textContent = m.average_rating ? `Ø ${m.average_rating}` : '';
     btn.setAttribute(
       'aria-label',
