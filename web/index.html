@@ -345,13 +345,36 @@
       </div>
 
       <nav class="dash-tabs" role="tablist" aria-label="Dashboard sections">
+        <button id="dash-tab-overview" type="button" role="tab" class="dash-tab" data-pane="overview" aria-controls="dash-pane-overview">Overview</button>
         <button id="dash-tab-lines" type="button" role="tab" class="dash-tab" data-pane="lines" aria-controls="dash-pane-lines">Lines</button>
         <button id="dash-tab-progress" type="button" role="tab" class="dash-tab" data-pane="progress" aria-controls="dash-pane-progress">Progress</button>
         <button id="dash-tab-gaps" type="button" role="tab" class="dash-tab" data-pane="gaps" aria-controls="dash-pane-gaps">Gaps</button>
-        <button id="dash-tab-overview" type="button" role="tab" class="dash-tab" data-pane="overview" aria-controls="dash-pane-overview">Overview</button>
       </nav>
 
-      <div id="dash-pane-lines" class="dash-pane" role="tabpanel" aria-labelledby="dash-tab-lines">
+      <div id="dash-pane-overview" class="dash-pane" role="tabpanel" aria-labelledby="dash-tab-overview">
+        <div class="dash-band">
+          <section class="dash-card" aria-labelledby="ov-title">
+            <h2 id="ov-title" class="dash-h">Openings <span id="ov-rep" class="meta"></span></h2>
+            <div id="ov-list" class="ov-list"></div>
+            <div class="mastery-legend" aria-hidden="true">
+              <span><i class="sw m-mastered"></i>Mastered (streak 5+)</span>
+              <span><i class="sw m-known"></i>Known (2–4)</span>
+              <span><i class="sw m-learning"></i>Learning (0–1)</span>
+              <span><i class="sw m-new"></i>New</span>
+            </div>
+          </section>
+          <section class="dash-card" aria-labelledby="act-title">
+            <h2 id="act-title" class="dash-h">Training activity <span class="meta">last 26 weeks</span></h2>
+            <div class="act-scroll"><div id="act-grid" class="act-grid" role="img"></div></div>
+            <div class="act-foot">
+              <p id="act-summary" class="act-summary"></p>
+              <span class="act-legend" aria-hidden="true">Less <i class="cell l0"></i><i class="cell l1"></i><i class="cell l2"></i><i class="cell l3"></i><i class="cell l4"></i> More</span>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div id="dash-pane-lines" class="dash-pane" role="tabpanel" aria-labelledby="dash-tab-lines" hidden>
         <div class="dash-toolbar">
           <label>Sort
             <select id="dash-sort">
@@ -417,28 +440,6 @@
         </section>
       </div>
 
-      <div id="dash-pane-overview" class="dash-pane" role="tabpanel" aria-labelledby="dash-tab-overview" hidden>
-        <div class="dash-band">
-          <section class="dash-card" aria-labelledby="ov-title">
-            <h2 id="ov-title" class="dash-h">Openings <span id="ov-rep" class="meta"></span></h2>
-            <div id="ov-list" class="ov-list"></div>
-            <div class="mastery-legend" aria-hidden="true">
-              <span><i class="sw m-mastered"></i>Mastered (streak 5+)</span>
-              <span><i class="sw m-known"></i>Known (2–4)</span>
-              <span><i class="sw m-learning"></i>Learning (0–1)</span>
-              <span><i class="sw m-new"></i>New</span>
-            </div>
-          </section>
-          <section class="dash-card" aria-labelledby="act-title">
-            <h2 id="act-title" class="dash-h">Training activity <span class="meta">last 26 weeks</span></h2>
-            <div class="act-scroll"><div id="act-grid" class="act-grid" role="img"></div></div>
-            <div class="act-foot">
-              <p id="act-summary" class="act-summary"></p>
-              <span class="act-legend" aria-hidden="true">Less <i class="cell l0"></i><i class="cell l1"></i><i class="cell l2"></i><i class="cell l3"></i><i class="cell l4"></i> More</span>
-            </div>
-          </section>
-        </div>
-      </div>
     </main>
 
     <main id="games-view" class="games-view" hidden>

@@ -53,6 +53,7 @@ async function setFilter(page, value) {
   await page.reload();
   await settle(page, 800);
   await page.click('#view-dashboard');
+  await page.click('#dash-tab-lines'); // Dashboard opens on Overview
   await settle(page, 900);
 
   // ---- nothing bookmarked yet --------------------------------------------------------
@@ -151,6 +152,7 @@ async function setFilter(page, value) {
   await pp.goto(URL);
   await settle(pp, 800);
   await pp.click('#view-dashboard');
+  await pp.click('#dash-tab-lines'); // Dashboard opens on Overview
   await settle(pp, 900);
   await pp.selectOption('#dash-filter', 'bookmarked');
   await settle(pp, 200);

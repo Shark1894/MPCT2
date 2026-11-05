@@ -50,6 +50,7 @@ const rows = (p) => p.$$eval('#dash-lines .dash-line', (els) => els.map((e) => e
 
   // ---- open the dashboard -------------------------------------------------
   await page.click('#view-dashboard');
+  await page.click('#dash-tab-lines'); // Dashboard opens on Overview
   await settle(page);
   check(await page.isHidden('main.layout') && (await page.isVisible('#dashboard')), 'dashboard view replaces the board');
   check((await page.$eval('#dash-opening option:checked', (o) => o.textContent)) === 'Caro-Kann', 'dashboard follows the selected opening');
@@ -158,6 +159,7 @@ const rows = (p) => p.$$eval('#dash-lines .dash-line', (els) => els.map((e) => e
   await mp.goto(URL);
   await settle(mp, 700);
   await mp.click('#view-dashboard');
+  await mp.click('#dash-tab-lines'); // Dashboard opens on Overview
   await settle(mp, 700);
   check((await rows(mp)).length === 2, 'phone: lines listed');
   check(await mp.isHidden('.dash-header'), 'phone: table header hidden (cards)');

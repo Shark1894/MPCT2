@@ -232,8 +232,12 @@ The **Dashboard** tab (top bar). At the top, always visible: the selected openin
 **Train all**, and **More** (Reset all lines, Delete all lines, Delete opening), then its stats: lines, due now,
 next review, total reviews and accuracy (share of reviews without mistakes).
 
-Below that, four sub-tabs (the last one used is remembered per device; ← → move between them):
+Below that, four sub-tabs (opens on Overview; after that the last one used is remembered per device; ← → move
+between them):
 
+- **Overview**: **Openings**, every opening in the repertoire (White first) with lines, due, accuracy and a
+  learning-progress bar; click one to select it. **Training activity**: a grid of the last 26 weeks (shade =
+  reviews that day), your current and longest run of consecutive training days, and how many days you trained.
 - **Lines**: sort (next review, weakest, lowest streak, move order), show (all, due, not reviewed yet, recent
   mistakes, bookmarked) and search by move (`Bf5`, `3.e5`). Choices are remembered. Each line shows its next review,
   streak and last 5 results, with **☆** (bookmark), **Train**, **Show**, **Reset** (clears its history, due today)
@@ -243,9 +247,6 @@ Below that, four sub-tabs (the last one used is remembered per device; ← → m
   comments hidden in training), mastered (5+, next review a month or more away). **Due over the next 2 weeks**:
   lines due each day (overdue lines count as today), plus how many are due later.
 - **Gaps**: the repertoire gap finder (see below).
-- **Overview**: **Openings**, every opening in the repertoire (White first) with lines, due, accuracy and a
-  learning-progress bar; click one to select it. **Training activity**: a grid of the last 26 weeks (shade =
-  reviews that day), your current and longest run of consecutive training days, and how many days you trained.
 
 ### Bookmarks
 

@@ -67,8 +67,8 @@ async function seed(page) {
 
   // ---- sub-tabs -------------------------------------------------------------------
   const selected = () => page.$$eval('.dash-tab', (els) => els.filter((e) => e.getAttribute('aria-selected') === 'true').map((e) => e.textContent));
-  check(JSON.stringify(await page.$$eval('.dash-tab', (els) => els.map((e) => e.textContent))) === '["Lines","Progress","Gaps","Overview"]', 'four sub-tabs');
-  check(JSON.stringify(await selected()) === '["Lines"]' && (await page.isVisible('#dash-lines')) && (await page.isHidden('#fc-chart')) && (await page.isHidden('.gaps-card')) && (await page.isHidden('#ov-list')), 'Lines tab first, others hidden');
+  check(JSON.stringify(await page.$$eval('.dash-tab', (els) => els.map((e) => e.textContent))) === '["Overview","Lines","Progress","Gaps"]', 'four sub-tabs, Overview first');
+  check(JSON.stringify(await selected()) === '["Overview"]' && (await page.isVisible('#ov-list')) && (await page.isHidden('#dash-lines')) && (await page.isHidden('#fc-chart')) && (await page.isHidden('.gaps-card')), 'opens on Overview, others hidden');
   check((await page.isVisible('#dash-train-due')) && (await page.isVisible('#stat-lines')), 'picker, Train buttons and stats above the tabs');
   await page.click('#dash-tab-overview');
   await settle(page, 200);
@@ -136,10 +136,8 @@ async function seed(page) {
   await page.reload();
   await settle(page, 1000);
   check((await page.inputValue('#dash-sort')) === 'weak', 'sort choice remembered');
+  check(JSON.stringify(await selected()) === '["Lines"]', 'sub-tab remembered after reload');
   await page.click('#dash-tab-overview');
-  await page.reload();
-  await settle(page, 1000);
-  check(JSON.stringify(await selected()) === '["Overview"]', 'sub-tab remembered after reload');
 
   // ---- overview switches opening ----------------------------------------------------------
   await page.click('.ov-row:has-text("London")');

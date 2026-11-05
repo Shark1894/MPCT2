@@ -110,7 +110,7 @@ export class DashboardView {
         this.showTab(next.dataset.pane);
         next.focus();
       });
-    this.showTab(store.get('dashTab', 'lines'));
+    this.showTab(store.get('dashTab', 'overview'));
     enableTips(document.getElementById('dashboard'));
     e.resetAll.addEventListener('click', () => this._closeMenu() || this.resetAll());
     e.deleteAll.addEventListener('click', () => this._closeMenu() || this.deleteAll());
@@ -121,9 +121,9 @@ export class DashboardView {
     return this.repertoire._opening();
   }
 
-  /** Switch sub-tab: lines | progress | gaps | overview (remembered per device). */
+  /** Switch sub-tab: overview | lines | progress | gaps (remembered per device). */
   showTab(name) {
-    if (!this.tabs.some((t) => t.dataset.pane === name)) name = 'lines';
+    if (!this.tabs.some((t) => t.dataset.pane === name)) name = 'overview';
     this.tab = name;
     store.set('dashTab', name);
     for (const t of this.tabs) {
