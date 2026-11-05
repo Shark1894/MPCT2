@@ -185,8 +185,8 @@ export function renderForecast(box, note, forecast) {
     const bar = el('span', 'fc-bar');
     bar.style.height = `${(d.due / max) * 100}%`;
     if (!d.due) bar.classList.add('zero');
-    // "Today" spills into tomorrow's slot, which is left blank (the tooltip still names it).
-    const tick = el('span', i === 0 ? 'fc-tick first' : 'fc-tick', i === 0 ? 'Today' : i === 1 ? '' : weekdayFmt.format(asDate(d.date)));
+    // Every day gets its weekday letter; today's is highlighted (the tooltip says "Today").
+    const tick = el('span', i === 0 ? 'fc-tick today' : 'fc-tick', weekdayFmt.format(asDate(d.date)));
     const plot = el('span', 'fc-plot');
     plot.append(value, bar);
     col.append(plot, tick);

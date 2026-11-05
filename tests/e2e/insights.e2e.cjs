@@ -81,10 +81,14 @@ async function seed(page) {
 
   // ---- forecast -----------------------------------------------------------------------
   check((await page.$$('.fc-col')).length === 14, '14 forecast days');
-  check((await text(page, '.fc-col:first-child .fc-value')) === '2' && (await text(page, '.fc-col:first-child .fc-tick')) === 'Today', 'today: 2 due');
+  check((await text(page, '.fc-col:first-child .fc-value')) === '2' && (await page.$('.fc-col:first-child .fc-tick.today')) !== null, 'today: 2 due, tick highlighted');
+  check((await page.getAttribute('.fc-col:first-child', 'data-tip')).startsWith('Today:'), 'today tooltip');
+  const ticks = await page.$$eval('.fc-tick', (els) => els.map((e) => e.textContent));
+  const want = Array.from({ length: 14 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return new Intl.DateTimeFormat(undefined, { weekday: 'narrow' }).format(d); });
+  check(ticks.join('') === want.join(''), 'every day has its letter: ' + ticks.join(' '));
   const tip = await page.getAttribute('.fc-col:nth-child(4)', 'data-tip');
   check(/: 1 line$/.test(tip), 'classical line due in 3 days: ' + tip);
-  // Tomorrow's tick is blank (Today spills into it); every day's baseline must still line up.
+  // Every day's baseline must line up.
   const baselines = await page.$$eval('.fc-plot', (els) => els.map((e) => Math.round(e.getBoundingClientRect().bottom)));
   check(new Set(baselines).size === 1, 'forecast baselines level: ' + baselines.join(','));
   check((await text(page, '#fc-note')) === '3 lines in the next 14 days, 1 later.', 'forecast note: ' + (await text(page, '#fc-note')));

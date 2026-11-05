@@ -2179,17 +2179,15 @@ button.star[aria-pressed='true'] {
   font-size: 11px;
   color: var(--text-dim);
   padding-top: 4px;
-  height: 1.6em; /* fixed, so tomorrow's blank tick keeps every baseline level */
+  height: 1.6em; /* fixed, so every column's baseline stays level */
   box-sizing: content-box;
   white-space: nowrap;
   overflow: hidden;
 }
 
-.fc-tick.first {
-  overflow: visible;
-  text-align: left;
-  position: relative;
-  left: 2px;
+.fc-tick.today {
+  color: var(--blue);
+  font-weight: 700;
 }
 
 .fc-note {
