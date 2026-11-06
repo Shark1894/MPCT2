@@ -203,6 +203,28 @@ async function submitDialog(p) {
   check(order.every((v, i) => i === 0 || v > order[i - 1]), 'phone: game panel after the engine, before the repertoire');
   check(await mp.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'phone: board view has no horizontal overflow');
 
+  // ---- import several PGN files at once --------------------------------------------------------
+  await page.click('#view-games');
+  await settle(page);
+  const before = (await rows(page)).length;
+  const pgnText = (white, black, date, moves) => `[Event "Club"]\n[Date "${date}"]\n[White "${white}"]\n[Black "${black}"]\n[Result "*"]\n\n${moves} *\n`;
+  const fileA = pgnText('Ann One', 'Bob Two', '2026.10.01', '1. e4 c5') + '\n' + pgnText('Cat Three', 'Dan Four', '2026.10.02', '1. d4 Nf6');
+  const fileB = pgnText('Eve Five', 'Fay Six', '2026.10.03', '1. c4 e5');
+  await page.click('#games-import');
+  await page.waitForSelector('dialog[open] input[type=file]', { state: 'attached' });
+  check((await text(page, 'dialog[open] .modal-field button')) === 'Choose files…', 'file button says files');
+  await page.setInputFiles('dialog[open] input[type=file]', [
+    { name: 'a.pgn', mimeType: 'text/plain', buffer: Buffer.from(fileA) },
+    { name: 'b.pgn', mimeType: 'text/plain', buffer: Buffer.from(fileB) },
+    { name: 'c.pgn', mimeType: 'text/plain', buffer: Buffer.from(fileA) }, // the same games again
+  ]);
+  await settle(page, 400);
+  check((await text(page, 'dialog[open] .modal-files')) === '3 files: a.pgn, b.pgn, c.pgn', 'chosen files listed');
+  check((await page.inputValue('dialog[open] textarea[name=pgn]')).split('[Event ').length - 1 === 5, 'all files loaded into the box');
+  await submitDialog(page);
+  check((await text(page, '#toast')).includes('Imported 3 games, 2 already in the app'), 'three files imported together: ' + (await text(page, '#toast')));
+  check((await rows(page)).length === before + 3, 'three new games listed');
+
   check(errors.length === 0, 'no console/page errors ' + JSON.stringify(errors));
   await browser.close();
 })();

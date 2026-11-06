@@ -473,7 +473,8 @@ Filters under the search box narrow the list further, and are remembered on the 
 - **Clear filters** resets them. Export PGN downloads exactly the filtered list.
 
 - **New game** asks for the details (date defaults to today) and can keep the moves already on the board.
-- **Import PGN** takes pasted text or a `.pgn` file. Only the main line is kept; `WhiteTeam`/`BlackTeam`, `Event`
+- **Import PGN** takes pasted text or one or more `.pgn` files (choose several at once; they're loaded one after
+  another, and very large imports are sent in parts, split between games). Only the main line is kept; `WhiteTeam`/`BlackTeam`, `Event`
   and `Date` tags are read. Games already in the app (same players, date and moves) are skipped, and games with
   illegal moves are listed rather than imported.
 - **Export PGN** downloads every game matching the search; **PGN** on a row downloads one game.

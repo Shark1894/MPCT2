@@ -16,6 +16,7 @@ function getDialog() {
  *   type: 'text' (default), 'select' (options: [[value, label]]), 'date', 'textarea', 'checkbox'
  *   required: text fields are required unless required: false
  *   file: for a textarea, an accept string (e.g. '.pgn') adds a "Choose file" button that loads a file into it
+ *   multiple: with file, several files can be chosen; their texts are loaded one after another
  * Resolves to { name: value, ... } (checkboxes give true/false) or null if cancelled.
  */
 export function formDialog({ title, message = '', fields = [], submit = 'Save', danger = false }) {
@@ -68,16 +69,25 @@ export function formDialog({ title, message = '', fields = [], submit = 'Save', 
       const picker = document.createElement('input');
       picker.type = 'file';
       picker.accept = f.file;
+      picker.multiple = Boolean(f.multiple);
       picker.hidden = true;
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'small';
-      btn.textContent = 'Choose file…';
+      btn.textContent = f.multiple ? 'Choose files…' : 'Choose file…';
       btn.addEventListener('click', () => picker.click());
+      const chosen = document.createElement('span');
+      chosen.className = 'modal-files meta';
+      chosen.hidden = true;
       picker.addEventListener('change', async () => {
-        if (picker.files[0]) input.value = await picker.files[0].text();
+        const files = [...picker.files];
+        if (!files.length) return;
+        const texts = await Promise.all(files.map((file) => file.text()));
+        input.value = texts.map((t) => t.trim()).filter(Boolean).join('\n\n');
+        chosen.hidden = files.length < 2;
+        chosen.textContent = `${files.length} files: ${files.map((file) => file.name).join(', ')}`;
       });
-      label.append(btn, picker);
+      label.append(btn, chosen, picker);
     }
     form.appendChild(label);
   }

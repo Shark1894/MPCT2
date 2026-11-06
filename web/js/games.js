@@ -68,6 +68,25 @@ export function normaliseFilters({ player = '', color = '', result = '', reviewe
   return { player, color, result, reviewed };
 }
 
+export const PGN_CHUNK = 4_000_000; // characters; the server takes up to 5 million per request
+
+/** PGN text in parts of at most `max` characters, split only where a game starts (a "[" tag line after a blank line). */
+export function pgnChunks(text, max = PGN_CHUNK) {
+  if (text.length <= max) return [text];
+  const games = text.split(/\n\s*\n(?=\[)/);
+  const chunks = [];
+  let current = '';
+  for (const g of games) {
+    if (current && current.length + g.length + 2 > max) {
+      chunks.push(current);
+      current = '';
+    }
+    current = current ? `${current}\n\n${g}` : g;
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
 /** SAN list -> "1.d4 d5 2.c4" */
 function preview(sans) {
   return sans.map((san, i) => (i % 2 === 0 ? `${i / 2 + 1}.${san}` : san)).join(' ');
@@ -741,13 +760,20 @@ export class GamesView {
   async importPgn() {
     const values = await formDialog({
       title: 'Import PGN',
-      message: 'Paste one or more games, or choose a .pgn file. Only the main line is kept; games already in the app are skipped.',
-      fields: [{ name: 'pgn', label: 'PGN', type: 'textarea', required: true, file: '.pgn,text/plain' }],
+      message: 'Paste one or more games, or choose one or more .pgn files. Only the main line is kept; games already in the app are skipped.',
+      fields: [{ name: 'pgn', label: 'PGN', type: 'textarea', required: true, file: '.pgn,text/plain', multiple: true }],
       submit: 'Import',
     });
     if (!values) return;
     try {
-      const res = await api.importPgn(values.pgn);
+      const res = { imported: 0, duplicates: 0, errors: [] };
+      for (const chunk of pgnChunks(values.pgn)) {
+        // Many files can add up to more than one request takes: sent in parts, split between games.
+        const part = await api.importPgn(chunk);
+        res.imported += part.imported;
+        res.duplicates += part.duplicates;
+        res.errors.push(...part.errors);
+      }
       const parts = [`Imported ${plural(res.imported, 'game')}`];
       if (res.duplicates) parts.push(`${res.duplicates} already in the app`);
       toast(parts.join(', '), res.imported || !res.errors.length ? '' : 'error');

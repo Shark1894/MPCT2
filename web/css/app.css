@@ -3267,3 +3267,8 @@ body.puzzle-locked .engine {
     flex: 1;
   }
 }
+
+.modal-files {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
