@@ -4,7 +4,9 @@ author's notes), in one go.
 Lines go in as normal repertoire lines (due today, like any new line): duplicates and lines that
 are the start of a longer one are merged, and a line that continues one already in the opening
 extends it. Notes become position comments in the repertoire; a note already there isn't added
-twice, and an existing comment of yours keeps its text with the note added under it. Each chapter
+twice. Where you already have a comment, `comment_mode` decides: 'append' (default) keeps your text
+with the note added under it, 'keep' leaves that position alone, 'replace' swaps your comment for
+the course's notes. Each chapter
 can become a branch tag, on the position where its lines part from the rest (skipped when that's
 the start position or already tagged).
 
@@ -27,6 +29,7 @@ from app.repositories import repertoire as repo
 from app.repositories import tags as tags_repo
 
 COMMENT_MAX = 10_000  # what the comment box can save
+COMMENT_MODES = ("append", "keep", "replace")
 TAG_MAX = 60
 CHUNK = 2000
 
@@ -97,8 +100,12 @@ def import_course(
     chapters: list[dict],
     comments: bool = True,
     tag_chapters: bool = True,
+    comment_mode: str = "append",
 ) -> dict:
-    """lines: the course lines to import (already chosen); chapters: [{id, title}] in course order."""
+    """lines: the course lines to import (already chosen); chapters: [{id, title}] in course order.
+    comment_mode: what to do where you already have a comment ('append', 'keep' or 'replace')."""
+    if comment_mode not in COMMENT_MODES:
+        raise InvalidLine(f"Unknown comment mode {comment_mode!r}")
     if not lines:
         raise InvalidLine("No lines to import: choose at least one chapter")
     colors = {line.color for line in lines}
@@ -118,7 +125,8 @@ def import_course(
 
     report = {"opening_id": opening_id, "opening": name, "color": color, "created_opening": created_opening,
               "lines_read": len(lines), "lines_created": 0, "lines_extended": 0, "lines_covered": 0,
-              "comments_added": 0, "comments_existing": 0, "comments_too_long": 0, "tags": [], "tags_skipped": [],
+              "comments_added": 0, "comments_existing": 0, "comments_too_long": 0,
+              "comments_kept": 0, "comments_replaced": 0, "tags": [], "tags_skipped": [],
               "skipped": []}
 
     # ---- moves: validate, then merge duplicates and prefixes ----------------------------------
@@ -199,6 +207,25 @@ def import_course(
         writes: dict[str, str] = {}
         for key, bucket in notes.items():
             text = current.get(key, "")
+            if text and comment_mode == "keep":
+                report["comments_kept"] += 1  # positions left as they were
+                continue
+            if text and comment_mode == "replace":
+                course_text = ""
+                for note in bucket:
+                    merged = merge_comment(course_text, note)
+                    if merged is None:
+                        continue
+                    if len(merged) > COMMENT_MAX:
+                        report["comments_too_long"] += 1
+                    else:
+                        course_text = merged
+                if course_text and course_text != text:
+                    writes[key] = course_text
+                    report["comments_replaced"] += 1
+                elif course_text:
+                    report["comments_existing"] += len(bucket)  # already exactly the course's notes
+                continue
             changed = False
             for note in bucket:
                 merged = merge_comment(text, note)

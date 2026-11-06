@@ -1,6 +1,6 @@
 """Create an opening from a Chessable course export (the browser sends the chosen lines)."""
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -24,6 +24,8 @@ class CourseIn(BaseModel):
     lines: list[dict[str, Any]] = Field(max_length=10_000)  # course lines as in the export: {"game": {...}}
     chapters: list[Chapter] = Field(default_factory=list, max_length=500)
     comments: bool = True
+    # Where you already have a comment: add the note under it, leave it alone, or replace it.
+    comment_mode: Literal["append", "keep", "replace"] = "append"
     tags: bool = True
 
 
@@ -39,6 +41,8 @@ class CourseOut(BaseModel):
     comments_added: int
     comments_existing: int
     comments_too_long: int
+    comments_kept: int  # positions with your comment, left alone ('keep')
+    comments_replaced: int  # positions whose comment was replaced ('replace')
     tags: list[str]
     tags_skipped: list[str]
     skipped: list[str]
@@ -59,7 +63,8 @@ def import_course(repertoire_id: int, body: CourseIn, s: Db):
         if line.kind != "info":
             lines.append(line)
     report = repo.import_course(
-        s, repertoire_id, body.name, lines, [c.model_dump() for c in body.chapters], body.comments, body.tags
+        s, repertoire_id, body.name, lines, [c.model_dump() for c in body.chapters], body.comments, body.tags,
+        body.comment_mode,
     )
     report["skipped"] = skipped + report["skipped"]
     return report

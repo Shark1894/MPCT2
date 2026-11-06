@@ -549,14 +549,19 @@ Chessable course export (`.json`, with the course under `bookData`: its contents
 line, as the study page's `getGame` gives it). The file is read in the browser; you tick the chapters (the
 introduction, quickstarter, model games and chapters missing from the course's current contents start unticked;
 information pages are never imported, reference lines only if you tick that), name the opening (default: the
-course's name, played from the course's side) and choose whether to import the notes and tag the chapters. Only
+course's name, played from the course's side), choose what to do with the author's notes and whether to tag the
+chapters. Only
 the chosen lines' moves and notes are sent to the server (a few MB).
 
 - Lines become normal repertoire lines, due today. Duplicates and lines that are the start of a longer one are
   merged; a line continuing one already in the opening extends it.
 - The author's notes go into the repertoire's position comments, as plain text with sidelines in brackets. A note
-  already there isn't added again; your own comment keeps its text with the note under it; a note that would take a
-  comment past 10,000 characters is left out (and counted).
+  already there isn't added again, and a note that would take a comment past 10,000 characters is left out (and
+  counted). Where a position already has a comment, **Author's notes** decides (remembered per device):
+  - **add under my existing comments** (default): your text stays, the note goes under it;
+  - **only where I have no comment**: positions you've commented are left exactly as they are;
+  - **replace my existing comments**: your comment is swapped for the course's notes for that position;
+  - **don't import**: no notes at all.
 - Each chapter becomes a branch tag on the position where its lines part from the rest, so you can train or filter
   by chapter. Chapters whose lines part at move 1, or whose position is already tagged, are reported, not tagged.
 - Importing again with the same opening name adds only what's new (an opening of that name for the other colour

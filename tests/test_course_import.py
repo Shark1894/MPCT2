@@ -121,3 +121,26 @@ def test_errors(client, rep):
     assert r.status_code == 409  # same name, other colour
     r = post(client, rep["id"], [line(7, ["e4", "e4"]), SLAV], name="Mixed", tags=False)
     assert r["lines_created"] == 1 and len(r["skipped"]) == 1  # the illegal line is reported, the rest imported
+
+
+def test_comment_modes(client, rep):
+    after_c4 = "rnbqkbnr/ppp1pppp/8/3p4/2PP4/8/PP2PPPP/RNBQKBNR b KQkq - 0 2"
+    comment = lambda: client.get(f"/api/repertoires/{rep['id']}/comment", params={"fen": after_c4}).json()["comment"]
+    client.put(f"/api/repertoires/{rep['id']}/comment", json={"fen": after_c4, "comment": "My own note."})
+
+    keep = post(client, rep["id"], [QGD], name="Keep", tags=False, comment_mode="keep")
+    assert comment() == "My own note."  # left alone
+    assert keep["comments_kept"] == 1 and keep["comments_added"] == 2 and keep["comments_replaced"] == 0  # other positions still get notes
+
+    replace = post(client, rep["id"], [QGD], name="Keep", tags=False, comment_mode="replace")
+    assert comment() == "White puts pressure on d5."  # your text gone, the course's note instead
+    assert replace["comments_replaced"] == 1 and replace["comments_added"] == 0  # the other two already hold exactly the course's notes
+    again = post(client, rep["id"], [QGD], name="Keep", tags=False, comment_mode="replace")
+    assert again["comments_replaced"] == 0  # already the course's notes: nothing rewritten
+
+    client.put(f"/api/repertoires/{rep['id']}/comment", json={"fen": after_c4, "comment": "Mine again."})
+    post(client, rep["id"], [QGD], name="Keep", tags=False)  # default: add under
+    assert comment() == "Mine again.\n\nWhite puts pressure on d5."
+
+    r = client.post(f"/api/repertoires/{rep['id']}/import-course", json={"name": "X", "lines": [QGD], "chapters": [], "comment_mode": "merge"})
+    assert r.status_code == 422

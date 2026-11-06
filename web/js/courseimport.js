@@ -3,7 +3,7 @@
 // the server, which makes the opening, its lines, comments and one branch tag per chapter.
 
 import { api } from './api.js';
-import { formDialog, plural, toast } from './ui.js';
+import { formDialog, plural, store, toast } from './ui.js';
 
 // Chapters left unticked at first: not repertoire lines to train.
 const NOT_TRAINED = /intro|quick ?starter|model games|illustrative games|test yourself|exercises/i;
@@ -36,6 +36,13 @@ export function readCourse(json) {
   };
 }
 
+/** What to do with the author's notes where a position already has a comment of yours. */
+export const NOTE_MODES = [
+  ['append', 'Import: add under my existing comments'],
+  ['keep', 'Import: only where I have no comment'],
+  ['replace', 'Import: replace my existing comments'],
+  ['none', 'Don’t import'],
+];
 /** Whether a chapter is ticked to start with. */
 export const trainedChapter = (title) => !NOT_TRAINED.test(title);
 
@@ -100,7 +107,13 @@ export async function importCourse(repertoireId) {
       type: 'checkbox',
       value: c.listed && trainedChapter(c.title) && trainable(c) > 0,
     })),
-    { name: 'comments', label: 'Import the author’s notes as comments', type: 'checkbox', value: true },
+    {
+      name: 'notes',
+      label: 'Author’s notes',
+      type: 'select',
+      options: NOTE_MODES,
+      value: NOTE_MODES.some(([v]) => v === store.get('courseImport.notes')) ? store.get('courseImport.notes') : 'append',
+    },
     { name: 'tags', label: 'Tag each chapter (train or filter by chapter)', type: 'checkbox', value: true },
   ];
   if (references) fields.push({ name: 'reference', label: `Include ${plural(references, 'reference line')} (not trained on Chessable)`, type: 'checkbox', value: false });
@@ -114,6 +127,8 @@ export async function importCourse(repertoireId) {
     submit: 'Import',
   });
   if (!values) return null;
+  store.set('courseImport.notes', values.notes);
+  const comments = values.notes !== 'none';
   const ids = course.chapters.filter((c) => values[`ch_${c.id}`]).map((c) => c.id);
   const lines = chosenLines(course, ids, Boolean(values.reference));
   if (!lines.length) {
@@ -127,7 +142,8 @@ export async function importCourse(repertoireId) {
       name: values.name,
       lines,
       chapters: course.chapters.map((c) => ({ id: c.id, title: c.title })),
-      comments: values.comments,
+      comments,
+      comment_mode: comments ? values.notes : 'append',
       tags: values.tags,
     });
   } catch (err) {
@@ -138,7 +154,9 @@ export async function importCourse(repertoireId) {
     `${r.created_opening ? 'Created' : 'Added to'} “${r.opening}”: ${plural(r.lines_created, 'new line')}`,
     r.lines_extended ? `${plural(r.lines_extended, 'line')} extended` : '',
     r.lines_covered ? `${r.lines_covered} already covered by other lines` : '',
-    values.comments ? `${plural(r.comments_added, 'note')} added to comments` + (r.comments_existing ? ` (${r.comments_existing} already there)` : '') : '',
+    comments ? `${plural(r.comments_added, 'note')} added to comments` + (r.comments_existing ? ` (${r.comments_existing} already there)` : '') : '',
+    r.comments_replaced ? `${plural(r.comments_replaced, 'comment')} replaced by the course’s notes` : '',
+    r.comments_kept ? `${plural(r.comments_kept, 'position')} with your own comment left as it was` : '',
     r.comments_too_long ? `${plural(r.comments_too_long, 'note')} left out (the comment would be too long)` : '',
     values.tags ? `${plural(r.tags.length, 'chapter tag')}` : '',
   ].filter(Boolean);
