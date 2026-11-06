@@ -12,6 +12,7 @@ training in those browsers falls back to typing moves.
 """
 
 import io
+import struct
 import sys
 import tarfile
 import urllib.request
@@ -20,7 +21,49 @@ from pathlib import Path
 
 NAME = "vosk-model-small-en-us-0.15"
 URL = f"https://alphacephei.com/vosk/models/{NAME}.zip"
-REQUIRED = ("am/final.mdl", "conf/mfcc.conf", "conf/model.conf", "graph/HCLr.fst", "graph/Gr.fst", "graph/words.txt")
+# What a lookahead model (one that accepts a grammar) needs. The official zip has no
+# graph/words.txt: the words live in Gr.fst's symbol table.
+REQUIRED = ("am/final.mdl", "conf/mfcc.conf", "conf/model.conf", "graph/HCLr.fst", "graph/Gr.fst")
+
+
+FST_MAGIC = 2125659606
+SYMBOLS_MAGIC = 2125658996
+
+
+def fst_words(fst: bytes) -> str | None:
+    """graph/words.txt ("word id" lines) from the output symbol table kept inside an OpenFst
+    file, or None if it has none. The official model ships its words only there, but the
+    browser build of Vosk reads them from words.txt."""
+
+    def string(o):
+        n = struct.unpack_from("<i", fst, o)[0]
+        return fst[o + 4 : o + 4 + n].decode("utf-8"), o + 4 + n
+
+    def table(o):
+        if struct.unpack_from("<i", fst, o)[0] != SYMBOLS_MAGIC:
+            raise ValueError("bad symbol table")
+        _, o = string(o + 4)  # table name
+        _, size = struct.unpack_from("<qq", fst, o)  # available key, size
+        o += 16
+        rows = []
+        for _ in range(size):
+            sym, o = string(o)
+            rows.append((sym, struct.unpack_from("<q", fst, o)[0]))
+            o += 8
+        return rows, o
+
+    if len(fst) < 8 or struct.unpack_from("<i", fst, 0)[0] != FST_MAGIC:
+        return None
+    _, o = string(4)  # fst type
+    _, o = string(o)  # arc type
+    _, flags = struct.unpack_from("<ii", fst, o)  # version, flags
+    o += 8 + 8 + 8 + 8 + 8  # properties, start, states, arcs
+    if not flags & 2:
+        return None
+    if flags & 1:
+        _, o = table(o)  # input symbols come first
+    rows, _ = table(o)
+    return "".join(f"{sym} {key}\n" for sym, key in rows)
 
 
 def repack(zip_bytes: bytes, out: Path, folder: str = NAME) -> int:
@@ -33,17 +76,22 @@ def repack(zip_bytes: bytes, out: Path, folder: str = NAME) -> int:
         missing = [r for r in REQUIRED if r not in inner]
         if missing:
             raise ValueError(f"not a Vosk lookahead model (missing {', '.join(missing)})")
-        out.parent.mkdir(parents=True, exist_ok=True)
-        tmp = out.with_suffix(".part")
-        with tarfile.open(tmp, "w:gz") as tar:
-            for rel, name in sorted(inner.items()):
-                data = z.read(name)
-                info = tarfile.TarInfo(f"{folder}/{rel}")
-                info.size = len(data)
-                info.mode = 0o644
-                tar.addfile(info, io.BytesIO(data))
-        tmp.replace(out)
-        return len(inner)
+        files = {rel: z.read(name) for rel, name in inner.items()}
+    if "graph/words.txt" not in files:
+        words = fst_words(files["graph/Gr.fst"])
+        if words is None:
+            raise ValueError("no graph/words.txt and no word list inside graph/Gr.fst")
+        files["graph/words.txt"] = words.encode("utf-8")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix(".part")
+    with tarfile.open(tmp, "w:gz") as tar:
+        for rel, data in sorted(files.items()):
+            info = tarfile.TarInfo(f"{folder}/{rel}")
+            info.size = len(data)
+            info.mode = 0o644
+            tar.addfile(info, io.BytesIO(data))
+    tmp.replace(out)
+    return len(files)
 
 
 def main(argv: list[str]) -> int:

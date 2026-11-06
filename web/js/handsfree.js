@@ -671,7 +671,7 @@ export class HandsFree {
     else status = '🔊 Reading out the moves';
     e.status.textContent = status;
     const waiting = (this.mode === 'move' || this.mode === 'confirm') && !this.speaker.busy;
-    e.talk.hidden = !(!insecure && this.listener.available && waiting && !this.listener.running && !this.listener.starting && !this.listener.loading);
+    e.talk.hidden = !(!insecure && !this.listener.failed && this.listener.available && waiting && !this.listener.running && !this.listener.starting && !this.listener.loading);
     e.undo.hidden = !t?.session?.canUndoMistake?.();
     e.blind.setAttribute('aria-pressed', String(this.blind));
     e.blind.textContent = this.blind ? 'Show pieces' : 'Hide pieces';
