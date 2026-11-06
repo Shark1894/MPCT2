@@ -47,7 +47,7 @@ const current = (p) => p.evaluate(() => ({ id: mpct.puzzles.run.puzzle.id, expec
 
 (async () => {
   if (!DB) throw new Error('Set MPCT_DATABASE_URL');
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => m.type() === 'error' && !/status of 4\d\d/.test(m.text()) && errors.push(m.text()));
@@ -57,7 +57,7 @@ const current = (p) => p.evaluate(() => ({ id: mpct.puzzles.run.puzzle.id, expec
   await settle(page, 800);
 
   // ---- before the database is loaded ---------------------------------------------------------
-  await page.click('#view-puzzles');
+  await page.click('#view-courses'); await page.click('.cv-item[data-puzzles=rated]');
   await settle(page, 700);
   check(/No puzzles yet/.test(await text(page, '#pz-db-text')), 'asks to download the database');
   check((await text(page, '#pz-import')) === 'Download puzzles' && (await page.isDisabled('#pz-start')), 'Download offered, Start disabled');
@@ -69,7 +69,7 @@ const current = (p) => p.evaluate(() => ({ id: mpct.puzzles.run.puzzle.id, expec
   check(/Imported 3 puzzles/.test(out), 'import tool: ' + out.trim());
 
   await page.click('#view-board');
-  await page.click('#view-puzzles');
+  await page.click('#view-courses'); await page.click('.cv-item[data-puzzles=rated]');
   await settle(page, 700);
   check(/3 puzzles from the Lichess puzzle database, downloaded today/.test(await text(page, '#pz-db-text')), 'database status');
   check((await text(page, '#pz-import')) === 'Update puzzles' && !(await page.isDisabled('#pz-start')), 'Update offered, Start enabled');
@@ -140,7 +140,7 @@ const current = (p) => p.evaluate(() => ({ id: mpct.puzzles.run.puzzle.id, expec
   check(await page.isHidden('#puzzle') && !(await page.isHidden('#rep-build')) && (await page.isHidden('#mode-badge')), 'Stop returns to the normal board');
 
   // ---- the tab after a few puzzles ----------------------------------------------------------------
-  await page.click('#view-puzzles');
+  await page.click('#view-courses'); await page.click('.cv-item[data-puzzles=rated]');
   await settle(page, 800);
   const meta = await text(page, '#pz-rating-meta');
   check(/2 puzzles rated, 50% solved · today 1\/2/.test(meta), 'rating summary: ' + meta);
@@ -159,7 +159,7 @@ const current = (p) => p.evaluate(() => ({ id: mpct.puzzles.run.puzzle.id, expec
     const phone = await browser.newPage({ ...devices['Pixel 7'] });
     await phone.goto(URL);
     await settle(phone, 800);
-    await phone.click('#view-puzzles');
+    await phone.click('#view-courses'); await phone.click('.cv-item[data-puzzles=rated]');
     await settle(phone, 800);
     await phone.screenshot({ path: `${SHOTS}/puzzles-phone.png` });
     await phone.click('#pz-start');

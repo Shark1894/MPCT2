@@ -161,7 +161,7 @@ async function importFile(page, file) {
   await page.click('dialog[open] button[type=submit]');
   await settle(page, 800);
   const groups = await page.$$eval('.cv-group', (gs) => gs.map((g) => `${g.querySelector('.cv-group-h').textContent}: ${[...g.querySelectorAll('.cv-item-name')].map((n) => n.textContent).join(',')}`));
-  check(groups.join(' | ') === 'Woodpecker1: The Woodpecker Method | Tactics1: Test Tactics', `courses grouped by kind (${groups.join(' | ')})`);
+  check(groups.join(' | ') === 'Puzzles: Rated puzzles,From your games | Woodpecker1: The Woodpecker Method | Tactics1: Test Tactics', `courses grouped by kind (${groups.join(' | ')})`);
   check((await text(page, '.cv-item.selected .cv-item-name')) === 'The Woodpecker Method', 'imported course selected');
   check((await text(page, '.cv-item.selected .cv-item-progress')) === 'No cycle yet', 'woodpecker progress in the list');
   check((await text(page, '.wp-current .wp-h')) === 'The Woodpecker Method', 'woodpecker intro');
@@ -208,6 +208,7 @@ async function importFile(page, file) {
   await page.waitForTimeout(300);
   await move(page, 'g3h3');
   await waitEnd(page);
+  await page.waitForFunction(() => document.querySelector('#cx-result').textContent.includes('complete'), null, { timeout: 5000 }).catch(() => {});
   check((await text(page, '#cx-result')).includes('Missed') && (await text(page, '#cx-result')).includes('Cycle 1 complete!'), 'missed, and the cycle is complete');
   await page.click('#cx-next');
   await page.waitForSelector('#courses-view:not([hidden])');

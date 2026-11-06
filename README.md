@@ -41,6 +41,7 @@ The full plan, decisions and data model are in the project's
 | — | Import a Chessable course export as an opening (lines, notes, chapter tags) | Done |
 | — | Training tab: tactics, strategy and endgame courses worked through move by move | Done |
 | — | Training tab grouped by kind; Woodpecker Method cycles with timed puzzles | Done |
+| — | Puzzles moved into the Training tab | Done |
 
 ## Using the board
 
@@ -338,7 +339,7 @@ background check; 409 without a token or while one runs), `GET /api/explorer/sta
 
 Under Masters, **Your games** does the same for your own games: from the board position, every move played next
 in your OTB games, with how many games, the share, the results bar and your score with it ("+2 =1 −0", from the
-side you played: your names are the ones set on the Puzzles tab). Positions match by position, so transpositions
+side you played: your names are the ones set under Training → Puzzles → From your games). Positions match by position, so transpositions
 count. **Include online games** adds the Online group. Below, the games that reached the position (latest 30),
 each with what was played next; tap one to open it at that position. Tap a move to play it. Closed by default,
 hidden while training, drilling, solving puzzles or playing the engine. The server replays the games once into
@@ -425,7 +426,7 @@ API: `GET /api/repertoires/{id}/watches`, `GET /api/openings/{id}/watches`, `PUT
 
 ## Puzzles
 
-The **Puzzles** tab: tactics from the [Lichess puzzle database](https://database.lichess.org/#puzzles) (CC0, about
+**Training → Puzzles → Rated puzzles**: tactics from the [Lichess puzzle database](https://database.lichess.org/#puzzles) (CC0, about
 6 million puzzles) with your own puzzle rating.
 
 - **The database:** **Download puzzles** streams the compressed file (about 260 MB) from Lichess into Postgres in the
@@ -448,7 +449,7 @@ The **Puzzles** tab: tactics from the [Lichess puzzle database](https://database
 
 ### From your games
 
-The **From your games** card on the Puzzles tab turns your own mistakes into puzzles.
+**Training → Puzzles → From your games** turns your own mistakes into puzzles.
 
 - **Where they come from:** only games reviewed with the engine (see Engine review › Reviewed games). The card
   says how many of your games are reviewed, and **Review them** goes to the Games tab to review the rest. A move
@@ -588,7 +589,10 @@ through in order, move by move, on the board.
   guessed from the name) and tick the chapters. Lines may start from any position and be for either side.
   Importing the same course again updates titles, moves and notes and adds what's new; your progress is kept,
   except for exercises whose moves changed (they're new again).
-- Courses are listed on the left, grouped by kind (Woodpecker, Tactics, Strategy, Endgames, Other) with a progress
+- **Puzzles** sits at the top of the list: **Rated puzzles** (the Lichess puzzle database and your puzzle rating,
+  shown in the list) and **From your games** (your own mistakes; the list shows how many are due). They used to be
+  a tab of their own; a saved Puzzles view opens here.
+- Courses are listed below, grouped by kind (Woodpecker, Tactics, Strategy, Endgames, Other) with a progress
   bar each; click one to show it on the right (the choice is remembered). **Edit** renames it, moves it to
   another group, resets progress or deletes it.
 - A course shows its progress (solved, missed, to do) and its chapters; open a chapter to see its exercises
@@ -911,7 +915,7 @@ web/              frontend served as-is
   js/handsfree.js hands-free training: speech out/in, confirmations, typing, blindfold
   js/vosk-listener.js hands-free: offline recognition with Vosk (Firefox), chess words only
   js/puzzle.js    one puzzle's rules + rating chart path (pure logic, unit tested)
-  js/puzzles.js   Puzzles tab + puzzle mode on the board
+  js/puzzles.js   puzzle pages (in the Training tab) + puzzle mode on the board
   js/exercise.js  one course exercise's rules (pure logic, unit tested)
   js/courses.js   Training tab + course exercises on the board
   js/woodpecker.js  Woodpecker page in the Training tab

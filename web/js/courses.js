@@ -525,6 +525,13 @@ export class CourseTrainer {
 
 // ---- the Training tab ----------------------------------------------------------------------------
 
+/** The puzzle pages at the top of the list (the Puzzles tab's two parts). */
+export const PUZZLE_PAGES = [
+  ['pz:rated', 'Rated puzzles'],
+  ['pz:mine', 'From your games'],
+];
+const isPuzzlePage = (id) => typeof id === 'string' && id.startsWith('pz:');
+
 /** The groups in the tab's list, in order. */
 export const GROUPS = [['woodpecker', 'Woodpecker'], ...KINDS.filter(([k]) => k !== 'woodpecker')];
 
@@ -547,12 +554,15 @@ export class CoursesView {
   /**
    * @param {object} deps
    * @param {(list: {id: number}[], label: string, opts?: object) => void} deps.onStart
+   * @param {{refresh: () => Promise<void>, hide: () => void}} deps.puzzles  the puzzle pages (Lichess + your games)
    */
-  constructor({ onStart }) {
+  constructor({ onStart, puzzles }) {
     this.onStart = onStart;
+    this.puzzles = puzzles;
     this.el = {
       groups: $('cv-groups'),
       main: $('cv-main'),
+      puzzles: $('puzzles-view'),
       empty: $('cv-empty'),
       import: $('cv-import'),
     };
@@ -571,20 +581,38 @@ export class CoursesView {
   }
 
   async refresh() {
-    try {
-      this.courses = await api.courses();
-    } catch (err) {
+    this.visible = true;
+    const [courses, pz, mine] = await Promise.allSettled([api.courses(), api.puzzleSummary(), api.gamePuzzles(true)]);
+    if (courses.status === 'rejected') {
       this.el.empty.hidden = false;
-      this.el.empty.textContent = `Couldn't load your courses: ${err.message}`;
-      return;
+      this.el.empty.textContent = `Couldn't load your courses: ${courses.reason.message}`;
+      this.courses = [];
+    } else {
+      this.courses = courses.value;
     }
+    this.puzzleInfo = {
+      'pz:rated': pz.status === 'fulfilled' ? `${pz.value.rating}${pz.value.provisional ? '?' : ''}` : '',
+      'pz:mine': mine.status === 'fulfilled' ? (mine.value.length ? `${mine.value.length} due` : 'none due') : '',
+    };
     this.details.clear(); // statuses change as you work through a course
-    if (!this.courses.some((c) => c.id === this.selected)) this.selected = groupCourses(this.courses)[0]?.courses[0]?.id ?? null;
+    if (!isPuzzlePage(this.selected) && !this.courses.some((c) => c.id === this.selected)) {
+      this.selected = groupCourses(this.courses)[0]?.courses[0]?.id ?? 'pz:rated';
+    }
     this._drawList();
     await this._drawMain();
   }
 
-  hide() {}
+  /** Leaving the tab: the puzzle pages stop polling. */
+  hide() {
+    this.visible = false;
+    this.puzzles.hide();
+  }
+
+  /** Show one of the puzzle pages ('rated' or 'mine'). */
+  showPuzzles(which = 'rated') {
+    this.selected = `pz:${which}`;
+    store.set('coursesSelected', this.selected);
+  }
 
   select(id) {
     this.selected = id;
@@ -597,7 +625,23 @@ export class CoursesView {
     const courses = this.courses ?? [];
     this.el.empty.hidden = courses.length > 0;
     this.el.empty.textContent = 'No courses yet. Import a Chessable course (tactics, strategy, endgames or the Woodpecker Method).';
+    const puzzles = el('div', 'cv-group');
+    const ph = el('h3', 'cv-group-h');
+    ph.append(el('span', 'cv-kind-dot cv-kind-puzzles'), el('span', '', 'Puzzles'));
+    puzzles.appendChild(ph);
+    for (const [id, name] of PUZZLE_PAGES) {
+      const b = el('button', `cv-item${id === this.selected ? ' selected' : ''}`);
+      b.type = 'button';
+      b.setAttribute('aria-current', id === this.selected ? 'true' : 'false');
+      b.dataset.puzzles = id.slice(3);
+      b.appendChild(el('span', 'cv-item-name', name));
+      b.appendChild(el('span', 'meta cv-item-progress', this.puzzleInfo?.[id] ?? ''));
+      b.title = id === 'pz:rated' ? 'Lichess puzzles near your rating' : 'Your mistakes in your own games, practised like your lines';
+      b.addEventListener('click', () => this.select(id));
+      puzzles.appendChild(b);
+    }
     this.el.groups.replaceChildren(
+      puzzles,
       ...groupCourses(courses).map((g) => {
         const sec = el('div', 'cv-group');
         const h = el('h3', 'cv-group-h');
@@ -621,8 +665,17 @@ export class CoursesView {
   }
 
   async _drawMain() {
-    const c = (this.courses ?? []).find((x) => x.id === this.selected);
     const main = this.el.main;
+    if (isPuzzlePage(this.selected)) {
+      main.hidden = true;
+      this.el.puzzles.hidden = false;
+      this.el.puzzles.dataset.show = this.selected.slice(3);
+      if (this.visible) await this.puzzles.refresh();
+      return;
+    }
+    this.el.puzzles.hidden = true;
+    this.puzzles.hide();
+    const c = (this.courses ?? []).find((x) => x.id === this.selected);
     if (!c) {
       main.replaceChildren();
       main.hidden = true;

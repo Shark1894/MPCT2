@@ -111,7 +111,7 @@ function trainingMode(active, badge, bodyClass = 'training') {
   document.body.classList.toggle(bodyClass, active);
   $('mode-badge').textContent = badge;
   $('mode-badge').hidden = !active;
-  for (const v of ['dashboard', 'games', 'wild', 'puzzles', 'courses']) $(`view-${v}`).disabled = active;
+  for (const v of ['dashboard', 'games', 'wild', 'courses']) $(`view-${v}`).disabled = active;
   repertoire.setTraining(active);
 }
 
@@ -228,6 +228,7 @@ const courseTrainer = new CourseTrainer({
 });
 
 const coursesView = new CoursesView({
+  puzzles: puzzlesView, // the Puzzles pages live in the Training tab
   onStart: async (list, label, opts) => {
     if (!(await startBoardMode())) return;
     setView('board');
@@ -403,10 +404,15 @@ async function startTraining(opening, mode, lineId, tag, label) {
 
 // ---- views: Board | Dashboard | Games -----------------------------------------------
 
-const VIEWS = { board: 'main.layout', dashboard: '#dashboard', games: '#games-view', wild: '#wild-view', puzzles: '#puzzles-view', courses: '#courses-view' };
+const VIEWS = { board: 'main.layout', dashboard: '#dashboard', games: '#games-view', wild: '#wild-view', courses: '#courses-view' };
 let view = 'board';
 
 function setView(next) {
+  if (next === 'puzzles') {
+    // Puzzles moved into the Training tab (a saved view from before, or an old link).
+    coursesView.showPuzzles('rated');
+    next = 'courses';
+  }
   if (next !== 'board' && (trainer.active || drill.active || puzzles.active || courseTrainer.active)) return;
   view = next;
   for (const [name, sel] of Object.entries(VIEWS)) {
@@ -429,9 +435,8 @@ function setView(next) {
   }
   if (view === 'wild') wildView.refresh();
   else wildView.hide();
-  if (view === 'puzzles') puzzlesView.refresh();
-  else puzzlesView.hide();
   if (view === 'courses') coursesView.refresh();
+  else coursesView.hide();
   window.scrollTo(0, 0);
 }
 
@@ -684,7 +689,7 @@ repertoire.init().then(async () => {
     if (opened) render();
   }
   const saved = store.get('view');
-  if (saved && saved !== 'board' && VIEWS[saved]) setView(saved);
+  if (saved && saved !== 'board' && (VIEWS[saved] || saved === 'puzzles')) setView(saved);
   await review.restore();
   render();
   wildView.checkNew();

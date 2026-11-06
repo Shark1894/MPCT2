@@ -3814,3 +3814,11 @@ body.cx-paused .board-area {
   filter: blur(14px);
   pointer-events: none;
 }
+
+/* Puzzles inside the Training tab: one part at a time */
+#puzzles-view[data-show='rated'] [data-pz='mine'],
+#puzzles-view[data-show='mine'] [data-pz='rated'] {
+  display: none;
+}
+
+.cv-kind-dot.cv-kind-puzzles { background: var(--ok); }

@@ -23,7 +23,6 @@
         <button id="view-board" type="button" class="view-tab" aria-pressed="true">Board</button>
         <button id="view-dashboard" type="button" class="view-tab" aria-pressed="false">Dashboard</button>
         <button id="view-games" type="button" class="view-tab" aria-pressed="false">Games</button>
-        <button id="view-puzzles" type="button" class="view-tab" aria-pressed="false">Puzzles</button>
         <button id="view-courses" type="button" class="view-tab" aria-pressed="false" title="Courses to work through move by move: tactics, strategy, endgames">Training</button>
         <button id="view-wild" type="button" class="view-tab" aria-pressed="false" title="Your repertoire in tournament games">Wild<span id="wild-new" class="tab-count" hidden></span></button>
       </nav>
@@ -629,63 +628,63 @@
           <nav id="cv-groups" class="cv-groups"></nav>
         </aside>
         <div id="cv-main" class="cv-main" hidden></div>
+        <div id="puzzles-view" class="cv-main puzzles-view" data-show="rated" hidden>
+          <section class="dash-card pz-top" data-pz="rated">
+            <div class="pz-rating">
+              <span class="stat-label">Puzzle rating</span>
+              <span id="pz-rating" class="pz-rating-value">—</span>
+              <span id="pz-rating-meta" class="meta"></span>
+            </div>
+            <div class="pz-start">
+              <label class="pz-theme">Theme
+                <select id="pz-theme"><option value="">Any theme</option></select>
+              </label>
+              <button id="pz-start" type="button" class="primary">Start puzzles</button>
+            </div>
+          </section>
+
+          <section id="gp" class="dash-card gp" data-pz="mine">
+            <div class="gp-head">
+              <h2 class="dash-h">From your games <span class="meta">your mistakes, practised like your lines</span></h2>
+            </div>
+            <p id="gp-text" class="meta"></p>
+            <div class="gp-buttons">
+              <button id="gp-due" type="button" class="primary">Practise due</button>
+              <button id="gp-all" type="button">Practise all</button>
+            </div>
+            <p id="gp-reviewed" class="meta gp-reviewed"></p>
+            <p id="gp-names" class="meta gp-names"></p>
+            <ul id="gp-list" class="gp-list"></ul>
+          </section>
+
+          <section id="pz-db" class="dash-card pz-db" data-pz="rated">
+            <h2 class="dash-h">Puzzle database</h2>
+            <p id="pz-db-text" class="meta"></p>
+            <div id="pz-db-progress" class="pz-progress" hidden><div id="pz-db-bar"></div></div>
+            <button id="pz-import" type="button" class="small">Download puzzles</button>
+          </section>
+
+          <div class="dash-two" data-pz="rated">
+            <section class="dash-card">
+              <h2 class="dash-h">Rating history</h2>
+              <div id="pz-chart" class="pz-chart"></div>
+              <p id="pz-chart-empty" class="meta" hidden>Solve some puzzles to see your rating over time.</p>
+            </section>
+            <section class="dash-card">
+              <h2 class="dash-h">Themes to work on <span class="meta">rated puzzles, weakest first</span></h2>
+              <ul id="pz-themes" class="pz-themes"></ul>
+              <p id="pz-themes-empty" class="meta" hidden>After 5 or more puzzles of a theme, your results for it show here.</p>
+            </section>
+          </div>
+
+          <section class="dash-card" data-pz="rated">
+            <h2 class="dash-h">Recent puzzles</h2>
+            <ul id="pz-recent" class="pz-recent"></ul>
+            <p id="pz-recent-empty" class="meta" hidden>No puzzles yet.</p>
+          </section>
+        </div>
       </div>
     </main>
 
-    <main id="puzzles-view" class="games-view puzzles-view" hidden>
-      <section class="dash-card pz-top">
-        <div class="pz-rating">
-          <span class="stat-label">Puzzle rating</span>
-          <span id="pz-rating" class="pz-rating-value">—</span>
-          <span id="pz-rating-meta" class="meta"></span>
-        </div>
-        <div class="pz-start">
-          <label class="pz-theme">Theme
-            <select id="pz-theme"><option value="">Any theme</option></select>
-          </label>
-          <button id="pz-start" type="button" class="primary">Start puzzles</button>
-        </div>
-      </section>
-
-      <section id="gp" class="dash-card gp">
-        <div class="gp-head">
-          <h2 class="dash-h">From your games <span class="meta">your mistakes, practised like your lines</span></h2>
-        </div>
-        <p id="gp-text" class="meta"></p>
-        <div class="gp-buttons">
-          <button id="gp-due" type="button" class="primary">Practise due</button>
-          <button id="gp-all" type="button">Practise all</button>
-        </div>
-        <p id="gp-reviewed" class="meta gp-reviewed"></p>
-        <p id="gp-names" class="meta gp-names"></p>
-        <ul id="gp-list" class="gp-list"></ul>
-      </section>
-
-      <section id="pz-db" class="dash-card pz-db">
-        <h2 class="dash-h">Puzzle database</h2>
-        <p id="pz-db-text" class="meta"></p>
-        <div id="pz-db-progress" class="pz-progress" hidden><div id="pz-db-bar"></div></div>
-        <button id="pz-import" type="button" class="small">Download puzzles</button>
-      </section>
-
-      <div class="dash-two">
-        <section class="dash-card">
-          <h2 class="dash-h">Rating history</h2>
-          <div id="pz-chart" class="pz-chart"></div>
-          <p id="pz-chart-empty" class="meta" hidden>Solve some puzzles to see your rating over time.</p>
-        </section>
-        <section class="dash-card">
-          <h2 class="dash-h">Themes to work on <span class="meta">rated puzzles, weakest first</span></h2>
-          <ul id="pz-themes" class="pz-themes"></ul>
-          <p id="pz-themes-empty" class="meta" hidden>After 5 or more puzzles of a theme, your results for it show here.</p>
-        </section>
-      </div>
-
-      <section class="dash-card">
-        <h2 class="dash-h">Recent puzzles</h2>
-        <ul id="pz-recent" class="pz-recent"></ul>
-        <p id="pz-recent-empty" class="meta" hidden>No puzzles yet.</p>
-      </section>
-    </main>
   </body>
 </html>
