@@ -91,6 +91,7 @@ export const api = {
   createGame: (data) => request('POST', '/games', { body: data }),
   updateGame: (id, data) => request('PATCH', `/games/${id}`, { body: data }),
   deleteGame: (id) => request('DELETE', `/games/${id}`),
+  importCourse: (repertoireId, body) => request('POST', `/repertoires/${repertoireId}/import-course`, { body }),
   importPgn: (pgn, category = 'otb') => request('POST', '/games/import-pgn', { body: { pgn, category } }),
   lichessSettings: () => request('GET', '/lichess/settings'),
   setLichessUsername: (username) => request('PUT', '/lichess/username', { body: { username } }),

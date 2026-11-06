@@ -38,6 +38,7 @@ The full plan, decisions and data model are in the project's
 | — | Hands-free training: moves read aloud, say yours | Done |
 | — | Lichess game import: your recent Lichess games into Games, onto the board | Done |
 | — | Game groups (OTB / Online / Practice / Other) and the Your games explorer on the board | Done |
+| — | Import a Chessable course export as an opening (lines, notes, chapter tags) | Done |
 
 ## Using the board
 
@@ -541,6 +542,31 @@ API: `GET/POST /api/games` (`?q=` search; filters `player`, `color` = white|blac
 `GET /api/pgn/games` (all matching games, same search and filters), `POST /api/games/import-pgn` (`{"pgn": "..."}`),
 `POST /api/openings/{id}/check` (`{"moves": ["e2e4", ...]}`).
 
+## Importing a Chessable course
+
+**Manage repertoire and opening → Import Chessable course** creates an opening in the selected repertoire from a
+Chessable course export (`.json`, with the course under `bookData`: its contents in `course` and one entry per
+line, as the study page's `getGame` gives it). The file is read in the browser; you tick the chapters (the
+introduction, quickstarter, model games and chapters missing from the course's current contents start unticked;
+information pages are never imported, reference lines only if you tick that), name the opening (default: the
+course's name, played from the course's side) and choose whether to import the notes and tag the chapters. Only
+the chosen lines' moves and notes are sent to the server (a few MB).
+
+- Lines become normal repertoire lines, due today. Duplicates and lines that are the start of a longer one are
+  merged; a line continuing one already in the opening extends it.
+- The author's notes go into the repertoire's position comments, as plain text with sidelines in brackets. A note
+  already there isn't added again; your own comment keeps its text with the note under it; a note that would take a
+  comment past 10,000 characters is left out (and counted).
+- Each chapter becomes a branch tag on the position where its lines part from the rest, so you can train or filter
+  by chapter. Chapters whose lines part at move 1, or whose position is already tagged, are reported, not tagged.
+- Importing again with the same opening name adds only what's new (an opening of that name for the other colour
+  is refused). A report lists what was created, merged, extended and skipped.
+
+About 10 s for a course of a thousand lines (positions, lines and comments are written in bulk).
+
+API: `POST /api/repertoires/{id}/import-course` (`{"name", "lines": [{"game": {...}}, ...], "chapters": [{"id", "title"}],
+"comments": true, "tags": true}`).
+
 ## Importing from the desktop app
 
 `app/tools/import_legacy.py` copies the openings, lines and position comments from a PyQt MPCT repertoire file
@@ -634,6 +660,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/masters.e2e.cjs
 # the fake also plays Lichess (user JasonS); server started with LICHESS_API_URL=http://127.0.0.1:8099
 # (restart the fake between runs: some checks count its requests):
 MPCT_URL=http://localhost:8010/ node tests/e2e/lichess.e2e.cjs
+MPCT_URL=http://localhost:8010/ node tests/e2e/courseimport.e2e.cjs  # empty database (COURSE_FILE=export.json also imports a real one)
 MPCT_URL=http://localhost:8010/ node tests/e2e/mygames.e2e.cjs      # empty database (game groups, Your games explorer)
 MPCT_URL=http://localhost:8010/ node tests/e2e/handsfree.e2e.cjs    # empty database (fake speech in and out)
 # optional, real speech through the offline recogniser: server with VOICE_MODEL_DIR set, WAVs made with espeak-ng

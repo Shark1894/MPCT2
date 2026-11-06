@@ -3329,3 +3329,12 @@ body.puzzle-locked .engine {
   margin: 0;
   font-size: 13px;
 }
+
+.manage-grid .wide {
+  grid-column: 1 / -1;
+}
+
+/* Long checkbox lists (e.g. a course's chapters) wrap rather than stretch the dialog. */
+.modal-check span {
+  overflow-wrap: anywhere;
+}

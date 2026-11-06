@@ -1,6 +1,7 @@
 // Repertoire panel: repertoire/opening pickers, the move explorer for the current
 // position, add/delete line, and position comments (autosaved).
 
+import { importCourse } from './courseimport.js';
 import { api } from './api.js';
 import { START_FEN } from './game.js';
 import { confirmDialog, fillOpeningSelect, formDialog, store, toast } from './ui.js';
@@ -53,6 +54,7 @@ export class RepertoirePanel {
       repDelete: $('rep-delete'),
       openingEdit: $('opening-edit'),
       openingDelete: $('opening-delete'),
+      openingImport: $('opening-import-course'),
       explorer: $('explorer'),
       lineAdd: $('line-add'),
       lineDelete: $('line-delete'),
@@ -89,6 +91,7 @@ export class RepertoirePanel {
     e.repDelete.addEventListener('click', () => this.deleteRepertoire());
     e.openingEdit.addEventListener('click', () => this.editOpening());
     e.openingDelete.addEventListener('click', () => this.deleteOpening());
+    e.openingImport.addEventListener('click', () => this.importCourse());
     e.lineAdd.addEventListener('click', () => this.addLine());
     e.lineDelete.addEventListener('click', () => this.deleteLines());
     e.trainDue.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'due', this.currentTag()));
@@ -329,6 +332,16 @@ export class RepertoirePanel {
     }
   }
 
+  /** Create (or add to) an opening from a Chessable course export. */
+  async importCourse() {
+    if (!this.repId) return;
+    const id = await importCourse(this.repId);
+    if (!id) return;
+    await this._setOpenings(await api.openings(this.repId), id);
+    const o = this._opening();
+    if (o) this.onOrientation(o.color);
+  }
+
   async deleteOpening() {
     const o = this._opening();
     if (!o) return;
@@ -349,7 +362,7 @@ export class RepertoirePanel {
   _updateButtons() {
     const e = this.el;
     e.openingNew.disabled = !this.repId;
-    e.repRename.disabled = e.repDelete.disabled = !this.repId;
+    e.repRename.disabled = e.repDelete.disabled = e.openingImport.disabled = !this.repId;
     e.openingEdit.disabled = e.openingDelete.disabled = !this.openingId;
     e.lineAdd.disabled = e.lineDelete.disabled = !this.openingId;
     e.commentCurrent.disabled = !this.repId;
