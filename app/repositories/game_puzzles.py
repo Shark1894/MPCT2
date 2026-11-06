@@ -50,6 +50,9 @@ def _auto_names(s: Session) -> list[str]:
             if name and name.lower() != "you" and not name.startswith(ENGINE_NAMES):
                 counts[name] += 1
     top = [name for name, n in counts.most_common(1) if n >= 2]
+    lichess = s.get(AppSetting, "lichess_username")  # set for the Lichess game import
+    if lichess and isinstance(lichess.value, str) and lichess.value.lower() not in {n.lower() for n in top}:
+        top.append(lichess.value)
     return top + ["You"]
 
 

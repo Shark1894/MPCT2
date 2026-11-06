@@ -36,6 +36,7 @@ The full plan, decisions and data model are in the project's
 | — | Repertoire gap finder: masters replies your repertoire doesn't cover | Done |
 | — | Masters explorer on the board: masters moves and top games for any position | Done |
 | — | Hands-free training: moves read aloud, say yours | Done |
+| — | Lichess game import: your recent Lichess games into Games, onto the board | Done |
 
 ## Using the board
 
@@ -483,6 +484,32 @@ Filters under the search box narrow the list further, and are remembered on the 
 - **Compare with repertoire** checks the game against the selected opening and reports where it left the book,
   whose move it was and what the repertoire plays, with **Show that position**.
 
+### From Lichess
+
+**From Lichess** opens a box with your latest finished games on lichess.org, fetched when it opens (and again
+each time you come back to the Games tab while it's open). No password or token is needed: games are public, so
+your **Lichess username** is enough. It's asked for the first time (**Change** next to it later), stored as an app
+setting, and added to your names in games so puzzles know which side was you. `LICHESS_TOKEN` is sent when it's
+set, because Lichess lets authenticated requests download faster; a refused token falls back to no token.
+
+- Each row: when it was played (your time zone), players with ratings, speed and clock, rated or casual, the
+  opening, length, and the result from your side (**Won** / **Lost** / **Drawn**), plus a link to it on Lichess.
+- **Open** imports the game into Games (once: it's remembered by its Lichess id) and opens it on the board, ready
+  for Review, Compare with repertoire and puzzles. A game you already had from a PGN (same players, date and moves)
+  is linked rather than copied. Imported games show "Imported from Lichess · View on lichess.org" in the game panel.
+- **Open latest** does that for your most recent finished game in one tap: play on Lichess, then come here.
+- **Import N new games** imports every listed game that isn't in Games yet (one request). **Show more** lists
+  50, then 100.
+- Standard games and games from a set-up position can be imported; Chess960 and other variants, and aborted
+  games, are listed but can't. Imported games: players as on Lichess (AI games as "Stockfish level N"),
+  competition "Lichess · Blitz 3+2 · rated", date = the day the game started (UTC), main line only.
+
+API: `GET /api/lichess/settings`, `PUT /api/lichess/username` (`{"username": "..."}`, `""` clears it),
+`GET /api/lichess/games?max=20` (fetched from Lichess now, nothing stored; 409 without a username, 404 for an
+unknown user), `POST /api/lichess/games/{id}/import` (`{game_id, created}`), `POST /api/lichess/latest`,
+`POST /api/lichess/import-new?max=20`. Games carry `lichess_id`. `LICHESS_API_URL` (default `https://lichess.org`)
+points elsewhere for tests.
+
 API: `GET/POST /api/games` (`?q=` search; filters `player`, `color` = white|black (needs a player),
 `result` = white|black|draw|unfinished or won|lost|drawn (needs a player), `reviewed` = yes|no),
 `GET /api/games/players` (names with game counts), `GET/PATCH/DELETE /api/games/{id}`, `GET /api/games/{id}/pgn`,
@@ -579,6 +606,9 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/gamepuzzles.e2e.cjs  # empty data
 # started with LICHESS_TOKEN=lip_e2e LICHESS_EXPLORER_URL=http://127.0.0.1:8099:
 MPCT_URL=http://localhost:8010/ node tests/e2e/gaps.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/masters.e2e.cjs
+# the fake also plays Lichess (user JasonS); server started with LICHESS_API_URL=http://127.0.0.1:8099
+# (restart the fake between runs: some checks count its requests):
+MPCT_URL=http://localhost:8010/ node tests/e2e/lichess.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/handsfree.e2e.cjs    # empty database (fake speech in and out)
 # optional, real speech through the offline recogniser: server with VOICE_MODEL_DIR set, WAVs made with espeak-ng
 MPCT_URL=http://localhost:8010/ node tests/e2e/voskvoice.e2e.cjs

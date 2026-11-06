@@ -269,6 +269,7 @@ export class GamePanel {
     this.el.compareResult.innerHTML = '';
     this.current = { id, saved: null, review: data.review, savedMoves: data.moves.map((m) => m.uci).join(' ') };
     this._setMode(false);
+    this._showLichessSource(data.lichess_id);
     this.current.saved = this._snapshot();
     store.set('openWild', null);
     store.set('openGameId', id); // reopened after a reload
@@ -277,6 +278,20 @@ export class GamePanel {
     this.updateState();
     this.onOpened?.(data);
     return true;
+  }
+
+  /** An imported Lichess game says so, with a link to it on lichess.org. */
+  _showLichessSource(lichessId) {
+    const src = this.el.source;
+    src.innerHTML = '';
+    if (!lichessId) return;
+    const a = document.createElement('a');
+    a.href = `https://lichess.org/${encodeURIComponent(lichessId)}`;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = 'View on lichess.org';
+    src.append('Imported from Lichess · ', a);
+    src.hidden = false;
   }
 
   /** Close the game; asks first if there are unsaved changes. Returns false if the user cancels. */

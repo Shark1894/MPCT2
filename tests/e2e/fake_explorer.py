@@ -1,4 +1,5 @@
-"""Fake Lichess masters explorer for e2e tests: canned answers, checks the token."""
+"""Fake Lichess for e2e tests: the masters explorer (canned answers, checks the token) and the
+game export API for the Lichess game import (user "JasonS"; any other user is unknown)."""
 import json, sys, urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import chess
@@ -38,12 +39,42 @@ DATA = {k: with_uci(k, v) for k, v in DATA.items()}
 TOP = {key(list(k)): v for k, v in TOP.items()}
 LOG = []
 
+def lgame(gid, white, black, moves, winner, status, created, variant="standard", speed="blitz", clock=(180, 2)):
+    g = {"id": gid, "rated": True, "variant": variant, "speed": speed, "perf": speed, "createdAt": created,
+         "status": status, "moves": moves, "clock": {"initial": clock[0], "increment": clock[1]},
+         "opening": {"eco": "B12", "name": "Caro-Kann Defense: Advance Variation"},
+         "players": {"white": {"user": {"name": white, "id": white.lower()}, "rating": 1850},
+                     "black": {"user": {"name": black, "id": black.lower()}, "rating": 1790}}}
+    if winner: g["winner"] = winner
+    return g
+
+NOW = 1762448400000  # created times are fixed; the page shows them in its own time zone
+LICHESS = [
+    lgame("lgame003", "Opponent2", "JasonS", "e4 c6 d4 d5 e5 Bf5 Nf3 e6", "black", "resign", NOW),
+    lgame("lgame002", "JasonS", "Opponent1", "d4 d5 c4 e6", None, "draw", NOW - 3600000),
+    lgame("lgame001", "JasonS", "Opponent3", "e4 e5", None, "draw", NOW - 7200000, variant="chess960"),
+    lgame("lgame000", "Opponent4", "JasonS", "e4 c6 d4 d5 Nc3 dxe4 Nxe4 Bf5", "white", "mate", NOW - 86400000),
+]
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
         if u.path == "/log":
             body = json.dumps(LOG).encode()
+        elif u.path.startswith("/api/games/user/"):
+            user = u.path.rsplit("/", 1)[1]; LOG.append("user:" + user)
+            if user.lower() != "jasons":
+                self.send_response(404); self.end_headers(); return
+            n = int(urllib.parse.parse_qs(u.query).get("max", ["20"])[0])
+            body = "".join(json.dumps(g) + "\n" for g in LICHESS[:n]).encode()
+            self.send_response(200); self.send_header("Content-Type", "application/x-ndjson"); self.end_headers(); self.wfile.write(body); return
+        elif u.path.startswith("/game/export/"):
+            gid = u.path.rsplit("/", 1)[1]; LOG.append("game:" + gid)
+            found = [g for g in LICHESS if g["id"] == gid]
+            if not found:
+                self.send_response(404); self.end_headers(); return
+            body = json.dumps(found[0]).encode()
         elif u.path == "/masters":
             if self.headers.get("Authorization") != "Bearer lip_e2e":
                 self.send_response(401); self.end_headers(); return

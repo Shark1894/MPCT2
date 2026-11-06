@@ -10,6 +10,7 @@ import { DrillController } from './drill.js';
 import { DashboardView } from './dashboard.js';
 import { AnalysisPanel } from './analysis.js';
 import { GamePanel, GamesView } from './games.js';
+import { LichessGames } from './lichessgames.js';
 import { PlayController } from './play.js';
 import { ReviewController } from './review.js';
 import { SavedEval } from './saved-eval.js';
@@ -231,6 +232,11 @@ const gamesView = new GamesView({
   analysis,
 });
 
+const lichessGames = new LichessGames({
+  onOpen: (id) => gamesView.onOpen(id),
+  onImported: () => gamesView.refresh(),
+});
+
 // ---- repertoire in the wild ------------------------------------------------------
 
 /** Put moves from the start on the board (asking first if that ends a game vs the engine or loses edits). */
@@ -370,7 +376,10 @@ function setView(next) {
   } else {
     analysis.pause('away'); // the board isn't visible
     if (view === 'dashboard') dashboard.refresh();
-    if (view === 'games') gamesView.refresh();
+    if (view === 'games') {
+      gamesView.refresh();
+      lichessGames.restore(); // the Lichess box, if left open, fetches your latest games
+    }
   }
   if (view === 'wild') wildView.refresh();
   else wildView.hide();
@@ -621,4 +630,4 @@ repertoire.init().then(async () => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval, masters, handsFree: trainer.voice };
+window.mpct = { game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval, masters, lichessGames, handsFree: trainer.voice };

@@ -484,6 +484,7 @@
         <div class="games-buttons">
           <button id="games-new" type="button" class="primary">New game</button>
           <button id="games-import" type="button">Import PGN</button>
+          <button id="games-lichess" type="button" title="Your recent games on Lichess">From Lichess</button>
           <a id="games-export" class="button" href="#">Export PGN</a>
         </div>
       </div>
@@ -511,6 +512,21 @@
         <p id="games-review-progress" class="meta" aria-live="polite"></p>
         <button id="games-review-stop" type="button" class="small">Stop</button>
       </div>
+      <section id="lichess-box" class="lichess-box" aria-labelledby="lichess-title" hidden>
+        <div class="lichess-head">
+          <h2 id="lichess-title" class="dash-h">Lichess games</h2>
+          <span id="lichess-user" class="meta"></span>
+          <button id="lichess-change" type="button" class="small link-button">Change</button>
+          <div class="lichess-buttons">
+            <button id="lichess-latest" type="button" class="small primary" title="Import your most recent finished game and open it on the board">Open latest</button>
+            <button id="lichess-import-new" type="button" class="small" hidden>Import new games</button>
+            <button id="lichess-close" type="button" class="small">Close</button>
+          </div>
+        </div>
+        <p id="lichess-status" class="meta" aria-live="polite"></p>
+        <div id="lichess-list" class="games-list"></div>
+        <button id="lichess-more" type="button" class="small" hidden>Show more</button>
+      </section>
       <div id="games-list" class="games-list"></div>
       <p id="games-empty" class="dash-empty" hidden></p>
     </main>

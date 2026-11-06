@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # no scopes: https://lichess.org/account/oauth/token). Keep it in .env, never in code.
     lichess_token: str | None = None
     lichess_explorer_url: str = "https://explorer.lichess.org"
+    # Lichess game import (Games tab): your recent games come from the public API by username.
+    # LICHESS_TOKEN is sent when set (Lichess lets authenticated requests download faster).
+    lichess_api_url: str = "https://lichess.org"
     # Cached explorer answers older than this are asked for again.
     explorer_cache_days: int = 180
 

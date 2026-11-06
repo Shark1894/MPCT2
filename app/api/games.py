@@ -67,6 +67,7 @@ class GameSummary(GameMeta):
     plies: int
     opening: list[str]  # first few moves (SAN)
     review: GameReviewInfo | None = None  # current engine review
+    lichess_id: str | None = None  # imported from lichess.org
 
 
 class GameOut(GameSummary):

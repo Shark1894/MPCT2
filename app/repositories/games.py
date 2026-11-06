@@ -31,6 +31,7 @@ def _summary(game: Game, n_moves: int, opening: list[str], review: dict | None =
         "plies": n_moves,
         "opening": opening,
         "review": review,  # the current engine review (None = not reviewed, or moves changed since)
+        "lichess_id": game.lichess_id,  # imported from lichess.org
     }
 
 

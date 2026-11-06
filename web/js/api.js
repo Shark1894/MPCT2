@@ -90,6 +90,12 @@ export const api = {
   updateGame: (id, data) => request('PATCH', `/games/${id}`, { body: data }),
   deleteGame: (id) => request('DELETE', `/games/${id}`),
   importPgn: (pgn) => request('POST', '/games/import-pgn', { body: { pgn } }),
+  lichessSettings: () => request('GET', '/lichess/settings'),
+  setLichessUsername: (username) => request('PUT', '/lichess/username', { body: { username } }),
+  lichessGames: (max = 20) => request('GET', '/lichess/games', { params: { max } }),
+  importLichessGame: (id) => request('POST', `/lichess/games/${encodeURIComponent(id)}/import`),
+  importLichessLatest: () => request('POST', '/lichess/latest'),
+  importLichessNew: (max = 20) => request('POST', '/lichess/import-new', { params: { max } }),
   checkGame: (openingId, moves) => request('POST', `/openings/${openingId}/check`, { body: { moves } }),
   gamePgnUrl: (id) => `/api/games/${id}/pgn`,
   allGamesPgnUrl: (q = '', filters = {}) => {

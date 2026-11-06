@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import __version__
 from app import wild_fetch
-from app.api import bookmarks, dashboard, drill, evals, gaps, game_puzzles, games, masters, puzzles, repertoires, tags, training, wild
+from app.api import bookmarks, dashboard, drill, evals, gaps, game_puzzles, games, lichess, masters, puzzles, repertoires, tags, training, wild
 from app.config import settings
 from app.core.positions import InvalidLine, InvalidPosition
 from app.db.session import DatabaseNotConfigured, database_status
@@ -135,6 +135,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(tags.router)
     app.include_router(games.router)
+    app.include_router(lichess.router)
     app.include_router(bookmarks.router)
     app.include_router(evals.router)
     app.include_router(wild.router)

@@ -3190,3 +3190,80 @@ body.puzzle-locked .engine {
   word-break: break-word;
   user-select: text;
 }
+
+/* ---- Lichess game import (Games tab) ---- */
+
+.lichess-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lichess-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+
+.lichess-head .dash-h {
+  margin: 0;
+}
+
+.lichess-buttons {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.lichess-box > p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.lichess-box .games-list {
+  border-radius: 8px;
+}
+
+.lichess-row {
+  grid-template-columns: 110px minmax(0, 1fr) 60px 150px;
+}
+
+.lichess-row .game-actions {
+  grid-template-columns: 1fr 1fr;
+}
+
+.game-result.won {
+  color: var(--green);
+}
+
+.game-result.lost {
+  color: var(--error);
+}
+
+#lichess-more {
+  align-self: center;
+}
+
+#games-lichess.active {
+  border-color: var(--blue);
+}
+
+@media (max-width: 760px) {
+  .lichess-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .lichess-buttons {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .lichess-buttons > * {
+    flex: 1;
+  }
+}
