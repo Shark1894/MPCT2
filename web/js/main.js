@@ -14,6 +14,7 @@ import { PlayController } from './play.js';
 import { ReviewController } from './review.js';
 import { SavedEval } from './saved-eval.js';
 import { MastersPanel } from './masters.js';
+import { HandsFree } from './handsfree.js';
 import { WildView } from './wild.js';
 import { Sounds, movedOneForward } from './sounds.js';
 import { PuzzleController, PuzzlesView } from './puzzles.js';
@@ -119,6 +120,7 @@ const trainer = new TrainingController({
   onModeChange: (active) => trainingMode(active, 'Training'),
   onContinue: (info) => continueLineVsEngine(info),
 });
+trainer.voice = new HandsFree({ game, trainer: () => trainer });
 
 /** "Play on vs engine" at the end of a training line: the session waits while you play. */
 async function continueLineVsEngine({ side, opening, last }) {
@@ -619,4 +621,4 @@ repertoire.init().then(async () => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval, masters };
+window.mpct = { game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval, masters, handsFree: trainer.voice };

@@ -3104,3 +3104,59 @@ body.puzzle-locked .engine {
     width: 100%;
   }
 }
+
+/* hands-free training */
+.handsfree-toggle {
+  align-self: flex-start;
+}
+
+.handsfree-toggle[aria-pressed='true'] {
+  background: var(--blue-soft);
+  border-color: var(--blue);
+  color: var(--text);
+}
+
+.hf {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--blue);
+  border-radius: 8px;
+  background: var(--blue-soft);
+}
+
+.hf-status {
+  margin: 0;
+  font-weight: 600;
+}
+
+.hf-heard,
+.hf-help {
+  margin: 0;
+}
+
+.hf-help {
+  font-size: 12px;
+}
+
+.hf-type {
+  display: flex;
+  gap: 6px;
+}
+
+.hf-type input {
+  flex: 1;
+  min-width: 0;
+}
+
+.hf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* blindfold: the board without pieces (squares, highlights and arrows stay) */
+.board-area.blindfold cg-board piece {
+  visibility: hidden;
+}

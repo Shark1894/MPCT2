@@ -112,6 +112,21 @@
             <button id="train-bookmark" type="button" class="small star" aria-pressed="false" title="Bookmark this line">☆</button>
             <button id="train-stop" type="button" class="small">Stop</button>
           </div>
+          <button id="train-handsfree" type="button" class="small handsfree-toggle" aria-pressed="false" title="Moves read aloud; say yours" hidden>🎧 Hands-free</button>
+          <div id="hf" class="hf" hidden>
+            <p id="hf-status" class="hf-status" aria-live="polite"></p>
+            <p id="hf-heard" class="meta hf-heard" hidden></p>
+            <form id="hf-type" class="hf-type" autocomplete="off">
+              <label for="hf-input" class="sr-only">Type a move</label>
+              <input id="hf-input" type="text" placeholder="Or type: Nf3, knight f3, O-O" autocapitalize="off" spellcheck="false" />
+              <button type="submit" class="small">Play</button>
+            </form>
+            <div class="hf-actions">
+              <button id="hf-undo" type="button" class="small" hidden title="Take back the last mistake: it was misheard">That was a mishearing</button>
+              <button id="hf-blind" type="button" class="small" aria-pressed="false" title="Train blindfold: the board shows no pieces">Hide pieces</button>
+            </div>
+            <p class="meta hf-help">Say moves like “knight F3”, “E takes D5”, “castles kingside”. Also: “repeat”, “moves”, “that was a mishearing”, “stop”.</p>
+          </div>
           <p id="train-progress" class="meta"></p>
           <p id="train-message" class="train-message" aria-live="polite"></p>
           <p id="train-comments-note" class="train-comments-note" hidden>

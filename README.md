@@ -35,6 +35,7 @@ The full plan, decisions and data model are in the project's
 | — | Position drill: random repertoire positions without the moves before them | Done |
 | — | Repertoire gap finder: masters replies your repertoire doesn't cover | Done |
 | — | Masters explorer on the board: masters moves and top games for any position | Done |
+| — | Hands-free training: moves read aloud, say yours | Done |
 
 ## Using the board
 
@@ -205,6 +206,30 @@ API: `GET/POST /api/openings/{id}/tags` (`{"name", "fen"}`), `PATCH/DELETE /api/
   "Practice vs engine (<opening>)" and goes back too. **Stop** / **Analyse** ends the game and the session (a
   message says how many lines were left); so does anything else that ends the game, such as starting other
   training. A reload keeps the game but not the waiting session.
+
+### Hands-free training
+
+While training, **🎧 Hands-free** (under the training title) reads the opponent's moves aloud and listens for
+yours, so you can train away from the screen. It stays on for later sessions until you switch it off (per device),
+and keeps the screen awake while on. Sessions count as real reviews, with the same rules as on the board.
+
+- Say moves the way you'd read them: “knight F3”, “E4”, “E takes D5”, “bishop takes C6”, “castles kingside”,
+  “E8 queen”. Piece names and letters the recogniser often mishears (“night”, “be”, “see”, “for”…) are understood.
+  What was heard is matched against the legal moves only, and a square on its own means the pawn move.
+- **A mishearing never fails a line**: the recogniser's guesses are all checked and any that is the expected move
+  counts; a different legal move is read back (“I heard knight D3. Is that right?”) and only counts as a mistake
+  after “yes”; nothing recognisable gets “say that again”. **That was a mishearing** (button or said) takes the
+  last mistake on the current move back.
+- Hints are spoken (“move your knight on G8”, then the move itself); the line's result is read out and the next
+  line starts by itself.
+- Commands: “repeat” (the last move again), “moves” (the line so far), “that was a mishearing”, “stop” (hands-free
+  off; training carries on).
+- **Type a move** in the box instead (SAN or the spoken form); typed wrong moves count without asking.
+  **Hide pieces** trains blindfold (the board keeps its squares and last-move highlight).
+
+Speech out uses the browser's voices; listening needs Chrome or Edge (desktop or Android) and the microphone allowed
+for the site. Other browsers (Firefox) read moves out and you type yours. Recognition is done by the browser's
+speech service, so it needs a connection.
 
 ## Position drill
 
@@ -534,6 +559,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/gamepuzzles.e2e.cjs  # empty data
 # started with LICHESS_TOKEN=lip_e2e LICHESS_EXPLORER_URL=http://127.0.0.1:8099:
 MPCT_URL=http://localhost:8010/ node tests/e2e/gaps.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/masters.e2e.cjs
+MPCT_URL=http://localhost:8010/ node tests/e2e/handsfree.e2e.cjs    # empty database (fake speech in and out)
 ```
 
 ## Deploy on the home server
@@ -709,6 +735,8 @@ web/              frontend served as-is
   js/games.js     games list view + open-game panel (save, compare, PGN)
   js/wild.js      Wild tab: watched positions, spotted tournament games, fetch status
   js/masters.js   board Masters panel: masters moves and top games for the position
+  js/speech-core.js hands-free: moves to speech, heard text to moves/commands (pure, unit tested)
+  js/handsfree.js hands-free training: speech out/in, confirmations, typing, blindfold
   js/puzzle.js    one puzzle's rules + rating chart path (pure logic, unit tested)
   js/puzzles.js   Puzzles tab + puzzle mode on the board
   js/sounds.js    move sounds (Web Audio; choosing the sound is unit tested)

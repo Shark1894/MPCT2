@@ -30,6 +30,7 @@ export class TrainingController {
   constructor({ game, board, panel, render, onModeChange, onContinue = () => {} }) {
     Object.assign(this, { game, board, panel, render, onModeChange, onContinue });
     this.session = null;
+    this.voice = null; // HandsFree, set by the page
     this.suspended = null; // a session put aside while playing on against the engine
     this.hintShapes = [];
     this.timer = null;
@@ -95,6 +96,7 @@ export class TrainingController {
     this.el.box.hidden = false;
     this.el.summary.hidden = true;
     this.onModeChange(true);
+    this.voice?.sessionStarted();
     this._beginLine();
     // On phones the Train button is below the board: bring the board back into view.
     const boardTop = document.querySelector('.board-area').getBoundingClientRect().top;
@@ -105,6 +107,7 @@ export class TrainingController {
     clearTimeout(this.timer);
     this.el.commentsNote.hidden = true;
     this.session = null;
+    this.voice?.sessionEnded();
     this._setHint(null);
     this.el.box.hidden = true;
     this.onModeChange(false);
@@ -129,6 +132,7 @@ export class TrainingController {
     clearTimeout(this.timer);
     this.suspended = this.session;
     this.session = null;
+    this.voice?.sessionEnded();
     this._setHint(null);
     this.el.commentsNote.hidden = true;
     this.el.box.hidden = true;
@@ -143,6 +147,7 @@ export class TrainingController {
     this.session = s;
     this.el.box.hidden = false;
     this.onModeChange(true);
+    this.voice?.sessionStarted();
     this.nextLine();
   }
 
@@ -165,6 +170,7 @@ export class TrainingController {
     this._applyComments();
     this._showBookmark();
     this.render();
+    this.voice?.lineStarted(s);
     this._continue();
   }
 
@@ -179,6 +185,7 @@ export class TrainingController {
     if (s.isUserTurn()) {
       this._message(s.ply === 0 ? `You play ${s.color}. Your move.` : 'Your move.');
       this.render();
+      this.voice?.yourTurn(s.ply === 0);
       return;
     }
     this._message('');
@@ -187,6 +194,7 @@ export class TrainingController {
       const m = s.opponentMove();
       this.game.play(m.uci.slice(0, 2), m.uci.slice(2, 4), m.uci[4]);
       this.render();
+      this.voice?.opponentMoved(m.san);
       this._continue();
     }, OPPONENT_DELAY_MS);
   }
@@ -203,6 +211,7 @@ export class TrainingController {
       this._setHint(null);
       this.game.play(from, to, promotion);
       this.render();
+      this.voice?.refresh();
       this._continue();
       return;
     }
@@ -217,6 +226,23 @@ export class TrainingController {
           : 'Try again.';
     this._message(`Not the repertoire move. ${tip}`, 'wrong');
     document.dispatchEvent(new CustomEvent('mpct:sound', { detail: 'wrong' }));
+    this.voice?.wrong(result.hint, s.expected()?.san);
+  }
+
+  /** A move said or typed in hands-free mode (already confirmed if it was a wrong one). */
+  voiceMove(uci) {
+    this.onUserMove(uci.slice(0, 2), uci.slice(2, 4), uci[4]);
+  }
+
+  /** "That was a mishearing": take back the last wrong try on this move. */
+  undoMistake() {
+    const s = this.session;
+    if (!s?.undoMistake()) return false;
+    this._setHint(s.hint());
+    this._applyComments();
+    this._message('Mistake taken back: it won’t count. Your move.');
+    this.voice?.refresh();
+    return true;
   }
 
   async _finishLine() {
@@ -244,6 +270,7 @@ export class TrainingController {
     this.el.next.textContent = last ? 'Finish' : 'Next line';
     this.el.end.hidden = false;
     this.el.next.focus();
+    this.voice?.lineFinished(resultText, last);
   }
 
   retryLine() {
@@ -273,6 +300,7 @@ export class TrainingController {
       (sum.fixed ? ` (${sum.fixed} on a retry)` : '') +
       (sum.failed ? `, ${sum.failed} to repeat (due again today).` : '.');
     this.el.done.focus();
+    this.voice?.summary($('train-summary-text').textContent);
   }
 
   // ---- bookmark -------------------------------------------------------------

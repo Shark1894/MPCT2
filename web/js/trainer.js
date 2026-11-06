@@ -49,6 +49,7 @@ export class TrainingSession {
     this.attempts = []; // { ply, uci } for every user move tried
     this.wrongHere = 0; // wrong tries on the current move
     this.mistakes = 0;
+    this.failedBefore = this.failedLines.has(this.line?.id); // a mistake on this line earlier in the session
   }
 
   /** The move the line expects next, or null when the line is complete. */
@@ -107,6 +108,26 @@ export class TrainingSession {
     this.mistakes += 1;
     this.failedLines.add(this.line.id);
     return { correct: false, hint: this.hint() };
+  }
+
+  /** Whether the last try was a wrong move on the move still to play (so it can be taken back). */
+  canUndoMistake() {
+    const m = this.expected();
+    const last = this.attempts.at(-1);
+    return Boolean(m && last && last.ply === m.ply && last.uci !== m.uci && this.wrongHere > 0);
+  }
+
+  /**
+   * Take back the last wrong try ("that was a mishearing" in hands-free mode): it no longer
+   * counts as a mistake, isn't sent with the review and doesn't earn a hint.
+   */
+  undoMistake() {
+    if (!this.canUndoMistake()) return false;
+    this.attempts.pop();
+    this.wrongHere -= 1;
+    this.mistakes -= 1;
+    if (this.mistakes === 0 && !this.failedBefore) this.failedLines.delete(this.line.id);
+    return true;
   }
 
   /** The hint earned so far on the current move. */

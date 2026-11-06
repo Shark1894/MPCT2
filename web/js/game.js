@@ -50,6 +50,16 @@ export class Game {
     return m ? [m.from, m.to] : undefined;
   }
 
+  /** Legal moves in the current position (chess.js verbose moves, plus uci). */
+  legalMoves() {
+    return this._chess.moves({ verbose: true }).map((m) => ({ ...m, uci: m.from + m.to + (m.promotion ?? '') }));
+  }
+
+  /** The piece on a square ({type: 'n', color: 'w'}) or null. */
+  pieceAt(square) {
+    return this._chess.get(square) ?? null;
+  }
+
   /** Legal destinations in chessground's format: Map<fromSquare, toSquare[]>. */
   dests() {
     const dests = new Map();

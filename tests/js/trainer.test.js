@@ -185,3 +185,39 @@ test('a line failed this session keeps its comments on retry', () => {
   assert.equal(known.mistakes, 0);
   assert.deepEqual(known.commentState(), { show: true, reason: 'mistake' }); // ...but comments stay visible
 });
+
+test('a misheard mistake can be taken back (hands-free)', () => {
+  const s = session('black', CARO);
+  s.opponentMove();
+  assert.equal(s.canUndoMistake(), false);
+  s.tryMove('e7e5');
+  s.tryMove('d7d5');
+  assert.equal(s.hint().type, 'piece');
+  assert.equal(s.undoMistake(), true);
+  assert.equal(s.mistakes, 1);
+  assert.equal(s.hint(), null); // the piece hint needed two wrong tries
+  assert.equal(s.undoMistake(), true);
+  assert.equal(s.mistakes, 0);
+  assert.equal(s.undoMistake(), false);
+  assert.equal(s.showComments(), true); // streak 0: still learning
+  s.tryMove('c7c6');
+  s.opponentMove();
+  s.tryMove('d7d5');
+  s.opponentMove();
+  assert.deepEqual(s.review().attempts, [
+    { ply: 2, uci: 'c7c6' },
+    { ply: 4, uci: 'd7d5' },
+  ]);
+  s.recordResult();
+  assert.deepEqual(s.summary(), { reviewed: 1, correct: 1, fixed: 0, failed: 0, total: 1 });
+  assert.equal(s.failedLines.has(1), false);
+});
+
+test('undo only reaches the move still to play', () => {
+  const s = session('black', CARO);
+  s.opponentMove();
+  s.tryMove('e7e5');
+  s.tryMove('c7c6');
+  assert.equal(s.canUndoMistake(), false); // that mistake was on a move already played
+  assert.equal(s.mistakes, 1);
+});
