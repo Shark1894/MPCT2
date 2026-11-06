@@ -74,7 +74,7 @@ async function importFile(page, file) {
   await page.click('#view-courses');
   await settle(page);
   check(await page.isVisible('#courses-view'), 'Training tab opens');
-  check((await text(page, '#cv-empty')).includes('No courses yet'), 'empty state explained');
+  check((await text(page, '#cv-empty')).includes('Import adds your Chessable courses'), 'empty state explained');
 
   // ---- import ------------------------------------------------------------------------------------
   await importFile(page, `${dir}/tactics.json`);
@@ -161,7 +161,7 @@ async function importFile(page, file) {
   await page.click('dialog[open] button[type=submit]');
   await settle(page, 800);
   const groups = await page.$$eval('.cv-group', (gs) => gs.map((g) => `${g.querySelector('.cv-group-h').textContent}: ${[...g.querySelectorAll('.cv-item-name')].map((n) => n.textContent).join(',')}`));
-  check(groups.join(' | ') === 'Puzzles: Rated puzzles,From your games | Woodpecker1: The Woodpecker Method | Tactics1: Test Tactics', `courses grouped by kind (${groups.join(' | ')})`);
+  check(groups.join(' | ') === 'Puzzles: Rated puzzles,From your games | Endgames: Queen mate (K+Q v K),Rook mate (K+R v K),Two bishops (K+B+B v K),Bishop and knight (K+B+N v K),King and pawn (K+P v K) | Woodpecker1: The Woodpecker Method | Tactics1: Test Tactics', `courses grouped by kind (${groups.join(' | ')})`);
   check((await text(page, '.cv-item.selected .cv-item-name')) === 'The Woodpecker Method', 'imported course selected');
   check((await text(page, '.cv-item.selected .cv-item-progress')) === 'No cycle yet', 'woodpecker progress in the list');
   check((await text(page, '.wp-current .wp-h')) === 'The Woodpecker Method', 'woodpecker intro');

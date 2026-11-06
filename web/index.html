@@ -210,6 +210,28 @@
           </div>
         </div>
 
+        <div id="eg" class="training eg" hidden>
+          <div class="train-head">
+            <h2 id="eg-title">Endgame</h2>
+            <button id="eg-stop" type="button" class="small">Stop</button>
+          </div>
+          <p id="eg-sub" class="meta eg-tip"></p>
+          <p id="eg-status" class="meta"></p>
+          <p id="eg-message" class="train-message" aria-live="polite"></p>
+          <div class="train-end-actions" id="eg-playing">
+            <button id="eg-hint" type="button" title="Show a winning move (from the tablebase)">Hint</button>
+            <button id="eg-giveup" type="button" title="End this attempt (counts as not passed)">Give up</button>
+          </div>
+          <div id="eg-end" class="train-end" hidden>
+            <p id="eg-result" class="train-result" aria-live="polite"></p>
+            <div class="train-end-actions">
+              <button id="eg-next" type="button" class="primary">New position</button>
+              <button id="eg-again" type="button" title="The same starting position again">Same again</button>
+            </div>
+            <button id="eg-takeback" type="button" class="small" hidden>Take back and carry on (practice)</button>
+          </div>
+        </div>
+
         <div id="cx" class="training cx" hidden>
           <div class="train-head">
             <h2 id="cx-title">Exercise</h2>
@@ -624,8 +646,8 @@
             <h2 class="dash-h">Training</h2>
             <button id="cv-import" type="button" class="small primary" title="Import a Chessable course (one combined .json file)">Import</button>
           </div>
-          <p id="cv-empty" class="meta cv-empty" hidden></p>
           <nav id="cv-groups" class="cv-groups"></nav>
+          <p id="cv-empty" class="meta cv-empty" hidden></p>
         </aside>
         <div id="cv-main" class="cv-main" hidden></div>
         <div id="puzzles-view" class="cv-main puzzles-view" data-show="rated" hidden>

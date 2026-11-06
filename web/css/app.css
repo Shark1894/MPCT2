@@ -3822,3 +3822,13 @@ body.cx-paused .board-area {
 }
 
 .cv-kind-dot.cv-kind-puzzles { background: var(--ok); }
+
+/* Endgame drills */
+.eg-tip {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.eg-recent-h {
+  margin-top: 14px;
+}

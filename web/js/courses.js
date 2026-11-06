@@ -10,6 +10,8 @@ import { Chess } from '../vendor/chess.js/chess.js';
 import { pickFile, readCourse, slimLine } from './courseimport.js';
 import { ExerciseRun } from './exercise.js';
 import { WoodpeckerPage } from './woodpecker.js';
+import { EndgamePage, drillProgress } from './endgames.js';
+import { DRILLS } from './endgame-core.js';
 import { clock, days } from './woodpecker-core.js';
 import { confirmDialog, formDialog, plural, store, toast } from './ui.js';
 
@@ -531,6 +533,7 @@ export const PUZZLE_PAGES = [
   ['pz:mine', 'From your games'],
 ];
 const isPuzzlePage = (id) => typeof id === 'string' && id.startsWith('pz:');
+const isDrillPage = (id) => typeof id === 'string' && id.startsWith('eg:') && DRILLS.some((d) => `eg:${d.id}` === id);
 
 /** The groups in the tab's list, in order. */
 export const GROUPS = [['woodpecker', 'Woodpecker'], ...KINDS.filter(([k]) => k !== 'woodpecker')];
@@ -555,10 +558,12 @@ export class CoursesView {
    * @param {object} deps
    * @param {(list: {id: number}[], label: string, opts?: object) => void} deps.onStart
    * @param {{refresh: () => Promise<void>, hide: () => void}} deps.puzzles  the puzzle pages (Lichess + your games)
+   * @param {(drillId: string, fen?: string) => void} deps.onEndgame          start an endgame drill
    */
-  constructor({ onStart, puzzles }) {
+  constructor({ onStart, puzzles, onEndgame }) {
     this.onStart = onStart;
     this.puzzles = puzzles;
+    this.endgame = new EndgamePage({ onStart: (id, fen) => onEndgame(id, fen) });
     this.el = {
       groups: $('cv-groups'),
       main: $('cv-main'),
@@ -582,7 +587,8 @@ export class CoursesView {
 
   async refresh() {
     this.visible = true;
-    const [courses, pz, mine] = await Promise.allSettled([api.courses(), api.puzzleSummary(), api.gamePuzzles(true)]);
+    const [courses, pz, mine, eg] = await Promise.allSettled([api.courses(), api.puzzleSummary(), api.gamePuzzles(true), api.endgameStats()]);
+    this.egStats = eg.status === 'fulfilled' ? eg.value : null;
     if (courses.status === 'rejected') {
       this.el.empty.hidden = false;
       this.el.empty.textContent = `Couldn't load your courses: ${courses.reason.message}`;
@@ -595,7 +601,7 @@ export class CoursesView {
       'pz:mine': mine.status === 'fulfilled' ? (mine.value.length ? `${mine.value.length} due` : 'none due') : '',
     };
     this.details.clear(); // statuses change as you work through a course
-    if (!isPuzzlePage(this.selected) && !this.courses.some((c) => c.id === this.selected)) {
+    if (!isPuzzlePage(this.selected) && !isDrillPage(this.selected) && !this.courses.some((c) => c.id === this.selected)) {
       this.selected = groupCourses(this.courses)[0]?.courses[0]?.id ?? 'pz:rated';
     }
     this._drawList();
@@ -624,7 +630,7 @@ export class CoursesView {
   _drawList() {
     const courses = this.courses ?? [];
     this.el.empty.hidden = courses.length > 0;
-    this.el.empty.textContent = 'No courses yet. Import a Chessable course (tactics, strategy, endgames or the Woodpecker Method).';
+    this.el.empty.textContent = 'Import adds your Chessable courses here: tactics, strategy, endgames or the Woodpecker Method.';
     const puzzles = el('div', 'cv-group');
     const ph = el('h3', 'cv-group-h');
     ph.append(el('span', 'cv-kind-dot cv-kind-puzzles'), el('span', '', 'Puzzles'));
@@ -640,32 +646,60 @@ export class CoursesView {
       b.addEventListener('click', () => this.select(id));
       puzzles.appendChild(b);
     }
+    const endgames = el('div', 'cv-group');
+    const eh = el('h3', 'cv-group-h');
+    const egCourses = courses.filter((c) => c.kind === 'endgames');
+    eh.append(el('span', 'cv-kind-dot cv-kind-endgames'), el('span', '', 'Endgames'));
+    endgames.appendChild(eh);
+    for (const d of DRILLS) {
+      const id = `eg:${d.id}`;
+      const b = el('button', `cv-item${id === this.selected ? ' selected' : ''}`);
+      b.type = 'button';
+      b.setAttribute('aria-current', id === this.selected ? 'true' : 'false');
+      b.dataset.drill = d.id;
+      b.title = `${d.pieces}: against perfect defence`;
+      b.appendChild(el('span', 'cv-item-name', `${d.name} (${d.pieces})`));
+      b.appendChild(el('span', 'meta cv-item-progress', drillProgress(this.egStats?.[d.id])));
+      b.addEventListener('click', () => this.select(id));
+      endgames.appendChild(b);
+    }
+    for (const c of egCourses) endgames.appendChild(this._courseItem(c)); // imported endgame courses under the drills
     this.el.groups.replaceChildren(
       puzzles,
-      ...groupCourses(courses).map((g) => {
+      endgames,
+      ...groupCourses(courses).filter((g) => g.kind !== 'endgames').map((g) => {
         const sec = el('div', 'cv-group');
         const h = el('h3', 'cv-group-h');
         h.append(el('span', `cv-kind-dot cv-kind-${g.kind}`), el('span', '', g.title), el('span', 'meta', String(g.courses.length)));
         sec.appendChild(h);
-        for (const c of g.courses) {
-          const b = el('button', `cv-item${c.id === this.selected ? ' selected' : ''}`);
-          b.type = 'button';
-          b.setAttribute('aria-current', c.id === this.selected ? 'true' : 'false');
-          b.dataset.course = c.id;
-          b.appendChild(el('span', 'cv-item-name', c.name));
-          b.appendChild(el('span', 'meta cv-item-progress', progressText(c)));
-          const prog = c.kind === 'woodpecker' && c.cycle ? { total: c.cycle.total, solved: c.cycle.solved, missed: c.cycle.done - c.cycle.solved } : c;
-          b.appendChild(this._bar(prog, 'cv-bar-mini'));
-          b.addEventListener('click', () => this.select(c.id));
-          sec.appendChild(b);
-        }
+        for (const c of g.courses) sec.appendChild(this._courseItem(c));
         return sec;
       }),
     );
   }
 
+  _courseItem(c) {
+    const b = el('button', `cv-item${c.id === this.selected ? ' selected' : ''}`);
+    b.type = 'button';
+    b.setAttribute('aria-current', c.id === this.selected ? 'true' : 'false');
+    b.dataset.course = c.id;
+    b.appendChild(el('span', 'cv-item-name', c.name));
+    b.appendChild(el('span', 'meta cv-item-progress', progressText(c)));
+    const prog = c.kind === 'woodpecker' && c.cycle ? { total: c.cycle.total, solved: c.cycle.solved, missed: c.cycle.done - c.cycle.solved } : c;
+    b.appendChild(this._bar(prog, 'cv-bar-mini'));
+    b.addEventListener('click', () => this.select(c.id));
+    return b;
+  }
+
   async _drawMain() {
     const main = this.el.main;
+    if (isDrillPage(this.selected)) {
+      this.el.puzzles.hidden = true;
+      this.puzzles.hide();
+      main.hidden = false;
+      this.endgame.render(main, this.selected.slice(3), this.egStats);
+      return;
+    }
     if (isPuzzlePage(this.selected)) {
       main.hidden = true;
       this.el.puzzles.hidden = false;

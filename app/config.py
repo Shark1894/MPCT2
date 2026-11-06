@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # Lichess game import (Games tab): your recent games come from the public API by username.
     # LICHESS_TOKEN is sent when set (Lichess lets authenticated requests download faster).
     lichess_api_url: str = "https://lichess.org"
+    # Endgame drills: perfect defence and move feedback from the Lichess tablebase (Syzygy,
+    # up to 7 pieces; no token needed). If it can't be reached the drills fall back to Stockfish.
+    lichess_tablebase_url: str = "https://tablebase.lichess.ovh"
     # Cached explorer answers older than this are asked for again.
     explorer_cache_days: int = 180
 

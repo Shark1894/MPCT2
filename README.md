@@ -42,6 +42,7 @@ The full plan, decisions and data model are in the project's
 | — | Training tab: tactics, strategy and endgame courses worked through move by move | Done |
 | — | Training tab grouped by kind; Woodpecker Method cycles with timed puzzles | Done |
 | — | Puzzles moved into the Training tab | Done |
+| — | Endgame drills: random mates and K+P v K against perfect (tablebase) defence | Done |
 
 ## Using the board
 
@@ -610,6 +611,28 @@ through in order, move by move, on the board.
 - While solving, navigation and the engine are off; once an exercise is finished you can step through it and
   analyse.
 
+### Endgame drills
+
+Under **Endgames** in the Training list (above any imported endgame courses): **Queen mate** (K+Q v K), **Rook
+mate** (K+R v K), **Two bishops** (K+B+B v K), **Bishop and knight** (K+B+N v K) and **King and pawn** (K+P v K),
+each with a technique tip, your results and the latest attempts (**Again** replays a start position).
+
+- Every **New position** is random. Mates: you (White or Black) to move, the lone king in the middle, nothing of
+  yours hanging, the bishops on opposite colours. K+P v K: the server makes realistic candidates (your king near
+  the pawn, theirs near its path) and keeps one the tablebase says is won with **at most two winning moves**, so
+  it needs the opposition or the key squares.
+- The defence is perfect: the [Lichess tablebase](https://tablebase.lichess.ovh) (Syzygy, up to 7 pieces, no token)
+  through `GET /api/tablebase`, which picks the longest resistance. The panel shows your moves, the 50-move count
+  and how many moves perfect play needs. **Hint** shows a winning move (counted); **Give up** ends the attempt.
+- Pass: mate before the 50-move rule (mates), or queening with the win still there (K+P). A move that lets the win
+  go (a draw now, a piece left hanging, stalemate, a third repetition, or no mate within 50 moves any more) ends the
+  attempt as not passed and is pointed out; **Take back and carry on** shows a winning move and lets you play on as
+  practice (not recorded).
+- If the tablebase can't be reached, Stockfish defends instead (no hints, slips not pointed out); K+P positions
+  need the tablebase. `LICHESS_TABLEBASE_URL` overrides the address (tests use `tests/e2e/fake_tablebase.py`).
+- Stats per drill (attempts, % passed, best and average moves against perfect play, time):
+  `GET /api/endgames/stats`; `GET /api/endgames/kp` (a K+P position), `POST /api/endgames/attempts`.
+
 ### Woodpecker Method
 
 A course in the Woodpecker group (a name with "Woodpecker" is put there on import) is solved in **cycles**: the
@@ -732,6 +755,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/masters.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/lichess.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/courseimport.e2e.cjs  # empty database (COURSE_FILE=export.json also imports a real one)
 MPCT_URL=http://localhost:8010/ node tests/e2e/courses.e2e.cjs      # empty database (Training tab)
+MPCT_URL=http://localhost:8010/ node tests/e2e/endgames.e2e.cjs     # empty database; app run with LICHESS_TABLEBASE_URL=http://localhost:8098 and tests/e2e/fake_tablebase.py running (FAKE_TB_PID=<its pid> also checks the Stockfish fallback)
 MPCT_URL=http://localhost:8010/ node tests/e2e/mygames.e2e.cjs      # empty database (game groups, Your games explorer)
 MPCT_URL=http://localhost:8010/ node tests/e2e/handsfree.e2e.cjs    # empty database (fake speech in and out)
 # optional, real speech through the offline recogniser: server with VOICE_MODEL_DIR set, WAVs made with espeak-ng
@@ -919,6 +943,8 @@ web/              frontend served as-is
   js/exercise.js  one course exercise's rules (pure logic, unit tested)
   js/courses.js   Training tab + course exercises on the board
   js/woodpecker.js  Woodpecker page in the Training tab
+  js/endgame-core.js  endgame drills: random mates, reading the tablebase (pure logic, unit tested)
+  js/endgames.js  endgame drills on the board + their page in the Training tab
   js/woodpecker-core.js  Woodpecker times, pace and sorting (pure logic, unit tested)
   js/sounds.js    move sounds (Web Audio; choosing the sound is unit tested)
   js/play.js      play vs engine: levels, engine replies, takeback, resign, save

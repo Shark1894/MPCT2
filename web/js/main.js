@@ -21,6 +21,7 @@ import { WildView } from './wild.js';
 import { Sounds, movedOneForward } from './sounds.js';
 import { PuzzleController, PuzzlesView } from './puzzles.js';
 import { CourseTrainer, CoursesView } from './courses.js';
+import { EndgameTrainer } from './endgames.js';
 import { isModalOpen, plural, store, toast } from './ui.js';
 import { reviewComplete, reviewPayload } from './gamereview.js';
 import { api } from './api.js';
@@ -185,7 +186,7 @@ async function startDrill(scope) {
 }
 
 /** The board belongs to a training line, a drilled position or an unsolved puzzle: no navigation or free moves. */
-const locked = () => trainer.active || drill.active || puzzles.locked || courseTrainer.locked;
+const locked = () => trainer.active || drill.active || puzzles.locked || courseTrainer.locked || endgameTrainer.locked;
 
 const puzzlesView = new PuzzlesView({
   onStart: async (theme) => {
@@ -227,8 +228,30 @@ const courseTrainer = new CourseTrainer({
   onFinished: () => setView('courses'),
 });
 
+const endgameTrainer = new EndgameTrainer({
+  game,
+  board,
+  render: () => render(),
+  onModeChange: (active) => {
+    trainingMode(active, 'Endgame', 'puzzling');
+    if (active) repertoire.setCommentsVisible(false);
+  },
+  onLock: (locked) => {
+    // The engine would give the answer away while you play; afterwards it's free to analyse.
+    if (locked) analysis.pause('endgame');
+    else analysis.resume('endgame');
+    document.body.classList.toggle('puzzle-locked', locked);
+  },
+  onFinished: () => setView('courses'),
+});
+
 const coursesView = new CoursesView({
   puzzles: puzzlesView, // the Puzzles pages live in the Training tab
+  onEndgame: async (drillId, fen) => {
+    if (!(await startBoardMode())) return;
+    setView('board');
+    endgameTrainer.start(drillId, fen);
+  },
   onStart: async (list, label, opts) => {
     if (!(await startBoardMode())) return;
     setView('board');
@@ -391,6 +414,7 @@ async function saveGameReview(r) {
 async function startBoardMode() {
   if (!(await play.confirmStop())) return false;
   if (courseTrainer.active) courseTrainer.stop();
+  if (endgameTrainer.active) endgameTrainer.stop();
   if (!(await gamePanel.confirmLeave())) return false;
   return true;
 }
@@ -413,7 +437,7 @@ function setView(next) {
     coursesView.showPuzzles('rated');
     next = 'courses';
   }
-  if (next !== 'board' && (trainer.active || drill.active || puzzles.active || courseTrainer.active)) return;
+  if (next !== 'board' && (trainer.active || drill.active || puzzles.active || courseTrainer.active || endgameTrainer.active)) return;
   view = next;
   for (const [name, sel] of Object.entries(VIEWS)) {
     document.querySelector(sel).hidden = view !== name;
@@ -467,7 +491,7 @@ function moveSound() {
 function render() {
   moveSound();
   board.show(game, {
-    canMove: trainer.active ? trainer.canMove() : drill.active ? drill.canMove() : puzzles.locked ? puzzles.canMove() : courseTrainer.locked ? courseTrainer.canMove() : play?.active ? play.canMove() : true,
+    canMove: trainer.active ? trainer.canMove() : drill.active ? drill.canMove() : puzzles.locked ? puzzles.canMove() : courseTrainer.locked ? courseTrainer.canMove() : endgameTrainer.locked ? endgameTrainer.canMove() : play?.active ? play.canMove() : true,
   });
   const status = game.status();
   ui.status.textContent = status.text;
@@ -545,6 +569,10 @@ async function onBoardMove(from, to) {
   }
   if (courseTrainer.locked) {
     courseTrainer.onUserMove(from, to, promotion);
+    return;
+  }
+  if (endgameTrainer.locked) {
+    endgameTrainer.onUserMove(from, to, promotion);
     return;
   }
   if (play.active && !play.canMove()) return render();
@@ -696,4 +724,4 @@ repertoire.init().then(async () => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, courseTrainer, coursesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval, masters, myGames, lichessGames, handsFree: trainer.voice };
+window.mpct = { game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, courseTrainer, coursesView, endgameTrainer, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval, masters, myGames, lichessGames, handsFree: trainer.voice };

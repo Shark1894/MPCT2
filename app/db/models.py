@@ -588,3 +588,25 @@ class WoodpeckerAttempt(Base):
     solved: Mapped[bool]
     seconds: Mapped[float]
     attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EndgameAttempt(Base):
+    """One go at an endgame drill (Training tab) from `start_fen`, played against perfect defence.
+    result: mate / promoted (success); fifty / stalemate / material / repetition / thrown /
+    gave-up (not). moves = your moves; optimal = your moves with perfect play (from the tablebase's
+    depth to mate, when known)."""
+
+    __tablename__ = "endgame_attempts"
+    __table_args__ = (Index("ix_endgame_attempts_drill_finished", "drill", "finished_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    drill: Mapped[str] = mapped_column(String(10))
+    start_fen: Mapped[str] = mapped_column(Text)
+    color: Mapped[str] = mapped_column(String(5))
+    success: Mapped[bool]
+    result: Mapped[str] = mapped_column(String(12))
+    moves: Mapped[int]
+    optimal: Mapped[int | None]
+    hints: Mapped[int] = mapped_column(server_default="0")
+    seconds: Mapped[float]
+    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

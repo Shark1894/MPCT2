@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import __version__
 from app import wild_fetch
-from app.api import bookmarks, course_import, courses, dashboard, drill, evals, gaps, game_puzzles, games, lichess, masters, puzzles, repertoires, tags, training, wild
+from app.api import bookmarks, course_import, courses, dashboard, endgames, drill, evals, gaps, game_puzzles, games, lichess, masters, puzzles, repertoires, tags, training, wild
 from app.config import settings
 from app.core.positions import InvalidLine, InvalidPosition
 from app.db.session import DatabaseNotConfigured, database_status
@@ -29,6 +29,7 @@ from app.repositories.puzzles import InvalidPuzzle, PuzzlesUnavailable
 from app.repositories.training import InvalidReview
 from app.repositories.drill import InvalidDrill
 from app.repositories.courses import InvalidCourse
+from app.repositories.endgames import InvalidAttempt
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
@@ -103,6 +104,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(InvalidReview, _error(422))
     app.add_exception_handler(InvalidDrill, _error(422))
     app.add_exception_handler(InvalidCourse, _error(422))
+    app.add_exception_handler(InvalidAttempt, _error(422))
     app.add_exception_handler(PuzzlesUnavailable, _error(409))
     app.add_exception_handler(DatabaseNotConfigured, _error(503))
 
@@ -132,6 +134,7 @@ def create_app() -> FastAPI:
     app.include_router(repertoires.router)
     app.include_router(course_import.router)
     app.include_router(courses.router)
+    app.include_router(endgames.router)
     app.include_router(training.router)
     app.include_router(drill.router)
     app.include_router(gaps.router)
