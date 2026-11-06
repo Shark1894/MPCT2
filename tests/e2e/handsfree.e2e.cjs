@@ -35,13 +35,29 @@ const FAKE_SPEECH = () => {
       addEventListener() {},
     },
   });
+  window.__gum = 0;
+  if (navigator.mediaDevices) {
+    navigator.mediaDevices.getUserMedia = () => {
+      window.__gum += 1;
+      return Promise.resolve({ getTracks: () => [{ stop() {} }] });
+    };
+  }
   if (window.__noListening) return;
+  window.__recMode = 'ok'; // 'silent': start() ignored (Chrome on Android without a tap); 'notallowed'
   class FakeRec {
     constructor() {
       window.__rec = this;
       this.running = false;
     }
     start() {
+      if (window.__recMode === 'silent') return;
+      if (window.__recMode === 'notallowed') {
+        setTimeout(() => {
+          this.onerror && this.onerror({ error: 'not-allowed' });
+          this.onend && this.onend();
+        }, 1);
+        return;
+      }
       if (this.running) throw new Error('already started');
       this.running = true;
       setTimeout(() => this.onstart && this.onstart(), 1);
@@ -205,6 +221,28 @@ const sans = (page) => page.evaluate(() => mpct.game.moves.slice(0, mpct.game.pl
   await settle(page, 300);
   check(await page.isHidden('#hf') && !(await page.evaluate(() => document.querySelector('.board-area').classList.contains('blindfold'))), '"stop": hands-free off, pieces back');
   check(await page.evaluate(() => mpct.trainer.active), 'training carries on');
+
+  // ---- Chrome on Android: listening may only start from a tap ------------------------------------
+  const gum = await page.evaluate(() => window.__gum);
+  await page.evaluate(() => (window.__recMode = 'silent'));
+  await page.click('#train-handsfree');
+  check((await page.evaluate(() => window.__gum)) > gum || (await page.evaluate(() => mpct.handsFree.micPrimed)), 'microphone asked for in the tap itself (so Chrome shows its prompt)');
+  await page.waitForSelector('#hf-talk', { state: 'visible', timeout: 6000 }).catch(() => {});
+  check(await page.isVisible('#hf-talk'), 'start ignored: "Tap to talk" appears');
+  check((await text(page, '#hf-status')).includes('Listening didn’t start. Tap 🎙 to talk.'), 'and says why: ' + (await text(page, '#hf-status')));
+  await page.evaluate(() => (window.__recMode = 'ok'));
+  await page.click('#hf-talk');
+  await settle(page, 200);
+  check((await page.evaluate(() => window.__listening())) && (await page.isHidden('#hf-talk')), 'tap: listening');
+  await hear(page, ['c6']);
+  await page.evaluate(() => (window.__recMode = 'notallowed'));
+  await page.waitForSelector('#hf-talk', { state: 'visible', timeout: 6000 }).catch(() => {});
+  check((await text(page, '#hf-status')).startsWith('Tap 🎙 to talk. If nothing happens, allow the microphone'), '"not-allowed": tap to talk, or allow the mic: ' + (await text(page, '#hf-status')));
+  await page.evaluate(() => (window.__recMode = 'ok'));
+  await page.click('#hf-talk');
+  await hear(page, ['d5']);
+  await settle(page, 700);
+  check((await sans(page)) === 'e4 c6 d4 d5 e5', 'and carries on after the tap: ' + (await sans(page)));
   await page.click('#train-stop');
 
   // ---- a browser without built-in recognition (Firefox) --------------------------------------------
