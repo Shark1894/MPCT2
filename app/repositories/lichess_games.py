@@ -157,6 +157,7 @@ def to_game(g: dict) -> dict:
         "result": _result(g),
         "start_fen": start_fen,
         "moves": ucis,
+        "category": "online",
     }
 
 
@@ -257,7 +258,9 @@ def _store(s: Session, g: dict) -> dict:
     created = game_id is None
     if created:
         game_id = create_game(s, data)["id"]
-    s.get(Game, game_id).lichess_id = g["id"]
+    game = s.get(Game, game_id)
+    game.lichess_id = g["id"]
+    game.category = "online"  # a copy imported as PGN earlier moves to the Online group
     s.flush()
     return {"game_id": game_id, "created": created}
 

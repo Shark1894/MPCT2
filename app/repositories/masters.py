@@ -197,6 +197,7 @@ def save_to_games(s: Session, game_id: str) -> dict:
             "played_on": g.played_on,
             "result": g.result,
             "moves": moves,
+            "category": "other",
         },
     )
     return {"game_id": game["id"], "created": True}

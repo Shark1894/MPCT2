@@ -239,7 +239,10 @@ class Game(Base):
     """A played game (over the board or online), shared across repertoires."""
 
     __tablename__ = "games"
-    __table_args__ = (CheckConstraint("result IN ('1-0', '0-1', '1/2-1/2', '*')", name="result"),)
+    __table_args__ = (
+        CheckConstraint("result IN ('1-0', '0-1', '1/2-1/2', '*')", name="result"),
+        CheckConstraint("category IN ('otb', 'online', 'practice', 'other')", name="category"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     white: Mapped[str] = mapped_column(String(100), server_default="")
@@ -250,6 +253,9 @@ class Game(Base):
     played_on: Mapped[date | None] = mapped_column(Date, index=True)
     result: Mapped[str] = mapped_column(String(7), server_default="*")
     start_fen: Mapped[str | None] = mapped_column(Text)  # null = the normal starting position
+    # The Games tab's groups: your over-the-board games, online games, practice vs the engine,
+    # and other people's games (saved masters / tournament games, anything else).
+    category: Mapped[str] = mapped_column(String(10), server_default="otb", index=True)
     # The game's id on lichess.org when it was imported from there (one copy per Lichess game).
     lichess_id: Mapped[str | None] = mapped_column(String(12), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

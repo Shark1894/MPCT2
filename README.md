@@ -37,6 +37,7 @@ The full plan, decisions and data model are in the project's
 | — | Masters explorer on the board: masters moves and top games for any position | Done |
 | — | Hands-free training: moves read aloud, say yours | Done |
 | — | Lichess game import: your recent Lichess games into Games, onto the board | Done |
+| — | Game groups (OTB / Online / Practice / Other) and the Your games explorer on the board | Done |
 
 ## Using the board
 
@@ -330,6 +331,20 @@ explorer address (default `https://explorer.lichess.org`).
 API: `GET /api/openings/{id}/gaps?min_share=5&min_games=5`, `POST /api/openings/{id}/gaps/check` (starts a
 background check; 409 without a token or while one runs), `GET /api/explorer/status`, `POST /api/explorer/stop`.
 
+## Your games explorer (board)
+
+Under Masters, **Your games** does the same for your own games: from the board position, every move played next
+in your OTB games, with how many games, the share, the results bar and your score with it ("+2 =1 −0", from the
+side you played: your names are the ones set on the Puzzles tab). Positions match by position, so transpositions
+count. **Include online games** adds the Online group. Below, the games that reached the position (latest 30),
+each with what was played next; tap one to open it at that position. Tap a move to play it. Closed by default,
+hidden while training, drilling, solving puzzles or playing the engine. The server replays the games once into
+an index and rebuilds it when a game in those groups is added, changed or deleted.
+
+API: `GET /api/games-explorer?fen=&groups=otb[,online]`, `GET /api/games/groups` (counts),
+`category` on games (`otb|online|practice|other`; filter `?category=` on `/api/games`, `/api/games/players`,
+`/api/pgn/games`; `category` in `POST /api/games`, `PATCH`, and `POST /api/games/import-pgn`).
+
 ## Masters explorer (board)
 
 The **Masters** section on the board (under Branches; tap the heading to open or close it, remembered per device)
@@ -461,7 +476,16 @@ API: `GET /api/puzzles/status`, `POST /api/puzzles/import`, `GET /api/puzzles/th
 
 ## Games
 
-The **Games** tab lists your games newest first (date, players with teams, competition, opening moves, result),
+Games are kept in four groups, shown one at a time by the tabs at the top of the Games tab (with counts, the
+last one remembered): **OTB** (your over-the-board games), **Online** (Lichess imports go here), **Practice**
+(games saved from Play vs engine) and **Other** (masters and tournament games saved from the board or the Wild
+tab, and anything else). New game and Import PGN put games into the group shown (or the one you choose in the
+dialog); a game's **Group** in its details panel moves it. Search, filters, the player list and Export PGN all
+work within the group. When the groups came in (v0.31.0), existing games were sorted automatically: Lichess
+imports and Lichess/chess.com PGN events to Online, "Practice vs engine" or Stockfish games to Practice, copies
+of masters/tournament games to Other, the rest to OTB.
+
+The **Games** tab lists the group's games newest first (date, players with teams, competition, opening moves, result),
 with a search box that matches players, teams and competition.
 
 Filters under the search box narrow the list further, and are remembered on the device:
@@ -610,6 +634,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/masters.e2e.cjs
 # the fake also plays Lichess (user JasonS); server started with LICHESS_API_URL=http://127.0.0.1:8099
 # (restart the fake between runs: some checks count its requests):
 MPCT_URL=http://localhost:8010/ node tests/e2e/lichess.e2e.cjs
+MPCT_URL=http://localhost:8010/ node tests/e2e/mygames.e2e.cjs      # empty database (game groups, Your games explorer)
 MPCT_URL=http://localhost:8010/ node tests/e2e/handsfree.e2e.cjs    # empty database (fake speech in and out)
 # optional, real speech through the offline recogniser: server with VOICE_MODEL_DIR set, WAVs made with espeak-ng
 MPCT_URL=http://localhost:8010/ node tests/e2e/voskvoice.e2e.cjs

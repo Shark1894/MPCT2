@@ -4,18 +4,20 @@ import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy.orm import Session
 
 from app.api.schemas import LineMoveOut, Uci
 from app.db.session import get_session
 from app.repositories import games as repo
+from app.repositories import my_explorer
 
 router = APIRouter(prefix="/api", tags=["games"])
 Db = Annotated[Session, Depends(get_session)]
 Text100 = Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)]
 Result = Literal["1-0", "0-1", "1/2-1/2", "*"]
+Category = Literal["otb", "online", "practice", "other"]
 
 
 class GameMeta(BaseModel):
@@ -29,6 +31,7 @@ class GameMeta(BaseModel):
 
 
 class GameIn(GameMeta):
+    category: Category = "otb"
     start_fen: str | None = None
     moves: list[Uci] = Field(default_factory=list, max_length=1000)
 
@@ -43,6 +46,7 @@ class GamePatch(BaseModel):
     competition: Annotated[str, StringConstraints(strip_whitespace=True, max_length=150)] | None = None
     played_on: date | None = None
     result: Result | None = None
+    category: Category | None = None
     start_fen: str | None = None  # changing it requires 'moves' too
     moves: list[Uci] | None = Field(default=None, max_length=1000)
 
@@ -68,6 +72,7 @@ class GameSummary(GameMeta):
     opening: list[str]  # first few moves (SAN)
     review: GameReviewInfo | None = None  # current engine review
     lichess_id: str | None = None  # imported from lichess.org
+    category: Category = "otb"
 
 
 class GameOut(GameSummary):
@@ -76,6 +81,7 @@ class GameOut(GameSummary):
 
 class PgnIn(BaseModel):
     pgn: str = Field(max_length=5_000_000)
+    category: Category = "otb"
 
 
 class PgnImportOut(BaseModel):
@@ -102,8 +108,8 @@ class PlayerOut(BaseModel):
     games: int
 
 
-def _filters(player, color, result, reviewed) -> dict:
-    return {"player": player, "color": color, "result": result, "reviewed": reviewed}
+def _filters(player, color, result, reviewed, category=None) -> dict:
+    return {"player": player, "color": color, "result": result, "reviewed": reviewed, "category": category}
 
 
 @router.get("/games", response_model=list[GameSummary])
@@ -114,17 +120,27 @@ def list_games(
     color: str | None = None,
     result: str | None = None,
     reviewed: str | None = None,
+    category: str | None = None,
 ):
     try:
-        return repo.list_games(s, q, **_filters(player, color, result, reviewed))
+        return repo.list_games(s, q, **_filters(player, color, result, reviewed, category))
     except repo.BadFilter as exc:
         raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/games/players", response_model=list[PlayerOut])
-def list_players(s: Db):
-    """Player names in the games (for the filter), most games first."""
-    return repo.list_players(s)
+def list_players(s: Db, category: str | None = None):
+    """Player names in the games (for the filter; in one group if given), most games first."""
+    try:
+        return repo.list_players(s, category)
+    except repo.BadFilter as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/games/groups")
+def game_groups(s: Db) -> dict[str, int]:
+    """How many games each group of the Games tab has."""
+    return repo.category_counts(s)
 
 
 @router.get("/pgn/games")
@@ -135,10 +151,11 @@ def export_all_pgn(
     color: str | None = None,
     result: str | None = None,
     reviewed: str | None = None,
+    category: str | None = None,
 ):
     """All games (or those matching q and the filters) as one PGN download."""
     try:
-        text = repo.export_all_pgn(s, q, **_filters(player, color, result, reviewed))
+        text = repo.export_all_pgn(s, q, **_filters(player, color, result, reviewed, category))
     except repo.BadFilter as exc:
         raise HTTPException(422, str(exc)) from exc
     return Response(
@@ -146,6 +163,54 @@ def export_all_pgn(
         media_type="application/x-chess-pgn",
         headers={"Content-Disposition": 'attachment; filename="mpct-games.pgn"'},
     )
+
+
+class ExplorerMove(BaseModel):
+    uci: str
+    san: str
+    games: int
+    white: int
+    draws: int
+    black: int
+    won: int  # your results, where one side is you
+    drawn: int
+    lost: int
+
+
+class ExplorerGame(BaseModel):
+    id: int
+    white: str
+    black: str
+    result: str
+    played_on: date | None
+    competition: str
+    category: Category
+    my_color: str | None
+    ply: int  # the position is reached after this many moves
+    san: str | None  # played next (None: the game ended there)
+
+
+class ExplorerOut(BaseModel):
+    key: str
+    groups: list[Category]
+    total: int
+    white: int
+    draws: int
+    black: int
+    won: int
+    drawn: int
+    lost: int
+    moves: list[ExplorerMove]
+    games: list[ExplorerGame]
+
+
+@router.get("/games-explorer", response_model=ExplorerOut)
+def games_explorer(fen: Annotated[str, Query(min_length=10, max_length=120)], s: Db, groups: str = "otb"):
+    """What you played (and met) from a position in your own games: groups=otb or otb,online."""
+    try:
+        return my_explorer.lookup(s, fen, my_explorer.parse_groups(groups))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.post("/games", response_model=GameOut, status_code=201)
@@ -184,7 +249,7 @@ def export_pgn(game_id: int, s: Db):
 
 @router.post("/games/import-pgn", response_model=PgnImportOut)
 def import_pgn(body: PgnIn, s: Db):
-    return repo.import_pgn(s, body.pgn)
+    return repo.import_pgn(s, body.pgn, body.category)
 
 
 @router.post("/openings/{opening_id}/check", response_model=CheckOut)

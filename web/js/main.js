@@ -15,6 +15,7 @@ import { PlayController } from './play.js';
 import { ReviewController } from './review.js';
 import { SavedEval } from './saved-eval.js';
 import { MastersPanel } from './masters.js';
+import { MyGamesPanel } from './mygames.js';
 import { HandsFree } from './handsfree.js';
 import { WildView } from './wild.js';
 import { Sounds, movedOneForward } from './sounds.js';
@@ -234,7 +235,7 @@ const gamesView = new GamesView({
 
 const lichessGames = new LichessGames({
   onOpen: (id) => gamesView.onOpen(id),
-  onImported: () => gamesView.refresh(),
+  onImported: () => gamesView.setGroup('online'), // imported Lichess games are in the Online group
 });
 
 // ---- repertoire in the wild ------------------------------------------------------
@@ -280,6 +281,22 @@ const masters = new MastersPanel({
     if (!g) return;
     render();
     toast(`At this position in the game (move ${Math.max(1, Math.ceil(g.ply / 2))}). Step on through it, or Save to Games to keep it.`);
+  },
+});
+
+// ---- your games explorer ----------------------------------------------------------
+
+const myGames = new MyGamesPanel({
+  onPlay: (uci) => {
+    if (locked() || play.active) return;
+    if (game.play(uci.slice(0, 2), uci.slice(2, 4), uci[4])) render();
+  },
+  onOpenGame: async (id, ply) => {
+    if (!(await play.confirmStop())) return;
+    if (!(await gamePanel.open(id))) return;
+    game.goTo(Math.min(ply, game.moves.length));
+    render();
+    toast(`At this position in the game (move ${Math.max(1, Math.ceil(ply / 2))}).`);
   },
 });
 
@@ -370,6 +387,7 @@ function setView(next) {
   }
   store.set('view', view);
   if (view === 'board') {
+    myGames?.clear(); // games may have been added or moved meanwhile
     board.redraw();
     review.update(); // a graph drawn while the board was hidden is resized to its panel
     analysis.resume('away');
@@ -424,6 +442,7 @@ function render() {
   // Hidden when something else already shows the evaluation (review panel, live engine) or it would give answers away.
   savedEval?.update(game.fen(), Boolean(review?.open) || analysis.settings.on || locked() || Boolean(play?.active));
   masters?.update(game.fen(), locked() || Boolean(play?.active));
+  myGames?.update(game.fen(), locked() || Boolean(play?.active));
   renderMoveList(
     ui.moves,
     game,
@@ -630,4 +649,4 @@ repertoire.init().then(async () => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval, masters, lichessGames, handsFree: trainer.voice };
+window.mpct = { game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval, masters, myGames, lichessGames, handsFree: trainer.voice };

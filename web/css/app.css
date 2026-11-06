@@ -3272,3 +3272,60 @@ body.puzzle-locked .engine {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+
+/* ---- Games tab groups (OTB / Online / Practice / Other) ---- */
+
+.games-groups {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.games-groups button {
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: none;
+  padding: 8px 14px;
+  margin-bottom: -1px;
+  color: var(--text-dim);
+}
+
+.games-groups button.active {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.games-groups .meta {
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+@media (max-width: 640px) {
+  .games-groups button {
+    flex: 1;
+    padding: 8px 4px;
+  }
+}
+
+/* ---- Your games explorer (board) ---- */
+
+.mine-online {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.mine-online input {
+  width: auto;
+}
+
+.mine-score {
+  margin: 0;
+  font-size: 13px;
+}

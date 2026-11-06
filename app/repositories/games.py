@@ -14,6 +14,7 @@ from app.repositories.game_puzzles import current_reviews
 from app.repositories.repertoire import NotFound, get_opening
 
 META_FIELDS = ("white", "black", "white_team", "black_team", "competition", "played_on", "result")
+CATEGORIES = ("otb", "online", "practice", "other")  # the Games tab's groups
 
 
 def _get(s: Session, game_id: int) -> Game:
@@ -32,6 +33,7 @@ def _summary(game: Game, n_moves: int, opening: list[str], review: dict | None =
         "opening": opening,
         "review": review,  # the current engine review (None = not reviewed, or moves changed since)
         "lichess_id": game.lichess_id,  # imported from lichess.org
+        "category": game.category,
     }
 
 
@@ -45,11 +47,26 @@ class BadFilter(ValueError):
     pass
 
 
-def list_players(s: Session) -> list[dict]:
-    """Every player name in the games (white or black), most games first. Names compare case-insensitively."""
+def _check_category(category: str | None) -> None:
+    if category and category not in CATEGORIES:
+        raise BadFilter(f"Unknown group: {category}")
+
+
+def category_counts(s: Session) -> dict[str, int]:
+    counts = dict(s.execute(select(Game.category, func.count()).group_by(Game.category)).all())
+    return {c: counts.get(c, 0) for c in CATEGORIES}
+
+
+def list_players(s: Session, category: str | None = None) -> list[dict]:
+    """Every player name in the games (white or black; in one group if given), most games first.
+    Names compare case-insensitively."""
+    _check_category(category)
     spellings: dict[str, dict[str, int]] = {}  # lower-case name -> spelling -> games
     for col in (Game.white, Game.black):
-        for name, n in s.execute(select(func.trim(col), func.count()).group_by(func.trim(col))).all():
+        query = select(func.trim(col), func.count()).group_by(func.trim(col))
+        if category:
+            query = query.where(Game.category == category)
+        for name, n in s.execute(query).all():
             if name:
                 by = spellings.setdefault(name.lower(), {})
                 by[name] = by.get(name, 0) + n
@@ -93,13 +110,18 @@ def list_games(
     color: str | None = None,
     result: str | None = None,
     reviewed: str | None = None,
+    category: str | None = None,
 ) -> list[dict]:
     """All games, newest first; q searches players, teams and competition. The other filters:
     player (exact name), color (that player's colour), result (white/black/draw/unfinished, or
-    won/lost/drawn for the player) and reviewed (yes/no: has a current engine review)."""
+    won/lost/drawn for the player), reviewed (yes/no: has a current engine review) and
+    category (one of the Games tab's groups)."""
     if reviewed and reviewed not in REVIEW_FILTERS:
         raise BadFilter(f"Unknown review filter: {reviewed}")
+    _check_category(category)
     query = _filter_query(select(Game), player, color, result)
+    if category:
+        query = query.where(Game.category == category)
     if q and q.strip():
         like = f"%{q.strip()}%"
         query = query.where(
@@ -145,7 +167,10 @@ def _store_moves(s: Session, game: Game, ucis: list[str]) -> None:
 
 def create_game(s: Session, data: dict) -> dict:
     """data: metadata fields, optional start_fen, and moves (UCI list)."""
-    game = Game(**{f: data[f] for f in META_FIELDS if f in data}, start_fen=data.get("start_fen") or None)
+    category = data.get("category") or "otb"
+    if category not in CATEGORIES:
+        raise InvalidPosition(f"Unknown group: {category}")
+    game = Game(**{f: data[f] for f in META_FIELDS if f in data}, start_fen=data.get("start_fen") or None, category=category)
     s.add(game)
     s.flush()
     _store_moves(s, game, data.get("moves", []))
@@ -159,6 +184,10 @@ def update_game(s: Session, game_id: int, data: dict) -> dict:
     for f in META_FIELDS:
         if f in data:
             setattr(game, f, data[f])
+    if data.get("category"):
+        if data["category"] not in CATEGORIES:
+            raise InvalidPosition(f"Unknown group: {data['category']}")
+        game.category = data["category"]
     if "start_fen" in data:
         start = (data["start_fen"] or "").strip() or None
         if start and start.split()[:4] == chess.STARTING_FEN.split()[:4]:
@@ -208,7 +237,7 @@ def _is_duplicate(s: Session, p: ParsedGame) -> bool:
     return False
 
 
-def import_pgn(s: Session, text: str) -> dict:
+def import_pgn(s: Session, text: str, category: str = "otb") -> dict:
     parsed, errors = parse_pgn(text)
     imported, duplicates = [], 0
     for p in parsed:
@@ -218,7 +247,7 @@ def import_pgn(s: Session, text: str) -> dict:
         try:
             game = create_game(
                 s,
-                {f: getattr(p, f) for f in META_FIELDS} | {"start_fen": p.start_fen, "moves": p.moves},
+                {f: getattr(p, f) for f in META_FIELDS} | {"start_fen": p.start_fen, "moves": p.moves, "category": category},
             )
         except ValueError as exc:
             errors.append(f"{p.white or '?'} v {p.black or '?'}: {exc}")

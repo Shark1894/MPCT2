@@ -361,6 +361,7 @@ export class PlayController {
       white_team: '',
       black_team: '',
       competition: competitionFor(this.opening),
+      category: 'practice',
       played_on: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD, local date
       result: this.result.score,
       start_fen: g.startFen,

@@ -60,6 +60,7 @@
             <label class="wide"><span id="game-competition-label">Competition</span> <input id="game-competition" maxlength="150" autocomplete="off" /></label>
             <label>Date <input id="game-played-on" type="date" /></label>
             <label>Result <select id="game-result"></select></label>
+            <label>Group <select id="game-category"></select></label>
           </div>
         </details>
         <div class="game-buttons">
@@ -271,6 +272,16 @@
             <div id="masters-moves" class="masters-moves"></div>
             <h3 id="masters-games-head" class="masters-sub" hidden>Top games</h3>
             <ol id="masters-games" class="masters-games"></ol>
+          </details>
+
+          <details id="mine-box" class="masters-box mine-box">
+            <summary><h2>Your games</h2><span id="mine-total" class="meta"></span></summary>
+            <label class="mine-online"><input id="mine-online" type="checkbox" /> Include online games</label>
+            <p id="mine-status" class="meta masters-status" aria-live="polite" hidden></p>
+            <p id="mine-score" class="meta mine-score" hidden></p>
+            <div id="mine-moves" class="masters-moves"></div>
+            <h3 id="mine-games-head" class="masters-sub" hidden>Games</h3>
+            <ol id="mine-games" class="masters-games"></ol>
           </details>
         </div>
 
@@ -487,6 +498,12 @@
           <button id="games-lichess" type="button" title="Your recent games on Lichess">From Lichess</button>
           <a id="games-export" class="button" href="#">Export PGN</a>
         </div>
+      </div>
+      <div id="games-groups" class="games-groups" role="tablist" aria-label="Game groups">
+        <button type="button" role="tab" data-group="otb">OTB <span class="meta"></span></button>
+        <button type="button" role="tab" data-group="online">Online <span class="meta"></span></button>
+        <button type="button" role="tab" data-group="practice">Practice <span class="meta"></span></button>
+        <button type="button" role="tab" data-group="other">Other <span class="meta"></span></button>
       </div>
       <div class="games-filters" role="group" aria-label="Filter games">
         <select id="games-player" aria-label="Player"><option value="">All players</option></select>

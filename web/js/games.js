@@ -15,7 +15,20 @@ const RESULTS = [
   ['1/2-1/2', '½-½ (draw)'],
   ['*', '* (unfinished)'],
 ];
-const META = ['white', 'white_team', 'black', 'black_team', 'competition', 'played_on', 'result'];
+const META = ['white', 'white_team', 'black', 'black_team', 'competition', 'played_on', 'result', 'category'];
+// The Games tab's groups: each game is in one, and the tab shows one at a time.
+export const GROUPS = [
+  ['otb', 'OTB'],
+  ['online', 'Online'],
+  ['practice', 'Practice'],
+  ['other', 'Other'],
+];
+const GROUP_HELP = {
+  otb: 'Your over-the-board games.',
+  online: 'Your online games (Lichess imports go here).',
+  practice: 'Your practice games against the engine.',
+  other: 'Other people’s games: saved masters and tournament games, and anything else.',
+};
 
 function todayIso() {
   const d = new Date();
@@ -123,6 +136,7 @@ export class GamePanel {
       fields: Object.fromEntries(META.map((f) => [f, $(`game-${f.replace('_', '-')}`)])),
     };
     for (const [value, label] of RESULTS) this.el.fields.result.appendChild(new Option(label, value));
+    for (const [value, label] of GROUPS) this.el.fields.category.appendChild(new Option(label, value));
     for (const input of Object.values(this.el.fields)) input.addEventListener('input', () => this.updateState());
     this.el.save.addEventListener('click', () => this.save());
     this.el.wildSave.addEventListener('click', () => this.saveWild());
@@ -237,6 +251,7 @@ export class GamePanel {
     f.competition.value = g.event;
     f.played_on.value = g.played_on ?? '';
     f.result.value = g.result;
+    f.category.value = 'other';
     this.el.source.textContent = source.filter(Boolean).join(' · ');
     this.el.pgn.href = pgnUrl;
     this.el.compareResult.innerHTML = '';
@@ -484,6 +499,10 @@ export class GamesView {
   constructor({ panel, game, onOpen, analysis }) {
     Object.assign(this, { panel, game, onOpen, analysis });
     this.reviewer = null;
+    this.group = GROUPS.some(([g]) => g === store.get('gamesGroup')) ? store.get('gamesGroup') : 'otb';
+    this.groupButtons = [...document.querySelectorAll('#games-groups [data-group]')];
+    for (const b of this.groupButtons) b.addEventListener('click', () => this.setGroup(b.dataset.group));
+    this._renderGroups();
     this.el = {
       search: $('games-search'),
       list: $('games-list'),
@@ -521,6 +540,32 @@ export class GamesView {
     this.el.importPgn.addEventListener('click', () => this.importPgn());
   }
 
+  /** Show one group of games (OTB, Online, Practice, Other). */
+  setGroup(group) {
+    if (!GROUPS.some(([g]) => g === group)) return;
+    this.group = group;
+    store.set('gamesGroup', group);
+    this._renderGroups();
+    this.refresh();
+  }
+
+  _renderGroups(counts = null) {
+    for (const b of this.groupButtons) {
+      const on = b.dataset.group === this.group;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', String(on));
+      if (counts) b.querySelector('.meta').textContent = String(counts[b.dataset.group] ?? 0);
+    }
+  }
+
+  async _loadGroups() {
+    try {
+      this._renderGroups(await api.gameGroups());
+    } catch {
+      /* counts are a nicety */
+    }
+  }
+
   setFilters(filters) {
     this.filters = normaliseFilters(filters);
     store.set('gamesFilters', this.filters);
@@ -551,7 +596,7 @@ export class GamesView {
 
   async _loadPlayers() {
     try {
-      this.players = await api.gamePlayers();
+      this.players = await api.gamePlayers(this.group);
     } catch {
       return; // the filter keeps its last list
     }
@@ -561,25 +606,27 @@ export class GamesView {
   async refresh() {
     const q = this.el.search.value.trim();
     const filters = this.filters;
+    const group = this.group;
     const filtered = Boolean(q) || Object.values(filters).some(Boolean);
-    this.el.exportAll.href = api.allGamesPgnUrl(q, filters);
+    this.el.exportAll.href = api.allGamesPgnUrl(q, { ...filters, category: group });
     this._loadPlayers();
+    this._loadGroups();
     let games;
     try {
-      games = await api.games(q, filters);
+      games = await api.games(q, { ...filters, category: group });
     } catch (err) {
       this.el.list.innerHTML = '';
       this.el.empty.hidden = false;
       this.el.empty.textContent = `Couldn't load games: ${err.message}`;
       return;
     }
-    if (q !== this.el.search.value.trim() || filters !== this.filters) return; // changed meanwhile
+    if (q !== this.el.search.value.trim() || filters !== this.filters || group !== this.group) return; // changed meanwhile
     this.el.count.textContent = filtered ? `${plural(games.length, 'game')} found` : plural(games.length, 'game');
     this.el.list.innerHTML = '';
     this.el.empty.hidden = games.length > 0;
     this.el.empty.textContent = filtered
-      ? 'No games match the search and filters.'
-      : 'No games yet. Add one with New game, or import a PGN.';
+      ? 'No games in this group match the search and filters.'
+      : `No games here yet. ${GROUP_HELP[group]}`;
     this.el.exportAll.hidden = games.length === 0;
     for (const g of games) this.el.list.appendChild(this._row(g));
     this._reviewButton();
@@ -725,6 +772,7 @@ export class GamesView {
       { name: 'competition', label: 'Competition', required: false, placeholder: 'League / tournament', maxLength: 150 },
       { name: 'played_on', label: 'Date', type: 'date', value: todayIso() },
       { name: 'result', label: 'Result', type: 'select', options: RESULTS, value: '*' },
+      { name: 'category', label: 'Group', type: 'select', options: GROUPS, value: this.group },
     ];
     if (boardMoves) {
       fields.push({
@@ -750,6 +798,7 @@ export class GamesView {
     try {
       if (!(await this.panel.confirmLeave())) return;
       const g = await api.createGame(body);
+      if (body.category !== this.group) this.setGroup(body.category);
       toast('Game created. Play or edit the moves on the board, then Save.');
       this.onOpen(g.id);
     } catch (err) {
@@ -761,7 +810,10 @@ export class GamesView {
     const values = await formDialog({
       title: 'Import PGN',
       message: 'Paste one or more games, or choose one or more .pgn files. Only the main line is kept; games already in the app are skipped.',
-      fields: [{ name: 'pgn', label: 'PGN', type: 'textarea', required: true, file: '.pgn,text/plain', multiple: true }],
+      fields: [
+        { name: 'category', label: 'Into the group', type: 'select', options: GROUPS, value: this.group },
+        { name: 'pgn', label: 'PGN', type: 'textarea', required: true, file: '.pgn,text/plain', multiple: true },
+      ],
       submit: 'Import',
     });
     if (!values) return;
@@ -769,7 +821,7 @@ export class GamesView {
       const res = { imported: 0, duplicates: 0, errors: [] };
       for (const chunk of pgnChunks(values.pgn)) {
         // Many files can add up to more than one request takes: sent in parts, split between games.
-        const part = await api.importPgn(chunk);
+        const part = await api.importPgn(chunk, values.category);
         res.imported += part.imported;
         res.duplicates += part.duplicates;
         res.errors.push(...part.errors);
@@ -784,7 +836,8 @@ export class GamesView {
           submit: 'OK',
         });
       }
-      await this.refresh();
+      if (values.category !== this.group) this.setGroup(values.category);
+      else await this.refresh();
     } catch (err) {
       toast(err.message, 'error');
     }

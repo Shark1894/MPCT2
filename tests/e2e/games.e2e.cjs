@@ -61,7 +61,7 @@ async function submitDialog(p) {
   await page.click('#view-games');
   await settle(page);
   check(await page.isVisible('#games-view') && (await page.isHidden('main.layout')), 'Games tab replaces the board');
-  check((await text(page, '#games-empty')).includes('No games yet'), 'empty state explains how to add games');
+  check((await text(page, '#games-empty')).includes('No games here yet. Your over-the-board games.'), 'empty state explains the group');
 
   // ---- import PGN ---------------------------------------------------------------
   await page.click('#games-import');

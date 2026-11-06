@@ -115,7 +115,7 @@ const ITALIAN = ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1c4', 'f8c5', 'c2c3', 'g8f6']
   check((await rows(page)).join() === 'Anna Bell v Peter Swan', 'search and filters together');
   await page.fill('#games-search', 'nobody');
   await settle(page, 700);
-  check((await page.textContent('#games-empty')) === 'No games match the search and filters.', 'empty message mentions filters');
+  check((await page.textContent('#games-empty')) === 'No games in this group match the search and filters.', 'empty message mentions filters');
   await page.fill('#games-search', '');
   await page.click('#games-clear');
   await settle(page, 700);
