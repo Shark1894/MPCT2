@@ -24,6 +24,7 @@
         <button id="view-dashboard" type="button" class="view-tab" aria-pressed="false">Dashboard</button>
         <button id="view-games" type="button" class="view-tab" aria-pressed="false">Games</button>
         <button id="view-puzzles" type="button" class="view-tab" aria-pressed="false">Puzzles</button>
+        <button id="view-courses" type="button" class="view-tab" aria-pressed="false" title="Courses to work through move by move: tactics, strategy, endgames">Training</button>
         <button id="view-wild" type="button" class="view-tab" aria-pressed="false" title="Your repertoire in tournament games">Wild<span id="wild-new" class="tab-count" hidden></span></button>
       </nav>
       <span id="mode-badge" class="mode-badge" hidden>Training</span>
@@ -207,6 +208,29 @@
             </div>
             <a id="puzzle-game" class="button small" href="#" target="_blank" rel="noopener">Game on Lichess</a>
             <button id="puzzle-open-game" type="button" class="small" hidden>Open the game</button>
+          </div>
+        </div>
+
+        <div id="cx" class="training cx" hidden>
+          <div class="train-head">
+            <h2 id="cx-title">Exercise</h2>
+            <button id="cx-stop" type="button" class="small">Stop</button>
+          </div>
+          <p id="cx-sub" class="meta cx-sub"></p>
+          <p id="cx-progress" class="meta"></p>
+          <p id="cx-message" class="train-message" aria-live="polite"></p>
+          <div id="cx-notes" class="cx-notes" aria-live="polite"></div>
+          <div class="train-end-actions" id="cx-playing">
+            <button id="cx-step" type="button" class="primary" hidden>Next move</button>
+            <button id="cx-show" type="button" title="Play the right move for you (counts as missed)">Show move</button>
+            <button id="cx-skip" type="button" title="On to the next exercise (not recorded)">Skip</button>
+          </div>
+          <div id="cx-end" class="train-end" hidden>
+            <p id="cx-result" class="train-result" aria-live="polite"></p>
+            <div class="train-end-actions">
+              <button id="cx-next" type="button" class="primary">Next exercise</button>
+              <button id="cx-retry" type="button" title="Try it again (your progress is updated)">Retry</button>
+            </div>
           </div>
         </div>
 
@@ -589,6 +613,28 @@
         <button id="wild-more" type="button" hidden>Show more</button>
       </section>
     </main>
+    <main id="courses-view" class="games-view courses-view" hidden>
+      <section class="dash-card cv-top">
+        <div>
+          <h2 class="dash-h">Training <span class="meta">courses to work through move by move: tactics, strategy, endgames</span></h2>
+        </div>
+        <div class="cv-top-actions">
+          <label class="cv-filter-label">Show
+            <select id="cv-filter">
+              <option value="">All courses</option>
+              <option value="tactics">Tactics</option>
+              <option value="strategy">Strategy</option>
+              <option value="endgames">Endgames</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <button id="cv-import" type="button" class="primary">Import Chessable course</button>
+        </div>
+      </section>
+      <p id="cv-empty" class="meta cv-empty" hidden></p>
+      <div id="cv-list" class="cv-list"></div>
+    </main>
+
     <main id="puzzles-view" class="games-view puzzles-view" hidden>
       <section class="dash-card pz-top">
         <div class="pz-rating">

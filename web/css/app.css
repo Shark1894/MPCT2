@@ -3338,3 +3338,211 @@ body.puzzle-locked .engine {
 .modal-check span {
   overflow-wrap: anywhere;
 }
+
+/* ---- Training tab: courses worked through move by move ---- */
+
+.cv-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cv-top .dash-h {
+  margin: 0;
+}
+
+.cv-top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.cv-filter-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.cv-empty {
+  margin: 4px 2px;
+}
+
+.cv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cv-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cv-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cv-title .dash-h {
+  margin: 0;
+}
+
+.cv-kind {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.cv-kind-tactics { color: var(--copper); }
+.cv-kind-strategy { color: var(--blue); }
+.cv-kind-endgames { color: var(--green); }
+
+.cv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cv-bar {
+  display: flex;
+  height: 8px;
+  margin: 12px 0 6px;
+  border-radius: 4px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.cv-bar-solved { background: var(--green); }
+.cv-bar-missed { background: var(--error); }
+
+.cv-counts {
+  margin: 0;
+  font-size: 13px;
+}
+
+.cv-chapters {
+  margin-top: 10px;
+}
+
+.cv-chapters > summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.cv-chapter-list {
+  margin-top: 6px;
+}
+
+.cv-chapter {
+  border-top: 1px solid var(--border);
+}
+
+.cv-chapter-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.cv-chapter-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cv-chapter-counts {
+  font-variant-numeric: tabular-nums;
+}
+
+.cv-exercises {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0 0 0 12px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.cv-ex {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.cv-ex button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  min-height: 0;
+}
+
+.cv-ex button:hover {
+  color: var(--blue);
+  text-decoration: underline;
+}
+
+.cv-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.cv-solved .cv-dot { background: var(--green); }
+.cv-missed .cv-dot { background: var(--error); }
+
+/* the exercise panel beside the board */
+
+.cx-sub {
+  margin: -4px 0 0;
+}
+
+.cx-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 40vh;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.cx-notes:empty {
+  display: none;
+}
+
+.cx-note {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  white-space: pre-line;
+}
+
+.cx-move {
+  display: block;
+  margin-bottom: 2px;
+  font-weight: 600;
+  color: var(--copper);
+}

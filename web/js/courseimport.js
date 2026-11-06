@@ -68,7 +68,7 @@ export function chosenLines(course, chapterIds, withReference) {
 }
 
 /** Pick a .json file with the browser's file chooser (resolves null if none is chosen). */
-function pickFile() {
+export function pickFile() {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';

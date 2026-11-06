@@ -39,6 +39,7 @@ The full plan, decisions and data model are in the project's
 | — | Lichess game import: your recent Lichess games into Games, onto the board | Done |
 | — | Game groups (OTB / Online / Practice / Other) and the Your games explorer on the board | Done |
 | — | Import a Chessable course export as an opening (lines, notes, chapter tags) | Done |
+| — | Training tab: tactics, strategy and endgame courses worked through move by move | Done |
 
 ## Using the board
 
@@ -544,6 +545,10 @@ API: `GET/POST /api/games` (`?q=` search; filters `player`, `color` = white|blac
 
 ## Importing a Chessable course
 
+A Chessable download of one JSON file per line (a folder or .zip with `course.json` and `<id>.json` files) is
+turned into one course file with `python -m app.tools.combine_chessable download.zip` (the file is named after
+the course).
+
 **Manage repertoire and opening → Import Chessable course** creates an opening in the selected repertoire from a
 Chessable course export (`.json`, with the course under `bookData`: its contents in `course` and one entry per
 line, as the study page's `getGame` gives it). The file is read in the browser; you tick the chapters (the
@@ -571,6 +576,35 @@ About 10 s for a course of a thousand lines (positions, lines and comments are w
 
 API: `POST /api/repertoires/{id}/import-course` (`{"name", "lines": [{"game": {...}}, ...], "chapters": [{"id", "title"}],
 "comments": true, "tags": true}`).
+
+## Training tab (courses)
+
+The **Training** tab is for courses that aren't openings: tactics, strategy, endgames. Each course is worked
+through in order, move by move, on the board.
+
+- **Import Chessable course** reads the same course file as the opening import (see below for turning a download
+  of one file per line into one file). Name the course, choose its kind (Tactics / Strategy / Endgames / Other,
+  guessed from the name) and tick the chapters. Lines may start from any position and be for either side.
+  Importing the same course again updates titles, moves and notes and adds what's new; your progress is kept,
+  except for exercises whose moves changed (they're new again).
+- Each course shows its progress (solved, missed, to do) and its chapters; open a chapter to see its exercises
+  (green solved, red missed) and click one to start from there. **Start / Continue** goes through the exercises
+  not solved yet in course order; **Retry missed** goes through the missed ones; each chapter has its own
+  **Start**. **Edit** renames, changes the kind, resets progress or deletes the course. **Show** filters by kind.
+- On the board you play the side the exercise is for; the other side's moves are played for you. A wrong move:
+  try again. A second wrong move at the same point shows the right one (an arrow, then it's played) and you carry
+  on. **Show move** does the same straight away; **Skip** moves on without recording anything. Any wrong or shown
+  move makes the exercise *missed*; otherwise it's *solved*. A checkmate other than the course's on the last move
+  is accepted.
+- The author's notes appear beside the board as each move is played (the start note straight away), so they don't
+  give the answer away. Information pages are shown whole; reference lines are stepped through with
+  **Next move** (or **→**) and aren't tested.
+- While solving, navigation and the engine are off; once an exercise is finished you can step through it and
+  analyse.
+
+API: `GET /api/courses`, `POST /api/courses/import`, `GET|PATCH|DELETE /api/courses/{id}`,
+`POST /api/courses/{id}/reset` (`{"chapter_id": null}` = the whole course), `GET /api/exercises/{id}`,
+`POST /api/exercises/{id}/attempt` (`{"solved": true}`).
 
 ## Importing from the desktop app
 
@@ -666,6 +700,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/masters.e2e.cjs
 # (restart the fake between runs: some checks count its requests):
 MPCT_URL=http://localhost:8010/ node tests/e2e/lichess.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/courseimport.e2e.cjs  # empty database (COURSE_FILE=export.json also imports a real one)
+MPCT_URL=http://localhost:8010/ node tests/e2e/courses.e2e.cjs      # empty database (Training tab)
 MPCT_URL=http://localhost:8010/ node tests/e2e/mygames.e2e.cjs      # empty database (game groups, Your games explorer)
 MPCT_URL=http://localhost:8010/ node tests/e2e/handsfree.e2e.cjs    # empty database (fake speech in and out)
 # optional, real speech through the offline recogniser: server with VOICE_MODEL_DIR set, WAVs made with espeak-ng
@@ -828,7 +863,7 @@ app/
   db/             SQLAlchemy models, session, Alembic migrations
   repositories/   database queries (replaces the legacy DBFunctions.py)
   api/            FastAPI routers + request/response schemas
-  tools/          command-line tools (legacy repertoire + games import, wild PGN import)
+  tools/          command-line tools (legacy repertoire + games import, wild PGN import, combine a Chessable download)
   wild_fetch.py   background fetching of tournament games (Lichess broadcasts, TWIC)
   puzzle_import.py streaming import of the Lichess puzzle database
 web/              frontend served as-is
@@ -850,6 +885,8 @@ web/              frontend served as-is
   js/vosk-listener.js hands-free: offline recognition with Vosk (Firefox), chess words only
   js/puzzle.js    one puzzle's rules + rating chart path (pure logic, unit tested)
   js/puzzles.js   Puzzles tab + puzzle mode on the board
+  js/exercise.js  one course exercise's rules (pure logic, unit tested)
+  js/courses.js   Training tab + course exercises on the board
   js/sounds.js    move sounds (Web Audio; choosing the sound is unit tested)
   js/play.js      play vs engine: levels, engine replies, takeback, resign, save
   js/api.js       JSON API client

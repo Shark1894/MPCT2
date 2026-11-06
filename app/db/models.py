@@ -486,3 +486,73 @@ class GamePuzzle(Base):
     reviews: Mapped[int] = mapped_column(server_default="0")
     correct: Mapped[int] = mapped_column(server_default="0")
     last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# ---- the Training tab: courses worked through move by move (tactics, strategy, endgames) ----
+
+
+class Course(Base):
+    """A course in the Training tab (e.g. a Chessable tactics or strategy course): chapters of
+    exercises, worked through in order. `chessable_id` (the course's bid) makes a re-import update
+    the same course."""
+
+    __tablename__ = "courses"
+    __table_args__ = (CheckConstraint("kind IN ('tactics', 'strategy', 'endgames', 'other')", name="kind"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    kind: Mapped[str] = mapped_column(String(10), server_default="other")
+    chessable_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    chapters: Mapped[list["CourseChapter"]] = relationship(
+        back_populates="course", cascade="all, delete-orphan", passive_deletes=True, order_by="CourseChapter.position"
+    )
+
+
+class CourseChapter(Base):
+    __tablename__ = "course_chapters"
+    __table_args__ = (UniqueConstraint("course_id", "chessable_id", name="uq_course_chapters_course_chessable"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    course_id: Mapped[int] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
+    chessable_id: Mapped[int | None] = mapped_column(BigInteger)
+    title: Mapped[str] = mapped_column(String(200))
+    position: Mapped[int] = mapped_column(server_default="0")  # order in the course
+
+    course: Mapped[Course] = relationship(back_populates="chapters")
+    exercises: Mapped[list["CourseExercise"]] = relationship(
+        back_populates="chapter", cascade="all, delete-orphan", passive_deletes=True, order_by="CourseExercise.position"
+    )
+
+
+class CourseExercise(Base):
+    """One exercise: from `start_fen`, the moves in `ucis` (space-separated); you play `color`'s
+    moves, the other side's are played for you. `comments` holds the author's notes by ply
+    (0 = the start position, n = after move n). kind 'info' is a page to read (no test),
+    'reference' is stepped through rather than tested. Progress: status new / solved / missed."""
+
+    __tablename__ = "course_exercises"
+    __table_args__ = (
+        UniqueConstraint("chapter_id", "chessable_id", name="uq_course_exercises_chapter_chessable"),
+        CheckConstraint("status IN ('new', 'solved', 'missed')", name="status"),
+        CheckConstraint("kind IN ('line', 'info', 'reference')", name="kind"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chapter_id: Mapped[int] = mapped_column(ForeignKey("course_chapters.id", ondelete="CASCADE"), index=True)
+    chessable_id: Mapped[int | None] = mapped_column(BigInteger)
+    position: Mapped[int] = mapped_column(server_default="0")  # order in the chapter
+    title: Mapped[str] = mapped_column(String(200), server_default="")
+    kind: Mapped[str] = mapped_column(String(10), server_default="line")
+    color: Mapped[str] = mapped_column(String(5))
+    start_fen: Mapped[str] = mapped_column(Text)
+    ucis: Mapped[str] = mapped_column(Text, server_default="")
+    sans: Mapped[str] = mapped_column(Text, server_default="")
+    comments: Mapped[dict] = mapped_column(JSONB, server_default="{}")
+    status: Mapped[str] = mapped_column(String(6), server_default="new")
+    attempts: Mapped[int] = mapped_column(server_default="0")
+    solved_count: Mapped[int] = mapped_column(server_default="0")
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    chapter: Mapped[CourseChapter] = relationship(back_populates="exercises")

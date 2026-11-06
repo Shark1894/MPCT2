@@ -39,6 +39,7 @@ class CourseLine:
     # Notes by ply: 0 = the start position, n = the position after move n.
     comments: dict[int, str] = field(default_factory=dict)
     kind: str = "line"  # 'line', 'info' (a page to read, not trained), 'reference' (not trained), 'alternative' (another move order)
+    start_fen: str = chess.STARTING_FEN
 
 
 def clean_text(text: str) -> str:
@@ -107,20 +108,37 @@ def _notes(raw) -> str:
 
 
 def parse_line(doc: dict) -> CourseLine:
-    """A getGame response -> CourseLine. Raises NotALine for anything that can't be trained."""
+    """A getGame response -> CourseLine for a repertoire (from the initial position, with moves).
+    Raises NotALine for anything that can't be trained as an opening line."""
+    line = _parse(doc)
+    if line.start_fen.split()[:4] != chess.STARTING_FEN.split()[:4]:
+        raise NotALine("starts from a set-up position (MPCT lines start from the initial position)")
+    if not line.ucis:
+        raise NotALine("no moves (an information page, not a line)")
+    return line
+
+
+def parse_exercise(doc: dict) -> CourseLine:
+    """A getGame response -> CourseLine for the Training tab: any start position, and pages with
+    no moves (to read) are fine. Raises NotALine for deleted or unreadable lines."""
+    return _parse(doc)
+
+
+def _parse(doc: dict) -> CourseLine:
     game = doc.get("game") if isinstance(doc, dict) else None
     if not isinstance(game, dict) or not isinstance(game.get("data"), list):
         raise NotALine("not a Chessable line (no game.data)")
     if game.get("isDel"):
         raise NotALine("deleted line")
     start = (game.get("initial") or chess.STARTING_FEN).strip()
-    if start.split()[:4] != chess.STARTING_FEN.split()[:4]:
-        raise NotALine("starts from a set-up position (MPCT lines start from the initial position)")
+    try:
+        board = chess.Board(start)
+    except ValueError as exc:
+        raise NotALine(f"start position isn't a valid FEN: {exc}") from exc
     color = (game.get("color") or "").lower()
     if color not in ("white", "black"):
         raise NotALine(f"unknown course colour {game.get('color')!r}")
 
-    board = chess.Board()
     ucis, sans, comments = [], [], {}
     for ply, m in enumerate(game["data"], start=1):
         before = _notes(m.get("before"))
@@ -136,8 +154,6 @@ def parse_line(doc: dict) -> CourseLine:
         after = _notes(m.get("after"))
         if after:
             comments[ply] = after
-    if not ucis:
-        raise NotALine("no moves (an information page, not a line)")
     return CourseLine(
         course_id=int(game.get("bid") or 0),
         course=(game.get("name") or "Chessable course").strip(),
@@ -149,5 +165,6 @@ def parse_line(doc: dict) -> CourseLine:
         ucis=ucis,
         sans=sans,
         comments=comments,
-        kind="info" if game.get("isInfo") else "reference" if game.get("isRef") else "alternative" if game.get("isAlt") else "line",
+        kind="info" if game.get("isInfo") or not ucis else "reference" if game.get("isRef") else "alternative" if game.get("isAlt") else "line",
+        start_fen=chess.Board(start).fen(),
     )
