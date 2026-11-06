@@ -40,6 +40,7 @@ The full plan, decisions and data model are in the project's
 | — | Game groups (OTB / Online / Practice / Other) and the Your games explorer on the board | Done |
 | — | Import a Chessable course export as an opening (lines, notes, chapter tags) | Done |
 | — | Training tab: tactics, strategy and endgame courses worked through move by move | Done |
+| — | Training tab grouped by kind; Woodpecker Method cycles with timed puzzles | Done |
 
 ## Using the board
 
@@ -587,10 +588,13 @@ through in order, move by move, on the board.
   guessed from the name) and tick the chapters. Lines may start from any position and be for either side.
   Importing the same course again updates titles, moves and notes and adds what's new; your progress is kept,
   except for exercises whose moves changed (they're new again).
-- Each course shows its progress (solved, missed, to do) and its chapters; open a chapter to see its exercises
+- Courses are listed on the left, grouped by kind (Woodpecker, Tactics, Strategy, Endgames, Other) with a progress
+  bar each; click one to show it on the right (the choice is remembered). **Edit** renames it, moves it to
+  another group, resets progress or deletes it.
+- A course shows its progress (solved, missed, to do) and its chapters; open a chapter to see its exercises
   (green solved, red missed) and click one to start from there. **Start / Continue** goes through the exercises
   not solved yet in course order; **Retry missed** goes through the missed ones; each chapter has its own
-  **Start**. **Edit** renames, changes the kind, resets progress or deletes the course. **Show** filters by kind.
+  **Start**.
 - On the board you play the side the exercise is for; the other side's moves are played for you. A wrong move:
   try again. A second wrong move at the same point shows the right one (an arrow, then it's played) and you carry
   on. **Show move** does the same straight away; **Skip** moves on without recording anything. Any wrong or shown
@@ -602,9 +606,32 @@ through in order, move by move, on the board.
 - While solving, navigation and the engine are off; once an exercise is finished you can step through it and
   analyse.
 
+### Woodpecker Method
+
+A course in the Woodpecker group (a name with "Woodpecker" is put there on import) is solved in **cycles**: the
+whole set of puzzles (or the chapters you choose for that cycle, e.g. only the easy ones) in course order, then
+the same set again, faster, each cycle aiming at half the days of the one before.
+
+- **Start cycle N** asks for a target in days (28 offered for the first; after that half the days the last cycle
+  took, rounded up) and the chapters. One cycle at a time; **Abandon cycle** deletes the current one.
+- Every puzzle is timed, from the moment your first move is due to the end. Only the first go at a puzzle in a
+  cycle counts (solved or missed, and its time); **Retry** afterwards is practice. **Skip** leaves it for later in
+  the cycle. **Pause** (or **P**) stops the clock and hides the board. With **Next puzzle automatically** a solved
+  puzzle moves straight on. The cycle finishes by itself with its last puzzle. Information pages and reference
+  lines aren't puzzles and are left out.
+- The page shows the current cycle (done, accuracy, total time, time a puzzle, days against the target, pace:
+  puzzles ahead of or behind the target pace and how many a day finish on time, time left at your average; the
+  mark on the bar is where target pace would be), every cycle side by side (days against target, accuracy, time,
+  time a puzzle and its change from the cycle before), and **Puzzle times**: each puzzle's time per cycle (✗ =
+  missed), slowest or most missed first, with **Practise** to solve one now (not recorded in a cycle).
+
 API: `GET /api/courses`, `POST /api/courses/import`, `GET|PATCH|DELETE /api/courses/{id}`,
 `POST /api/courses/{id}/reset` (`{"chapter_id": null}` = the whole course), `GET /api/exercises/{id}`,
-`POST /api/exercises/{id}/attempt` (`{"solved": true}`).
+`POST /api/exercises/{id}/attempt` (`{"solved": true}`); Woodpecker: `GET /api/courses/{id}/woodpecker` (cycles,
+current cycle, puzzles still to do), `POST /api/courses/{id}/woodpecker/cycles` (`{"target_days": 14,
+"chapter_ids": null}`), `DELETE /api/woodpecker/cycles/{id}` (the latest only),
+`POST /api/woodpecker/cycles/{id}/attempts` (`{"exercise_id": 1, "solved": true, "seconds": 12.5}`; a second go
+isn't stored), `GET /api/courses/{id}/woodpecker/times`.
 
 ## Importing from the desktop app
 
@@ -887,6 +914,8 @@ web/              frontend served as-is
   js/puzzles.js   Puzzles tab + puzzle mode on the board
   js/exercise.js  one course exercise's rules (pure logic, unit tested)
   js/courses.js   Training tab + course exercises on the board
+  js/woodpecker.js  Woodpecker page in the Training tab
+  js/woodpecker-core.js  Woodpecker times, pace and sorting (pure logic, unit tested)
   js/sounds.js    move sounds (Web Audio; choosing the sound is unit tested)
   js/play.js      play vs engine: levels, engine replies, takeback, resign, save
   js/api.js       JSON API client

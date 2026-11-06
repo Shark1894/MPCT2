@@ -1,5 +1,6 @@
 """The Training tab: courses (tactics, strategy, endgames) and their exercises."""
 
+from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Response
@@ -9,10 +10,11 @@ from sqlalchemy.orm import Session
 from app.core.chessable import NotALine, parse_exercise
 from app.db.session import get_session
 from app.repositories import courses as repo
+from app.repositories import woodpecker as wp
 
 router = APIRouter(prefix="/api", tags=["courses"])
 Db = Annotated[Session, Depends(get_session)]
-Kind = Literal["tactics", "strategy", "endgames", "other"]
+Kind = Literal["tactics", "strategy", "endgames", "woodpecker", "other"]
 
 
 class Progress(BaseModel):
@@ -22,11 +24,28 @@ class Progress(BaseModel):
     missed: int
 
 
+class CycleOut(BaseModel):
+    id: int
+    number: int
+    chapter_ids: list[int] | None
+    target_days: int | None
+    started_at: datetime
+    finished_at: datetime | None
+    days: float  # so far, or to finish
+    total: int  # puzzles in the cycle
+    done: int
+    solved: int
+    seconds: float
+    avg_seconds: float | None
+    accuracy: float | None  # % of the puzzles done that were solved
+
+
 class CourseSummary(Progress):
     id: int
     name: str
     kind: str
     chessable_id: int | None
+    cycle: CycleOut | None = None  # Woodpecker courses: the current (or last) cycle
 
 
 class ExerciseBrief(BaseModel):
@@ -114,7 +133,11 @@ class ResetOut(BaseModel):
 
 @router.get("/courses", response_model=list[CourseSummary])
 def list_courses(s: Db):
-    return repo.list_courses(s)
+    out = repo.list_courses(s)
+    for c in out:
+        if c["kind"] == "woodpecker":
+            c["cycle"] = wp.latest_cycle(s, c["id"])
+    return out
 
 
 @router.post("/courses/import", response_model=ImportOut)
@@ -163,3 +186,83 @@ def get_exercise(exercise_id: int, s: Db):
 @router.post("/exercises/{exercise_id}/attempt", response_model=AttemptOut)
 def attempt(exercise_id: int, body: AttemptIn, s: Db):
     return repo.record_attempt(s, exercise_id, body.solved)
+
+
+# ---- Woodpecker Method ------------------------------------------------------------------------
+
+
+class WpChapter(BaseModel):
+    id: int
+    title: str
+    puzzles: int
+
+
+class WoodpeckerOut(BaseModel):
+    course_id: int
+    course: str
+    puzzles: int
+    chapters: list[WpChapter]
+    cycles: list[CycleOut]  # oldest first
+    current: CycleOut | None
+    todo: list[int]  # the current cycle's puzzles still to do, in order
+    suggested_target_days: int | None  # half the last finished cycle's days
+
+
+class CycleIn(BaseModel):
+    chapter_ids: list[int] | None = Field(default=None, max_length=500)  # None = every chapter
+    target_days: int | None = Field(default=None, ge=1, le=3650)
+
+
+class WpAttemptIn(BaseModel):
+    exercise_id: int
+    solved: bool
+    seconds: float = Field(ge=0)
+
+
+class WpAttemptOut(BaseModel):
+    recorded: bool  # False: already tried in this cycle (a retry is practice)
+    finished: bool  # this attempt finished the cycle
+    cycle: CycleOut
+
+
+class PuzzleTime(BaseModel):
+    seconds: float
+    solved: bool
+
+
+class PuzzleTimes(BaseModel):
+    id: int
+    title: str
+    chapter: str
+    times: dict[int, PuzzleTime]  # cycle number -> time
+
+
+class PuzzleTimesOut(BaseModel):
+    cycles: list[int]
+    puzzles: list[PuzzleTimes]
+
+
+@router.get("/courses/{course_id}/woodpecker", response_model=WoodpeckerOut)
+def woodpecker(course_id: int, s: Db):
+    return wp.overview(s, course_id)
+
+
+@router.post("/courses/{course_id}/woodpecker/cycles", response_model=CycleOut)
+def start_cycle(course_id: int, body: CycleIn, s: Db):
+    return wp.start_cycle(s, course_id, body.chapter_ids, body.target_days)
+
+
+@router.delete("/woodpecker/cycles/{cycle_id}", status_code=204)
+def abandon_cycle(cycle_id: int, s: Db):
+    wp.abandon_cycle(s, cycle_id)
+    return Response(status_code=204)
+
+
+@router.post("/woodpecker/cycles/{cycle_id}/attempts", response_model=WpAttemptOut)
+def woodpecker_attempt(cycle_id: int, body: WpAttemptIn, s: Db):
+    return wp.record(s, cycle_id, body.exercise_id, body.solved, body.seconds)
+
+
+@router.get("/courses/{course_id}/woodpecker/times", response_model=PuzzleTimesOut)
+def puzzle_times(course_id: int, s: Db):
+    return wp.puzzle_times(s, course_id)

@@ -101,6 +101,12 @@ export const api = {
   resetCourse: (id, chapterId = null) => request('POST', `/courses/${id}/reset`, { body: { chapter_id: chapterId } }),
   exercise: (id) => request('GET', `/exercises/${id}`),
   exerciseAttempt: (id, solved) => request('POST', `/exercises/${id}/attempt`, { body: { solved } }),
+  woodpecker: (courseId) => request('GET', `/courses/${courseId}/woodpecker`),
+  woodpeckerTimes: (courseId) => request('GET', `/courses/${courseId}/woodpecker/times`),
+  startWoodpeckerCycle: (courseId, body) => request('POST', `/courses/${courseId}/woodpecker/cycles`, { body }),
+  abandonWoodpeckerCycle: (cycleId) => request('DELETE', `/woodpecker/cycles/${cycleId}`),
+  woodpeckerAttempt: (cycleId, exerciseId, solved, seconds) =>
+    request('POST', `/woodpecker/cycles/${cycleId}/attempts`, { body: { exercise_id: exerciseId, solved, seconds } }),
   importPgn: (pgn, category = 'otb') => request('POST', '/games/import-pgn', { body: { pgn, category } }),
   lichessSettings: () => request('GET', '/lichess/settings'),
   setLichessUsername: (username) => request('PUT', '/lichess/username', { body: { username } }),

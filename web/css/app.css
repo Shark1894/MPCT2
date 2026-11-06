@@ -3341,25 +3341,6 @@ body.puzzle-locked .engine {
 
 /* ---- Training tab: courses worked through move by move ---- */
 
-.cv-top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.cv-top .dash-h {
-  margin: 0;
-}
-
-.cv-top-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
 .cv-filter-label {
   display: flex;
   align-items: center;
@@ -3370,12 +3351,6 @@ body.puzzle-locked .engine {
 
 .cv-empty {
   margin: 4px 2px;
-}
-
-.cv-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 .cv-head {
@@ -3545,4 +3520,297 @@ body.puzzle-locked .engine {
   margin-bottom: 2px;
   font-weight: 600;
   color: var(--copper);
+}
+
+/* Training tab: grouped course list beside the selected course */
+
+.cv-layout {
+  display: grid;
+  grid-template-columns: 290px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.cv-nav {
+  position: sticky;
+  top: calc(var(--topbar-h) + 12px);
+  max-height: calc(100vh - var(--topbar-h) - 40px);
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.cv-nav-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cv-nav-head .dash-h {
+  margin: 0;
+}
+
+.cv-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cv-group-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.cv-group-h .meta {
+  margin-left: auto;
+  font-weight: 400;
+}
+
+.cv-kind-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+
+.cv-kind-dot.cv-kind-tactics { background: var(--copper); }
+.cv-kind-dot.cv-kind-strategy { background: var(--blue); }
+.cv-kind-dot.cv-kind-endgames { background: var(--green); }
+.cv-kind-dot.cv-kind-woodpecker { background: #b98ad8; }
+.cv-kind-woodpecker { color: #b98ad8; }
+
+.cv-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  min-height: 0;
+}
+
+.cv-item:hover {
+  background: var(--surface-2);
+}
+
+.cv-item.selected {
+  background: var(--blue-soft);
+  border-color: var(--blue);
+}
+
+.cv-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.cv-item-progress {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cv-bar.cv-bar-mini {
+  grid-column: 1 / -1;
+  height: 4px;
+  margin: 4px 0 0;
+}
+
+.cv-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cv-head-card .cv-bar {
+  margin-top: 12px;
+}
+
+.wp-h {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.cv-chapters .cv-chapter-list {
+  margin-top: 0;
+}
+
+@media (max-width: 800px) {
+  .cv-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .cv-nav {
+    position: static;
+    max-height: none;
+  }
+}
+
+/* Woodpecker */
+
+.wp-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wp-cur-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.wp-cur-head .wp-h {
+  margin: 0;
+}
+
+.wp-intro {
+  margin: 0 0 12px;
+  max-width: 70ch;
+}
+
+.wp-bar {
+  position: relative;
+  height: 10px;
+  overflow: visible;
+}
+
+.wp-bar .cv-bar-solved:first-child {
+  border-radius: 5px 0 0 5px;
+}
+
+.wp-pace-mark {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--text);
+  opacity: 0.7;
+}
+
+.wp-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.wp-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wp-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.wp-stat .meta {
+  font-size: 12px;
+}
+
+.wp-table-wrap {
+  overflow-x: auto;
+}
+
+.wp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wp-table th,
+.wp-table td {
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.wp-table th {
+  border-top: 0;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.wp-table .num {
+  text-align: right;
+}
+
+.wp-table .good { color: var(--ok); }
+.wp-table .bad { color: var(--error); }
+.wp-table tr.wp-open td { font-style: italic; }
+.wp-table td.wp-name { white-space: normal; min-width: 160px; }
+
+.wp-times > summary {
+  cursor: pointer;
+  margin: 0;
+}
+
+.wp-times[open] > summary {
+  margin-bottom: 10px;
+}
+
+.wp-times-tools {
+  margin-bottom: 8px;
+}
+
+.wp-times-tools select {
+  width: auto;
+}
+
+.wp-more {
+  margin-top: 8px;
+}
+
+/* the clock in the exercise panel */
+
+.cx-clock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.cx-timer {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 4ch;
+}
+
+.cx-auto input {
+  width: auto;
+  margin: 0;
+}
+
+.cx-auto {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+body.cx-paused .board-area {
+  filter: blur(14px);
+  pointer-events: none;
 }

@@ -218,6 +218,11 @@
           </div>
           <p id="cx-sub" class="meta cx-sub"></p>
           <p id="cx-progress" class="meta"></p>
+          <div id="cx-clock" class="cx-clock" hidden>
+            <span id="cx-timer" class="cx-timer" aria-label="Time on this puzzle">0:00</span>
+            <button id="cx-pause" type="button" class="small" title="Stop the clock (P)">Pause</button>
+            <label class="cx-auto"><input type="checkbox" id="cx-auto"> Next puzzle automatically</label>
+          </div>
           <p id="cx-message" class="train-message" aria-live="polite"></p>
           <div id="cx-notes" class="cx-notes" aria-live="polite"></div>
           <div class="train-end-actions" id="cx-playing">
@@ -614,25 +619,17 @@
       </section>
     </main>
     <main id="courses-view" class="games-view courses-view" hidden>
-      <section class="dash-card cv-top">
-        <div>
-          <h2 class="dash-h">Training <span class="meta">courses to work through move by move: tactics, strategy, endgames</span></h2>
-        </div>
-        <div class="cv-top-actions">
-          <label class="cv-filter-label">Show
-            <select id="cv-filter">
-              <option value="">All courses</option>
-              <option value="tactics">Tactics</option>
-              <option value="strategy">Strategy</option>
-              <option value="endgames">Endgames</option>
-              <option value="other">Other</option>
-            </select>
-          </label>
-          <button id="cv-import" type="button" class="primary">Import Chessable course</button>
-        </div>
-      </section>
-      <p id="cv-empty" class="meta cv-empty" hidden></p>
-      <div id="cv-list" class="cv-list"></div>
+      <div class="cv-layout">
+        <aside class="dash-card cv-nav" aria-label="Your courses">
+          <div class="cv-nav-head">
+            <h2 class="dash-h">Training</h2>
+            <button id="cv-import" type="button" class="small primary" title="Import a Chessable course (one combined .json file)">Import</button>
+          </div>
+          <p id="cv-empty" class="meta cv-empty" hidden></p>
+          <nav id="cv-groups" class="cv-groups"></nav>
+        </aside>
+        <div id="cv-main" class="cv-main" hidden></div>
+      </div>
     </main>
 
     <main id="puzzles-view" class="games-view puzzles-view" hidden>

@@ -228,10 +228,10 @@ const courseTrainer = new CourseTrainer({
 });
 
 const coursesView = new CoursesView({
-  onStart: async (list, label) => {
+  onStart: async (list, label, opts) => {
     if (!(await startBoardMode())) return;
     setView('board');
-    courseTrainer.start(list, label);
+    courseTrainer.start(list, label, opts);
   },
 });
 
@@ -575,6 +575,10 @@ document.addEventListener('keydown', (e) => {
   };
   if (e.key === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     toggleSound(); // works while training or solving too
+    return;
+  }
+  if (e.key === 'p' && courseTrainer.wp && courseTrainer.locked && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    courseTrainer.togglePause(); // Woodpecker: stop / restart the clock
     return;
   }
   if (e.key === 'ArrowRight' && courseTrainer.canStep) {

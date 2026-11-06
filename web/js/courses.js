@@ -9,6 +9,8 @@ import { api } from './api.js';
 import { Chess } from '../vendor/chess.js/chess.js';
 import { pickFile, readCourse, slimLine } from './courseimport.js';
 import { ExerciseRun } from './exercise.js';
+import { WoodpeckerPage } from './woodpecker.js';
+import { clock, days } from './woodpecker-core.js';
 import { confirmDialog, formDialog, plural, store, toast } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -17,6 +19,7 @@ const REPLY_DELAY_MS = 500;
 const SHOW_DELAY_MS = 900;
 
 export const KINDS = [
+  ['woodpecker', 'Woodpecker'],
   ['tactics', 'Tactics'],
   ['strategy', 'Strategy'],
   ['endgames', 'Endgames'],
@@ -26,6 +29,7 @@ const kindName = (k) => (KINDS.find(([v]) => v === k) ?? [k, k])[1];
 
 /** A guess at a course's kind from its name. */
 export function guessKind(name) {
+  if (/woodpecker/i.test(name)) return 'woodpecker';
   if (/endgame|ending/i.test(name)) return 'endgames';
   if (/strateg|positional|middlegame|plans?\b|structure/i.test(name)) return 'strategy';
   return 'tactics';
@@ -82,7 +86,14 @@ export class CourseTrainer {
       next: $('cx-next'),
       retry: $('cx-retry'),
       stop: $('cx-stop'),
+      clockBox: $('cx-clock'),
+      timer: $('cx-timer'),
+      pause: $('cx-pause'),
+      auto: $('cx-auto'),
     };
+    this.el.pause.addEventListener('click', () => this.togglePause());
+    this.el.auto.checked = store.get('wpAutoNext', true);
+    this.el.auto.addEventListener('change', () => store.set('wpAutoNext', this.el.auto.checked));
     this.el.stop.addEventListener('click', () => this.stop(true));
     this.el.show.addEventListener('click', () => this.show());
     this.el.step.addEventListener('click', () => this.step());
@@ -97,7 +108,7 @@ export class CourseTrainer {
   }
 
   canMove() {
-    return this.locked && this.run.yourTurn && !this.busy;
+    return this.locked && this.run.yourTurn && !this.busy && !this.paused;
   }
 
   /** Reading a reference line or info page: "Next move" (or →) steps on. */
@@ -105,8 +116,11 @@ export class CourseTrainer {
     return this.locked && !this.run.tested && !this.busy;
   }
 
-  /** Go through these exercises ({id, title}) in order. */
-  start(list, label) {
+  /**
+   * Go through these exercises ({id}) in order. opts.woodpecker = {cycleId, number, done, total,
+   * course}: a Woodpecker cycle (each puzzle timed, first go recorded in the cycle).
+   */
+  start(list, label, opts = {}) {
     if (!list.length) {
       toast('Nothing to do here.');
       return;
@@ -114,8 +128,62 @@ export class CourseTrainer {
     this.queue = list.slice();
     this.total = list.length;
     this.label = label;
-    this.session = { solved: 0, missed: 0, read: 0 };
+    this.wp = opts.woodpecker ? { ...opts.woodpecker } : null;
+    this.session = { solved: 0, missed: 0, read: 0, seconds: 0 };
+    this.el.clockBox.hidden = !this.wp;
+    clearInterval(this.ticker);
+    if (this.wp) this.ticker = setInterval(() => this._showClock(), 250);
     this.next();
+  }
+
+  // ---- the Woodpecker clock: runs from your first move being due to the end of the puzzle ----------
+
+  _clockReset() {
+    this.clock = { from: null, elapsed: 0 };
+    this._setPaused(false);
+    this._showClock();
+  }
+
+  _clockStart() {
+    if (this.wp && this.clock && this.clock.from === null && !this.paused) this.clock.from = performance.now();
+  }
+
+  _clockStop() {
+    if (this.clock?.from != null) {
+      this.clock.elapsed += (performance.now() - this.clock.from) / 1000;
+      this.clock.from = null;
+    }
+  }
+
+  _seconds() {
+    if (!this.clock) return 0;
+    return this.clock.elapsed + (this.clock.from != null ? (performance.now() - this.clock.from) / 1000 : 0);
+  }
+
+  _showClock() {
+    if (this.wp) this.el.timer.textContent = clock(this._seconds());
+  }
+
+  togglePause() {
+    if (!this.wp || !this.locked) return;
+    this._setPaused(!this.paused);
+  }
+
+  _setPaused(paused) {
+    if (paused && !this.paused) {
+      this.pausedRunning = this.clock?.from != null; // resume only a clock that was running
+      this._clockStop();
+    }
+    const resume = !paused && this.paused && this.pausedRunning;
+    this.paused = paused;
+    if (resume) {
+      this.pausedRunning = false;
+      this._clockStart();
+    }
+    this.el.pause.textContent = paused ? 'Resume' : 'Pause';
+    document.body.classList.toggle('cx-paused', paused);
+    this._showClock();
+    if (this.active) this.render();
   }
 
   async next() {
@@ -143,6 +211,8 @@ export class CourseTrainer {
 
   stop(back = false) {
     clearTimeout(this.timer);
+    clearInterval(this.ticker);
+    this._setPaused(false);
     this.run = null;
     this.queue = [];
     if (!this.active) return;
@@ -162,6 +232,8 @@ export class CourseTrainer {
     this.run = run;
     this.retrying = retrying;
     this.recorded = false;
+    this._clockReset();
+    this.el.pause.hidden = !this.wp;
     if (!this.active) {
       this.active = true;
       this.el.box.hidden = false;
@@ -205,6 +277,7 @@ export class CourseTrainer {
     const side = run.color === 'white' ? 'White' : 'Black';
     if (run.yourTurn) {
       this._message(`Your move: you play ${side}.`);
+      this._clockStart();
       return;
     }
     this.busy = true;
@@ -230,6 +303,7 @@ export class CourseTrainer {
       return;
     }
     this.busy = false;
+    this._clockStart(); // first time it's your move: the clock starts
     if (!this.el.message.classList.contains('wrong')) this._message('Your move.'); // a shown move stays on screen
     this.render();
   }
@@ -325,36 +399,90 @@ export class CourseTrainer {
   async _finish() {
     const run = this.run;
     this.busy = false;
+    this._clockStop();
+    this.el.pause.hidden = true;
+    this._setPaused(false);
+    const seconds = this._seconds();
     this.onLock(false); // free to step through it
     this.el.playing.hidden = true;
     const solved = run.solved;
+    const timed = this.wp && run.tested ? ` in ${clock(seconds)}` : '';
     if (run.tested) {
       if (solved) setTimeout(() => document.dispatchEvent(new CustomEvent('mpct:sound', { detail: 'success' })), 250);
-      this.el.result.textContent = solved ? '✓ Solved!' : '✗ Missed: it comes round again with Retry missed.';
+      this.el.result.textContent = solved
+        ? `✓ Solved${timed}!`
+        : this.wp
+          ? `✗ Missed (${clock(seconds)}).`
+          : '✗ Missed: it comes round again with Retry missed.';
+      if (this.retrying && this.wp) this.el.result.textContent += ' Practice: not recorded.';
       this.el.result.className = `train-result ${solved ? 'good' : 'bad'}`;
       this._message('');
     } else {
       this.el.result.textContent = run.ucis.length ? 'End of the line.' : '';
       this.el.result.className = 'train-result';
     }
-    this.el.retry.hidden = !run.tested;
-    this.el.next.textContent = this.queue.length ? 'Next exercise' : 'Finish';
+    this.el.next.textContent = this.queue.length ? (this.wp ? 'Next puzzle' : 'Next exercise') : 'Finish';
     this.el.end.hidden = false;
     this.el.next.focus();
     this.render();
     if (this.recorded) return;
     this.recorded = true;
-    if (!this.retrying) this.session[!run.tested ? 'read' : solved ? 'solved' : 'missed'] += 1;
-    try {
-      await api.exerciseAttempt(run.ex.id, solved);
-    } catch (err) {
-      toast(`Result not saved: ${err.message}`, 'error');
+    if (!this.retrying) {
+      this.session[!run.tested ? 'read' : solved ? 'solved' : 'missed'] += 1;
+      if (run.tested) this.session.seconds += seconds;
     }
-    if (this.run === run) this._progress();
+    if (this.wp && run.tested) {
+      if (!this.retrying) await this._recordWoodpecker(run, solved, seconds);
+    } else {
+      try {
+        await api.exerciseAttempt(run.ex.id, solved);
+      } catch (err) {
+        toast(`Result not saved: ${err.message}`, 'error');
+      }
+    }
+    if (this.run !== run) return;
+    this._progress();
+    if (this.wp && solved && !this.retrying && this.el.auto.checked && this.queue.length) {
+      this.timer = setTimeout(() => {
+        if (this.run === run && !this.el.end.hidden) this.next();
+      }, 1200);
+    }
+  }
+
+  async _recordWoodpecker(run, solved, seconds) {
+    let r;
+    try {
+      r = await api.woodpeckerAttempt(this.wp.cycleId, run.ex.id, solved, Math.round(seconds * 10) / 10);
+    } catch (err) {
+      toast(`Time not saved: ${err.message}`, 'error');
+      return;
+    }
+    this.wp.done = r.cycle.done;
+    this.wp.total = r.cycle.total;
+    this.wp.last = r.cycle;
+    if (r.finished) {
+      this.queue = [];
+      this.wp.finished = r.cycle;
+      if (this.run === run) {
+        this.el.result.textContent += ` Cycle ${r.cycle.number} complete!`;
+        this.el.next.textContent = 'Finish';
+      }
+    }
   }
 
   _summary() {
-    const s = this.session ?? { solved: 0, missed: 0, read: 0 };
+    const s = this.session ?? { solved: 0, missed: 0, read: 0, seconds: 0 };
+    if (this.wp) {
+      const f = this.wp.finished;
+      const n = s.solved + s.missed;
+      toast(
+        f
+          ? `Cycle ${f.number} complete: ${f.solved}/${f.total} solved (${Math.round(f.accuracy)}%) in ${clock(f.seconds)} over ${days(f.days)}.`
+          : `Cycle ${this.wp.number}: ${n} puzzle${n === 1 ? '' : 's'} this session in ${clock(s.seconds)}, ${s.solved} solved.`,
+      );
+      this.stop(true);
+      return;
+    }
     const parts = [`${s.solved} solved`, `${s.missed} missed`];
     if (s.read) parts.push(`${s.read} read`);
     toast(`${this.label ? `${this.label}: ` : ''}done. ${parts.join(', ')}.`);
@@ -363,6 +491,12 @@ export class CourseTrainer {
 
   _progress() {
     const s = this.session;
+    if (this.wp) {
+      const at = Math.min(this.wp.total, this.wp.done + (this.recorded || this.retrying ? 0 : 1));
+      const tally = s.solved + s.missed ? ` · this session ${s.solved} solved, ${s.missed} missed in ${clock(s.seconds)}` : '';
+      this.el.progress.textContent = `Cycle ${this.wp.number} · puzzle ${at} of ${this.wp.total}${tally}`;
+      return;
+    }
     const at = this.total - this.queue.length;
     const tally = s.solved + s.missed ? ` · ${s.solved} solved, ${s.missed} missed` : '';
     this.el.progress.textContent = `${this.label ? `${this.label} · ` : ''}${at} of ${this.total}${tally}`;
@@ -391,23 +525,48 @@ export class CourseTrainer {
 
 // ---- the Training tab ----------------------------------------------------------------------------
 
+/** The groups in the tab's list, in order. */
+export const GROUPS = [['woodpecker', 'Woodpecker'], ...KINDS.filter(([k]) => k !== 'woodpecker')];
+
+/** Courses grouped by kind, in GROUPS order, empty groups left out. */
+export function groupCourses(courses) {
+  return GROUPS.map(([kind, title]) => ({ kind, title, courses: courses.filter((c) => c.kind === kind) })).filter((g) => g.courses.length);
+}
+
+/** Short progress text for the list: "45%" or, for Woodpecker, "Cycle 2 · 340/1128". */
+export function progressText(c) {
+  if (c.kind === 'woodpecker') {
+    if (!c.cycle) return 'No cycle yet';
+    return c.cycle.finished_at ? `Cycle ${c.cycle.number} done` : `Cycle ${c.cycle.number} · ${c.cycle.done}/${c.cycle.total}`;
+  }
+  if (!c.total) return 'empty';
+  return c.new + c.missed === 0 ? 'all done' : `${Math.round((100 * c.solved) / c.total)}%`;
+}
+
 export class CoursesView {
-  /** @param {{onStart: (list: {id: number}[], label: string) => void}} deps */
+  /**
+   * @param {object} deps
+   * @param {(list: {id: number}[], label: string, opts?: object) => void} deps.onStart
+   */
   constructor({ onStart }) {
     this.onStart = onStart;
     this.el = {
-      list: $('cv-list'),
+      groups: $('cv-groups'),
+      main: $('cv-main'),
       empty: $('cv-empty'),
       import: $('cv-import'),
-      filter: $('cv-filter'),
     };
-    this.open = new Set(store.get('coursesOpen', []));
-    this.details = new Map(); // course id -> full course (chapters, exercises)
+    this.selected = store.get('coursesSelected', null);
     this.el.import.addEventListener('click', () => this.importCourse());
-    this.el.filter.value = store.get('coursesKind', '');
-    this.el.filter.addEventListener('change', () => {
-      store.set('coursesKind', this.el.filter.value);
-      this._draw();
+    this.woodpecker = new WoodpeckerPage({
+      onSolve: (cycle, todo, course) =>
+        this.onStart(
+          todo.map((id) => ({ id })),
+          `Cycle ${cycle.number}`,
+          { woodpecker: { cycleId: cycle.id, number: cycle.number, done: cycle.done, total: cycle.total, course: course.name } },
+        ),
+      onPractise: (id) => this.onStart([{ id }], 'Practice'),
+      onChanged: () => this.refresh(),
     });
   }
 
@@ -419,12 +578,110 @@ export class CoursesView {
       this.el.empty.textContent = `Couldn't load your courses: ${err.message}`;
       return;
     }
-    this.details.clear();
-    await Promise.all([...this.open].filter((id) => this.courses.some((c) => c.id === id)).map((id) => this._load(id)));
-    this._draw();
+    this.details.clear(); // statuses change as you work through a course
+    if (!this.courses.some((c) => c.id === this.selected)) this.selected = groupCourses(this.courses)[0]?.courses[0]?.id ?? null;
+    this._drawList();
+    await this._drawMain();
   }
 
   hide() {}
+
+  select(id) {
+    this.selected = id;
+    store.set('coursesSelected', id);
+    this._drawList();
+    this._drawMain();
+  }
+
+  _drawList() {
+    const courses = this.courses ?? [];
+    this.el.empty.hidden = courses.length > 0;
+    this.el.empty.textContent = 'No courses yet. Import a Chessable course (tactics, strategy, endgames or the Woodpecker Method).';
+    this.el.groups.replaceChildren(
+      ...groupCourses(courses).map((g) => {
+        const sec = el('div', 'cv-group');
+        const h = el('h3', 'cv-group-h');
+        h.append(el('span', `cv-kind-dot cv-kind-${g.kind}`), el('span', '', g.title), el('span', 'meta', String(g.courses.length)));
+        sec.appendChild(h);
+        for (const c of g.courses) {
+          const b = el('button', `cv-item${c.id === this.selected ? ' selected' : ''}`);
+          b.type = 'button';
+          b.setAttribute('aria-current', c.id === this.selected ? 'true' : 'false');
+          b.dataset.course = c.id;
+          b.appendChild(el('span', 'cv-item-name', c.name));
+          b.appendChild(el('span', 'meta cv-item-progress', progressText(c)));
+          const prog = c.kind === 'woodpecker' && c.cycle ? { total: c.cycle.total, solved: c.cycle.solved, missed: c.cycle.done - c.cycle.solved } : c;
+          b.appendChild(this._bar(prog, 'cv-bar-mini'));
+          b.addEventListener('click', () => this.select(c.id));
+          sec.appendChild(b);
+        }
+        return sec;
+      }),
+    );
+  }
+
+  async _drawMain() {
+    const c = (this.courses ?? []).find((x) => x.id === this.selected);
+    const main = this.el.main;
+    if (!c) {
+      main.replaceChildren();
+      main.hidden = true;
+      return;
+    }
+    main.hidden = false;
+    const head = el('section', 'dash-card cv-head-card');
+    const top = el('div', 'cv-head');
+    const title = el('div', 'cv-title');
+    title.appendChild(el('h2', 'dash-h', c.name));
+    title.appendChild(el('span', `cv-kind cv-kind-${c.kind}`, kindName(c.kind)));
+    top.appendChild(title);
+    const actions = el('div', 'cv-actions');
+    if (c.kind !== 'woodpecker') {
+      const go = el('button', 'primary', c.solved === 0 && c.missed === 0 ? 'Start' : c.new ? 'Continue' : c.missed ? 'Retry missed' : 'Go again');
+      go.type = 'button';
+      go.addEventListener('click', () => this._startCourse(c, c.new || c.missed ? 'continue' : 'all'));
+      actions.appendChild(go);
+      if (c.missed && c.new) {
+        const missed = el('button', '', `Retry missed (${c.missed})`);
+        missed.type = 'button';
+        missed.addEventListener('click', () => this._startCourse(c, 'missed'));
+        actions.appendChild(missed);
+      }
+    }
+    const edit = el('button', 'small', 'Edit');
+    edit.type = 'button';
+    edit.title = 'Rename, change the kind (group), reset progress or delete';
+    edit.addEventListener('click', () => this._edit(c));
+    actions.appendChild(edit);
+    top.appendChild(actions);
+    head.appendChild(top);
+
+    if (c.kind === 'woodpecker') {
+      const body = el('div', 'wp-page');
+      main.replaceChildren(head, body);
+      await this.woodpecker.render(body, c);
+      return;
+    }
+    head.appendChild(this._bar(c));
+    head.appendChild(
+      el('p', 'meta cv-counts', `${plural(c.total, 'exercise')} · ${c.solved} solved · ${c.missed} missed · ${c.new + c.missed ? `${c.new} to do` : 'all done'}`),
+    );
+    const chapters = el('section', 'dash-card cv-chapters');
+    chapters.appendChild(el('h3', 'wp-h', 'Chapters'));
+    const list = el('div', 'cv-chapter-list');
+    list.appendChild(el('p', 'meta', 'Loading…'));
+    chapters.appendChild(list);
+    main.replaceChildren(head, chapters);
+    if (!this.details.has(c.id)) await this._load(c.id);
+    const full = this.details.get(c.id);
+    if (this.selected !== c.id) return;
+    list.replaceChildren(...(full ? full.chapters.map((ch) => this._chapterRow(c, ch)) : []));
+  }
+
+  get details() {
+    this._details ??= new Map();
+    return this._details;
+  }
 
   async _load(id) {
     try {
@@ -434,87 +691,28 @@ export class CoursesView {
     }
   }
 
-  _draw() {
-    const kind = this.el.filter.value;
-    const shown = (this.courses ?? []).filter((c) => !kind || c.kind === kind);
-    this.el.empty.hidden = shown.length > 0;
-    this.el.empty.textContent = this.courses?.length
-      ? 'No courses of this kind.'
-      : 'No courses yet. Import a Chessable course (tactics, strategy or endgames) to work through it here, move by move.';
-    this.el.list.replaceChildren(...shown.map((c) => this._courseCard(c)));
-  }
-
-  _courseCard(c) {
-    const card = el('section', 'dash-card cv-course');
-    const head = el('div', 'cv-head');
-    const title = el('div', 'cv-title');
-    title.appendChild(el('h2', 'dash-h', c.name));
-    title.appendChild(el('span', `cv-kind cv-kind-${c.kind}`, kindName(c.kind)));
-    head.appendChild(title);
-
-    const actions = el('div', 'cv-actions');
-    const unsolved = c.new + c.missed;
-    const go = el('button', 'primary', c.solved === 0 && c.missed === 0 ? 'Start' : c.new ? 'Continue' : c.missed ? 'Retry missed' : 'Go again');
-    go.type = 'button';
-    go.addEventListener('click', () => this._startCourse(c, c.new || c.missed ? 'continue' : 'all'));
-    actions.appendChild(go);
-    if (c.missed && c.new) {
-      const missed = el('button', '', `Retry missed (${c.missed})`);
-      missed.type = 'button';
-      missed.addEventListener('click', () => this._startCourse(c, 'missed'));
-      actions.appendChild(missed);
-    }
-    const more = el('button', 'small', 'Edit');
-    more.type = 'button';
-    more.title = 'Rename, change the kind, reset progress or delete';
-    more.addEventListener('click', () => this._edit(c));
-    actions.appendChild(more);
-    head.appendChild(actions);
-    card.appendChild(head);
-
-    card.appendChild(this._bar(c));
-    card.appendChild(
-      el('p', 'meta cv-counts', `${plural(c.total, 'exercise')} · ${c.solved} solved · ${c.missed} missed · ${unsolved ? `${c.new} to do` : 'all done'}`),
-    );
-
-    const details = el('details', 'cv-chapters');
-    details.open = this.open.has(c.id);
-    details.appendChild(el('summary', '', 'Chapters'));
-    const body = el('div', 'cv-chapter-list');
-    details.appendChild(body);
-    const fill = () => {
-      const full = this.details.get(c.id);
-      body.replaceChildren(...(full ? full.chapters.map((ch) => this._chapterRow(c, ch)) : [el('p', 'meta', 'Loading…')]));
-    };
-    fill();
-    details.addEventListener('toggle', async () => {
-      if (details.open) this.open.add(c.id);
-      else this.open.delete(c.id);
-      store.set('coursesOpen', [...this.open]);
-      if (details.open && !this.details.has(c.id)) {
-        await this._load(c.id);
-        fill();
-      }
-    });
-    card.appendChild(details);
-    return card;
-  }
-
-  _bar(p) {
-    const bar = el('div', 'cv-bar');
+  _bar(p, extra = '') {
+    const bar = el('div', `cv-bar ${extra}`);
     bar.setAttribute('role', 'img');
     bar.setAttribute('aria-label', `${p.solved} solved, ${p.missed} missed of ${p.total}`);
-    const pct = (n) => `${p.total ? (100 * n) / p.total : 0}%`;
+    const w = (n) => `${p.total ? (100 * n) / p.total : 0}%`;
     const solved = el('span', 'cv-bar-solved');
-    solved.style.width = pct(p.solved);
+    solved.style.width = w(p.solved);
     const missed = el('span', 'cv-bar-missed');
-    missed.style.width = pct(p.missed);
+    missed.style.width = w(p.missed);
     bar.append(solved, missed);
     return bar;
   }
 
   _chapterRow(course, ch) {
     const row = el('details', 'cv-chapter');
+    row.open = (store.get('chaptersOpen', []) ?? []).includes(ch.id);
+    row.addEventListener('toggle', () => {
+      const open = new Set(store.get('chaptersOpen', []));
+      if (row.open) open.add(ch.id);
+      else open.delete(ch.id);
+      store.set('chaptersOpen', [...open]);
+    });
     const sum = el('summary', 'cv-chapter-head');
     sum.appendChild(el('span', 'cv-chapter-title', ch.title));
     sum.appendChild(el('span', 'meta cv-chapter-counts', `${ch.solved}/${ch.total}${ch.missed ? ` · ${ch.missed} missed` : ''}`));
@@ -522,8 +720,7 @@ export class CoursesView {
     start.type = 'button';
     start.addEventListener('click', (e) => {
       e.preventDefault(); // not the details toggle
-      const list = queueFor([ch], ch.new || ch.missed ? 'continue' : 'all');
-      this.onStart(list, ch.title);
+      this.onStart(queueFor([ch], ch.new || ch.missed ? 'continue' : 'all'), ch.title);
     });
     sum.appendChild(start);
     row.appendChild(sum);
@@ -547,8 +744,7 @@ export class CoursesView {
     if (!this.details.has(c.id)) await this._load(c.id);
     const full = this.details.get(c.id);
     if (!full) return;
-    const list = queueFor(full.chapters, which);
-    this.onStart(list, which === 'missed' ? `${c.name} · missed` : c.name);
+    this.onStart(queueFor(full.chapters, which), which === 'missed' ? `${c.name} · missed` : c.name);
   }
 
   async _edit(c) {
@@ -556,8 +752,8 @@ export class CoursesView {
       title: 'Edit course',
       fields: [
         { name: 'name', label: 'Name', value: c.name, maxLength: 100 },
-        { name: 'kind', label: 'Kind', type: 'select', options: KINDS, value: c.kind },
-        { name: 'reset', label: 'Reset progress (every exercise back to new)', type: 'checkbox', value: false },
+        { name: 'kind', label: 'Group', type: 'select', options: KINDS, value: c.kind },
+        { name: 'reset', label: 'Reset progress (every exercise back to new; Woodpecker cycles are kept)', type: 'checkbox', value: false },
         { name: 'delete', label: 'Delete this course', type: 'checkbox', value: false },
       ],
     });
@@ -566,7 +762,6 @@ export class CoursesView {
       if (values.delete) {
         if (!(await confirmDialog('Delete course', `Delete “${c.name}” and your progress in it?`))) return;
         await api.deleteCourse(c.id);
-        this.open.delete(c.id);
         toast(`Deleted “${c.name}”.`);
       } else {
         if (values.name !== c.name || values.kind !== c.kind) await api.updateCourse(c.id, { name: values.name, kind: values.kind });
@@ -578,6 +773,7 @@ export class CoursesView {
     } catch (err) {
       toast(err.message, 'error');
     }
+    this.details.delete(c.id);
     await this.refresh();
   }
 
@@ -636,8 +832,9 @@ export class CoursesView {
       r.reset ? `${plural(r.reset, 'exercise')} changed, so they're new again` : '',
     ].filter(Boolean);
     const skipped = r.skipped.map((t) => `Skipped: ${t}`);
-    this.open.add(r.course_id);
-    store.set('coursesOpen', [...this.open]);
+    this.details.delete(r.course_id);
+    this.selected = r.course_id;
+    store.set('coursesSelected', r.course_id);
     await this.refresh();
     await formDialog({
       title: 'Course imported',

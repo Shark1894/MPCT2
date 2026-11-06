@@ -18,7 +18,7 @@ from app.core.chessable import CourseLine
 from app.db.models import Course, CourseChapter, CourseExercise
 from app.repositories.repertoire import Conflict, NotFound
 
-KINDS = ("tactics", "strategy", "endgames", "other")
+KINDS = ("tactics", "strategy", "endgames", "woodpecker", "other")
 EXERCISE_KINDS = {"line": "line", "alternative": "line", "reference": "reference", "info": "info"}
 
 

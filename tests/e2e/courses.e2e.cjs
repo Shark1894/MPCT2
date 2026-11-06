@@ -86,12 +86,12 @@ async function importFile(page, file) {
   check((await text(page, 'dialog[open] .modal-message')).includes('Created “Test Tactics”: 3 new exercises'), 'import report');
   await page.click('dialog[open] button[type=submit]');
   await settle(page);
-  check((await text(page, '.cv-course .cv-counts')).includes('3 exercises · 0 solved · 0 missed · 3 to do'), 'course card counts');
-  check((await page.$$('.cv-chapter')).length === 2, 'chapters listed (opened after import)');
+  check((await text(page, '.cv-head-card .cv-counts')).includes('3 exercises · 0 solved · 0 missed · 3 to do'), 'course card counts');
+  check((await page.$$('.cv-chapter')).length === 2, 'chapters listed (course selected after import)');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/courses-tab.png` });
 
   // ---- work through it -----------------------------------------------------------------------------
-  await page.click('.cv-course .cv-actions button.primary'); // Start
+  await page.click('.cv-head-card .cv-actions button.primary'); // Start
   await page.waitForSelector('#cx:not([hidden])');
   check(await page.isVisible('main.layout'), 'board view');
   check((await text(page, '#cx-title')) === 'How to use this course', 'info page first (course order)');
@@ -125,11 +125,11 @@ async function importFile(page, file) {
   await page.click('#cx-next');
   await page.waitForSelector('#courses-view:not([hidden])');
   await settle(page);
-  check((await text(page, '.cv-course .cv-counts')).includes('2 solved · 1 missed'), 'progress saved and shown');
-  check((await text(page, '.cv-course .cv-actions button.primary')) === 'Retry missed', 'next step: retry missed');
+  check((await text(page, '.cv-head-card .cv-counts')).includes('2 solved · 1 missed'), 'progress saved and shown');
+  check((await text(page, '.cv-head-card .cv-actions button.primary')) === 'Retry missed', 'next step: retry missed');
 
   // ---- retry missed -------------------------------------------------------------------------------
-  await page.click('.cv-course .cv-actions button.primary');
+  await page.click('.cv-head-card .cv-actions button.primary');
   await waitTurn(page);
   check((await text(page, '#cx-title')) === 'Puzzle 2', 'the missed one comes back');
   await move(page, 'a1a8');
@@ -139,7 +139,7 @@ async function importFile(page, file) {
   await page.click('#cx-next');
   await page.waitForSelector('#courses-view:not([hidden])');
   await settle(page);
-  check((await text(page, '.cv-course .cv-counts')).includes('3 solved · 0 missed · all done'), 'all done');
+  check((await text(page, '.cv-head-card .cv-counts')).includes('3 solved · 0 missed · all done'), 'all done');
 
   // ---- re-import keeps progress -------------------------------------------------------------------
   await importFile(page, `${dir}/tactics.json`);
@@ -148,7 +148,79 @@ async function importFile(page, file) {
   check((await text(page, 'dialog[open] .modal-message')).includes('Updated “Test Tactics”: 0 new exercises'), 're-import updates');
   await page.click('dialog[open] button[type=submit]');
   await settle(page);
-  check((await text(page, '.cv-course .cv-counts')).includes('3 solved'), 'progress kept');
+  check((await text(page, '.cv-head-card .cv-counts')).includes('3 solved'), 'progress kept');
+
+  // ---- grouping: a second course, a Woodpecker one -----------------------------------------------
+  const WP = JSON.parse(JSON.stringify(EXPORT).replaceAll('"bid":55', '"bid":56').replaceAll('Test Tactics', 'The Woodpecker Method'));
+  WP.bookData.course.data = [{ id: 1, order: 0, title: 'Easy' }, { id: 2, order: 1, title: 'Intermediate' }];
+  fs.writeFileSync(`${dir}/wp.json`, JSON.stringify(WP));
+  await importFile(page, `${dir}/wp.json`);
+  check((await page.inputValue('dialog[open] select[name=kind]')) === 'woodpecker', 'kind guessed: woodpecker');
+  await page.click('dialog[open] button[type=submit]');
+  await page.waitForFunction(() => document.querySelector('dialog[open] h2')?.textContent === 'Course imported', null, { timeout: 15000 });
+  await page.click('dialog[open] button[type=submit]');
+  await settle(page, 800);
+  const groups = await page.$$eval('.cv-group', (gs) => gs.map((g) => `${g.querySelector('.cv-group-h').textContent}: ${[...g.querySelectorAll('.cv-item-name')].map((n) => n.textContent).join(',')}`));
+  check(groups.join(' | ') === 'Woodpecker1: The Woodpecker Method | Tactics1: Test Tactics', `courses grouped by kind (${groups.join(' | ')})`);
+  check((await text(page, '.cv-item.selected .cv-item-name')) === 'The Woodpecker Method', 'imported course selected');
+  check((await text(page, '.cv-item.selected .cv-item-progress')) === 'No cycle yet', 'woodpecker progress in the list');
+  check((await text(page, '.wp-current .wp-h')) === 'The Woodpecker Method', 'woodpecker intro');
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/wp-empty.png` });
+
+  // select the other course and back
+  await page.click('.cv-item:has-text("Test Tactics")');
+  await settle(page);
+  check((await text(page, '.cv-head-card .dash-h')) === 'Test Tactics', 'selecting a course shows it');
+  await page.click('.cv-item:has-text("The Woodpecker Method")');
+  await settle(page);
+
+  // ---- a cycle ---------------------------------------------------------------------------------------
+  await page.click('.wp-current button.primary'); // Start cycle 1
+  await page.waitForSelector('dialog[open] input[name=target]');
+  check((await page.inputValue('dialog[open] input[name=target]')) === '28', 'first cycle: 28 days offered');
+  check((await page.$$('dialog[open] input[type=checkbox]')).length === 2, 'chapters to choose');
+  await page.fill('dialog[open] input[name=target]', '10');
+  await page.click('dialog[open] button[type=submit]');
+  await settle(page, 800);
+  check((await text(page, '.wp-current .wp-h')) === 'Cycle 1', 'cycle 1 running');
+  check((await page.$$eval('.wp-stat-value', (e) => e.map((x) => x.textContent)))[0] === '0 / 2', 'cycle covers the 2 puzzles (info page left out)');
+  await page.click('.wp-current button.primary'); // Start solving
+  await waitTurn(page);
+  check(await page.isVisible('#cx-clock'), 'clock shown');
+  check((await text(page, '#cx-progress')).includes('Cycle 1 · puzzle 1 of 2'), 'cycle progress in the panel');
+  await page.waitForTimeout(1300);
+  check((await text(page, '#cx-timer')) === '0:01', 'clock running');
+  await page.click('#cx-pause');
+  check(await page.evaluate(() => document.body.classList.contains('cx-paused')), 'paused: board hidden');
+  const frozen = await text(page, '#cx-timer');
+  await page.waitForTimeout(1200);
+  check((await text(page, '#cx-timer')) === frozen, 'clock stopped while paused');
+  await page.keyboard.press('p');
+  check(!(await page.evaluate(() => document.body.classList.contains('cx-paused'))), 'P resumes');
+  await move(page, 'a1a8');
+  await waitEnd(page);
+  check(/✓ Solved in 0:0\d!/.test(await text(page, '#cx-result')), `solved with its time (${await text(page, '#cx-result')})`);
+  // auto-next: on to the next puzzle by itself
+  await page.waitForFunction(() => mpct.courseTrainer.run?.ex.title === 'Puzzle 3', null, { timeout: 5000 });
+  check(true, 'next puzzle automatically after a solve');
+  await waitTurn(page);
+  await move(page, 'g3h2');
+  await page.waitForTimeout(300);
+  await move(page, 'g3h3');
+  await waitEnd(page);
+  check((await text(page, '#cx-result')).includes('Missed') && (await text(page, '#cx-result')).includes('Cycle 1 complete!'), 'missed, and the cycle is complete');
+  await page.click('#cx-next');
+  await page.waitForSelector('#courses-view:not([hidden])');
+  await settle(page, 800);
+  check((await text(page, '.wp-current .wp-h')).includes('Ready for cycle 2'), 'ready for cycle 2');
+  const row = await page.$$eval('.wp-history tbody tr td', (t) => t.map((x) => x.textContent));
+  check(row[0] === '1' && row[4] === '2/2' && row[5] === '50%', `cycle table (${row.join(', ')})`);
+  check((await text(page, '.cv-item.selected .cv-item-progress')) === 'Cycle 1 done', 'list shows the cycle');
+  await page.click('.wp-times summary');
+  await page.waitForSelector('.wp-times-table');
+  const times = await page.$$eval('.wp-times-table tbody tr', (rs) => rs.map((r) => [...r.children].slice(0, 3).map((c) => c.textContent).join(' ')));
+  check(times.length === 2 && times.some((t) => t.startsWith('Puzzle 3 Intermediate ✗ 0:0')), `puzzle times (${times.join(' | ')})`);
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/wp-done.png`, fullPage: true });
 
   check(errors.length === 0, `no page errors ${errors.join(' | ')}`);
   await browser.close();

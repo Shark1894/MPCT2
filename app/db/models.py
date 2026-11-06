@@ -497,7 +497,7 @@ class Course(Base):
     the same course."""
 
     __tablename__ = "courses"
-    __table_args__ = (CheckConstraint("kind IN ('tactics', 'strategy', 'endgames', 'other')", name="kind"),)
+    __table_args__ = (CheckConstraint("kind IN ('tactics', 'strategy', 'endgames', 'woodpecker', 'other')", name="kind"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
@@ -556,3 +556,35 @@ class CourseExercise(Base):
     last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     chapter: Mapped[CourseChapter] = relationship(back_populates="exercises")
+
+
+class WoodpeckerCycle(Base):
+    """One pass through a Woodpecker course's puzzles (the Woodpecker Method: solve the whole set,
+    then again faster, each cycle aiming at half the days of the one before). `chapter_ids` limits
+    the cycle to some chapters (None = all). Finished when every puzzle in scope has an attempt."""
+
+    __tablename__ = "woodpecker_cycles"
+    __table_args__ = (UniqueConstraint("course_id", "number", name="uq_woodpecker_cycles_course_number"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    course_id: Mapped[int] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
+    number: Mapped[int]
+    chapter_ids: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))
+    target_days: Mapped[int | None]
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class WoodpeckerAttempt(Base):
+    """The first go at a puzzle in a cycle (later goes in the same cycle are practice, not stored):
+    right or not, and the seconds it took (from your first move being due to the end)."""
+
+    __tablename__ = "woodpecker_attempts"
+    __table_args__ = (UniqueConstraint("cycle_id", "exercise_id", name="uq_woodpecker_attempts_cycle_exercise"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cycle_id: Mapped[int] = mapped_column(ForeignKey("woodpecker_cycles.id", ondelete="CASCADE"), index=True)
+    exercise_id: Mapped[int] = mapped_column(ForeignKey("course_exercises.id", ondelete="CASCADE"), index=True)
+    solved: Mapped[bool]
+    seconds: Mapped[float]
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
