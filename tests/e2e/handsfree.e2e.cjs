@@ -237,7 +237,7 @@ const sans = (page) => page.evaluate(() => mpct.game.moves.slice(0, mpct.game.pl
   await hear(page, ['c6']);
   await page.evaluate(() => (window.__recMode = 'notallowed'));
   await page.waitForSelector('#hf-talk', { state: 'visible', timeout: 6000 }).catch(() => {});
-  check((await text(page, '#hf-status')).startsWith('Tap 🎙 to talk. If nothing happens, allow the microphone'), '"not-allowed": tap to talk, or allow the mic: ' + (await text(page, '#hf-status')));
+  check((await text(page, '#hf-status')).startsWith('Tap 🎙 to talk. If nothing happens, allow the microphone') && (await text(page, '#hf-status')).includes('(recogniser said: not-allowed)'), '"not-allowed": tap to talk, or allow the mic: ' + (await text(page, '#hf-status')));
   await page.evaluate(() => (window.__recMode = 'ok'));
   await page.click('#hf-talk');
   await hear(page, ['d5']);
@@ -292,6 +292,25 @@ const sans = (page) => page.evaluate(() => mpct.game.moves.slice(0, mpct.game.pl
   await settle(p3, 400);
   check((await text(p3, '#hf-status')).startsWith('The microphone only works over a secure connection: open https://'), 'http://: says to open the https address: ' + (await text(p3, '#hf-status')));
   check(await p3.isHidden('#hf-talk'), 'no pointless Tap to talk');
+
+  // ---- a Permissions-Policy header switching the microphone off ---------------------------------------
+  const ctx4 = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await ctx4.route('**/', async (route) => {
+    const res = await route.fetch();
+    route.fulfill({ response: res, headers: { ...res.headers(), 'permissions-policy': 'microphone=()' } });
+  });
+  await ctx4.addInitScript(FAKE_SPEECH);
+  const p4 = await ctx4.newPage();
+  await p4.goto(URL);
+  await p4.evaluate((id) => localStorage.setItem('mpct.openingId', JSON.stringify(id)), ids.caro);
+  await p4.reload();
+  await settle(p4, 800);
+  await p4.click('#train-all');
+  await p4.waitForFunction(() => mpct.trainer.active, null, { timeout: 5000 });
+  await settle(p4, 900);
+  await p4.click('#train-handsfree');
+  await settle(p4, 400);
+  check((await text(p4, '#hf-status')).startsWith('The server switches the microphone off'), 'Permissions-Policy microphone=(): says the server switches it off: ' + (await text(p4, '#hf-status')));
 
   check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();

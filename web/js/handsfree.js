@@ -113,7 +113,7 @@ class Listener {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         // Either the microphone is refused, or (Chrome on Android) listening has to start from a tap.
         this.want = false;
-        this.onState('needs-tap', 'Tap 🎙 to talk. If nothing happens, allow the microphone for this site in Chrome’s site settings.');
+        this.onState('needs-tap', `Tap 🎙 to talk. If nothing happens, allow the microphone for this site in Chrome’s site settings (recogniser said: ${e.error}).`);
         return;
       }
       if (e.error === 'no-speech') this.onState('note', 'Didn’t hear anything: still listening.');
@@ -419,10 +419,11 @@ export class HandsFree {
       .then((stream) => stream.getTracks().forEach((t) => t.stop()))
       .catch((err) => {
         this.micPrimed = false;
-        if (err?.name === 'NotAllowedError') {
-          this.micProblem = 'Microphone not allowed: allow it for this site in Chrome’s site settings, then tap 🎙 to talk. Or type your moves.';
-          this._render();
-        }
+        this.micProblem =
+          err?.name === 'NotAllowedError'
+            ? `Microphone refused (${err.message || err.name}): allow it for this site in Chrome’s site settings, then tap 🎙 to talk. Or type your moves.`
+            : `Microphone unavailable (${err?.name || 'error'}: ${err?.message || err}). Type your moves.`;
+        this._render();
       });
   }
 
@@ -564,6 +565,11 @@ export class HandsFree {
       const url = `https://${location.host}${location.pathname}`;
       return `The microphone only works over a secure connection: open ${url} (this page is http://). Type your moves meanwhile.`;
     }
+    const policy = document.permissionsPolicy ?? document.featurePolicy;
+    if (policy?.allowsFeature && !policy.allowsFeature('microphone')) {
+      return 'The server switches the microphone off for this site (a Permissions-Policy header with microphone=()). Allow it for the site, e.g. microphone=(self). Type your moves meanwhile.';
+    }
+    if (!navigator.mediaDevices?.getUserMedia) return 'This browser gives the page no microphone access. Type your moves.';
     return null;
   }
 
