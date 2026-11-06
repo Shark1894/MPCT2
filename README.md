@@ -542,6 +542,32 @@ docker compose exec mpct python -m app.tools.import_legacy /tmp/Games.db --dry-r
 docker compose exec mpct python -m app.tools.import_legacy /tmp/Games.db
 ```
 
+## Importing a Chessable course
+
+A one-off for courses you own (Chessable has no public API). Two steps:
+
+1. **Download** with `app/tools/fetch_chessable.py`, a standalone script (Python 3.10+, standard library
+   only), best run on the computer you use Chessable on. Make a headers file first: Firefox DevTools >
+   Network > open any line of the course > the `getGame` request > Headers > Request Headers > Raw, copy it all
+   into a private text file. The script sends those same headers (your login and browser), reads the API path
+   and your user id from them, pauses 3–5 s between requests, saves `course.json`, `chapter-<lid>.json` and
+   `line-<oid>.json` to a folder (the forum comments are dropped), and on a re-run fetches only what's missing.
+
+       curl -O https://raw.githubusercontent.com/Shark1894/MPCT2/main/app/tools/fetch_chessable.py
+       python3 fetch_chessable.py 156667 --headers ~/chessable-headers.txt --out ~/chessable/156667 --skip-chapters 17,18
+
+2. **Import** the folder inside the container: the course becomes a repertoire named after it, one opening per
+   chapter (in course order, played from the course's side), the author's notes in the position comments
+   (sidelines in brackets). New lines are due today. Re-running adds nothing twice; a note goes under an existing
+   comment instead of replacing it.
+
+       scp -r ~/chessable/156667 server:/tmp/
+       docker cp /tmp/156667 mpct-test:/tmp/ && docker exec mpct-test python -m app.tools.import_chessable /tmp/156667 --dry-run
+       docker exec mpct-test python -m app.tools.import_chessable /tmp/156667
+
+   `--repertoire NAME` imports into another repertoire; `--no-comments` skips the notes. Single saved `getGame`
+   responses can be imported the same way (give the files instead of a folder).
+
 ## Run locally
 
 ```bash
