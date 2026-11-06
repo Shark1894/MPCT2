@@ -272,6 +272,27 @@ const sans = (page) => page.evaluate(() => mpct.game.moves.slice(0, mpct.game.pl
   await settle(p2, 800);
   check((await p2.evaluate(() => mpct.game.moves.map((m) => m.san).join(' '))) === 'e4 c6 d4', 'typed move played');
 
+  // ---- opened over http:// (not localhost): the microphone can't work, and it says so --------------
+  const ctx3 = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await ctx3.addInitScript(() => Object.defineProperty(window, 'isSecureContext', { value: false }));
+  await ctx3.addInitScript(FAKE_SPEECH);
+  const p3 = await ctx3.newPage();
+  await p3.goto(URL);
+  await settle(p3, 600);
+  await p3.evaluate((id) => {
+    localStorage.setItem('mpct.openingId', JSON.stringify(id));
+    localStorage.setItem('mpct.voiceEngine', '"builtin"');
+  }, ids.caro);
+  await p3.reload();
+  await settle(p3, 800);
+  await p3.click('#train-all');
+  await p3.waitForFunction(() => mpct.trainer.active, null, { timeout: 5000 });
+  await settle(p3, 900);
+  await p3.click('#train-handsfree');
+  await settle(p3, 400);
+  check((await text(p3, '#hf-status')).startsWith('The microphone only works over a secure connection: open https://'), 'http://: says to open the https address: ' + (await text(p3, '#hf-status')));
+  check(await p3.isHidden('#hf-talk'), 'no pointless Tap to talk');
+
   check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();
 })();

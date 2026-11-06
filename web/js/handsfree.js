@@ -411,6 +411,7 @@ export class HandsFree {
    * permission prompt otherwise, and the built-in recogniser then fails without asking.
    */
   _primeMic() {
+    if (this._micBlockedReason()) return this._render();
     if (this.engine !== 'builtin' || this.micPrimed || !navigator.mediaDevices?.getUserMedia) return;
     this.micPrimed = true;
     navigator.mediaDevices
@@ -557,6 +558,15 @@ export class HandsFree {
     }
   }
 
+  /** Why the microphone can't work here at all, or null. */
+  _micBlockedReason() {
+    if (!window.isSecureContext) {
+      const url = `https://${location.host}${location.pathname}`;
+      return `The microphone only works over a secure connection: open ${url} (this page is http://). Type your moves meanwhile.`;
+    }
+    return null;
+  }
+
   _render() {
     const e = this.el;
     e.toggle.setAttribute('aria-pressed', String(this.on));
@@ -568,7 +578,9 @@ export class HandsFree {
     const both = this.listeners.builtin.available && this.listeners.offline.available;
     e.engineBox.hidden = !both;
     e.engine.value = this.engine;
-    if (!this.listener.available) status = 'This browser can’t listen: type your moves below.';
+    const insecure = this._micBlockedReason();
+    if (insecure) status = insecure;
+    else if (!this.listener.available) status = 'This browser can’t listen: type your moves below.';
     else if (this.micProblem) status = this.micProblem;
     else if (this.listener.loading) status = '⏳ Loading the offline speech model (about 30 MB, first time only)…';
     else if (this.mode === 'confirm' && this.listener.running) status = '🎙 Yes or no?';
@@ -578,7 +590,7 @@ export class HandsFree {
     else status = '🔊 Reading out the moves';
     e.status.textContent = status;
     const waiting = (this.mode === 'move' || this.mode === 'confirm') && !this.speaker.busy;
-    e.talk.hidden = !(this.listener.available && waiting && !this.listener.running && !this.listener.starting && !this.listener.loading);
+    e.talk.hidden = !(!insecure && this.listener.available && waiting && !this.listener.running && !this.listener.starting && !this.listener.loading);
     e.undo.hidden = !t?.session?.canUndoMistake?.();
     e.blind.setAttribute('aria-pressed', String(this.blind));
     e.blind.textContent = this.blind ? 'Show pieces' : 'Hide pieces';
