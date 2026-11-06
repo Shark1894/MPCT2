@@ -39,7 +39,7 @@ const FAKE_SPEECH = () => {
   if (navigator.mediaDevices) {
     navigator.mediaDevices.getUserMedia = () => {
       window.__gum += 1;
-      return Promise.resolve({ getTracks: () => [{ stop() {} }] });
+      return Promise.resolve({ getTracks: () => [{ label: 'Fake mic', stop() {} }] });
     };
   }
   if (window.__noListening) return;
@@ -230,9 +230,12 @@ const sans = (page) => page.evaluate(() => mpct.game.moves.slice(0, mpct.game.pl
   await page.waitForSelector('#hf-talk', { state: 'visible', timeout: 6000 }).catch(() => {});
   check(await page.isVisible('#hf-talk'), 'start ignored: "Tap to talk" appears');
   check((await text(page, '#hf-status')).includes('Listening didn’t start. Tap 🎙 to talk.'), 'and says why: ' + (await text(page, '#hf-status')));
+  const log = await text(page, '#hf-log');
+  check(log.includes('page: secure=true') && log.includes('recogniser: no answer to start() after 2.5 s'), 'Microphone details log shows what happened');
   await page.evaluate(() => (window.__recMode = 'ok'));
   await page.click('#hf-talk');
   await settle(page, 200);
+  check((await text(page, '#hf-log')).includes('recogniser: start() (new, from a tap)'), 'the tap starts a fresh recogniser');
   check((await page.evaluate(() => window.__listening())) && (await page.isHidden('#hf-talk')), 'tap: listening');
   await hear(page, ['c6']);
   await page.evaluate(() => (window.__recMode = 'notallowed'));

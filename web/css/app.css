@@ -3173,3 +3173,20 @@ body.puzzle-locked .engine {
 .board-area.blindfold cg-board piece {
   visibility: hidden;
 }
+
+.hf-log-box summary {
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.hf-log {
+  margin: 4px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}

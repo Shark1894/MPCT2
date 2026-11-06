@@ -82,34 +82,56 @@ class Speaker {
 
 class Listener {
   constructor(onHeard, onState) {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    this.available = Boolean(SR);
+    this.SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    this.available = Boolean(this.SR);
     this.onHeard = onHeard; // (alternatives[]) => void
-    this.onState = onState; // ('listening'|'idle'|'blocked'|'error', message?) => void
+    this.onState = onState; // ('listening'|'idle'|'blocked'|'error'|'needs-tap'|'note'|'log', message?) => void
     this.want = false;
     this.running = false;
+    this.starting = false;
     this.failures = 0;
-    if (!SR) return;
-    const rec = new SR();
+    this.rec = null;
+  }
+
+  _log(text) {
+    this.onState('log', text);
+  }
+
+  /** A new recogniser. Chrome on Android can leave one stuck after a start it ignored. */
+  _make() {
+    if (this.rec) {
+      for (const k of ['onstart', 'onresult', 'onerror', 'onend', 'onaudiostart', 'onspeechstart']) this.rec[k] = null;
+      try {
+        this.rec.abort();
+      } catch {
+        // already dead
+      }
+    }
+    const rec = new this.SR();
     rec.lang = 'en-GB';
     rec.interimResults = false;
     rec.continuous = false; // Android stops after a pause anyway; restarted while wanted
     rec.maxAlternatives = 5;
     rec.onstart = () => {
+      this._log('recogniser: start');
       this.starting = false;
       this.running = true;
       this.onState('listening');
     };
+    rec.onaudiostart = () => this._log('recogniser: microphone on');
+    rec.onspeechstart = () => this._log('recogniser: speech heard');
     rec.onresult = (e) => {
       const res = e.results[e.results.length - 1];
       const alts = [];
       for (let i = 0; i < res.length; i++) if (res[i].transcript?.trim()) alts.push(res[i].transcript.trim());
+      this._log(`recogniser: result ${JSON.stringify(alts)}`);
       if (!alts.length) return;
       this.failures = 0;
       this.want = false; // the controller decides whether to listen again
       this.onHeard(alts);
     };
     rec.onerror = (e) => {
+      this._log(`recogniser: error ${e.error}${e.message ? ` (${e.message})` : ''}`);
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         // Either the microphone is refused, or (Chrome on Android) listening has to start from a tap.
         this.want = false;
@@ -127,37 +149,54 @@ class Listener {
       // 'no-speech' and 'aborted': just listen again (onend restarts if still wanted)
     };
     rec.onend = () => {
+      this._log('recogniser: end');
       this.starting = false;
       this.running = false;
       if (this.want) setTimeout(() => this.want && !this.running && this._start(), 250);
       else this.onState('idle');
     };
     this.rec = rec;
+    return rec;
   }
 
-  _start() {
+  _start(fresh = false) {
+    if (fresh || !this.rec) this._make();
     this.starting = true;
     clearTimeout(this.startTimer);
     // Chrome on Android may ignore a start that didn't come from a tap, without any event.
     this.startTimer = setTimeout(() => {
       if (this.starting && !this.running) {
+        this._log('recogniser: no answer to start() after 2.5 s');
         this.starting = false;
         this.want = false;
+        this._make(); // that one is stuck: the next start (from a tap) gets a new one
         this.onState('needs-tap', 'Listening didn’t start. Tap 🎙 to talk.');
       }
     }, 2500);
     try {
+      this._log(`recogniser: start() ${fresh ? '(new, from a tap)' : ''}`);
       this.rec.start();
     } catch (err) {
       this.starting = false;
-      if (err?.name !== 'InvalidStateError') this.onState('needs-tap', `Couldn’t start listening (${err?.message || err}). Tap 🎙 to talk.`);
+      clearTimeout(this.startTimer);
+      this._log(`recogniser: start() threw ${err?.name}: ${err?.message}`);
+      if (err?.name === 'InvalidStateError' && !fresh) return; // already listening
+      this.onState('needs-tap', `Couldn’t start listening (${err?.name || ''} ${err?.message || err}). Tap 🎙 to talk.`);
     }
   }
 
   listen() {
     if (!this.available) return;
     this.want = true;
-    if (!this.running) this._start();
+    if (!this.running && !this.starting) this._start();
+  }
+
+  /** Listen, starting from scratch: for a tap, which Chrome always allows. */
+  listenNow() {
+    if (!this.available) return;
+    this.want = true;
+    this.running = false;
+    this._start(true);
   }
 
   stop() {
@@ -200,6 +239,7 @@ export class HandsFree {
       engine: $('hf-engine'),
       talk: $('hf-talk'),
       note: $('hf-note'),
+      log: $('hf-log'),
     };
     this.speaker = new Speaker();
     const heard = (alts) => this._heard(alts);
@@ -216,10 +256,13 @@ export class HandsFree {
       this.setOn(!this.on);
     });
     this.el.talk.addEventListener('click', () => {
+      this._log('tap: Tap to talk');
+      if (!this.micPrimed) this._primeMic();
       this.micProblem = null;
       this.el.note.hidden = true;
       if (this.mode === 'idle' && this.trainer?.canMove()) this.mode = 'move';
-      this.listener.listen(); // started by a tap: always allowed
+      if (this.listener.listenNow) this.listener.listenNow(); // a fresh start from a tap
+      else this.listener.listen();
       this._render();
     });
     this.el.undo.addEventListener('click', () => this._mishearing());
@@ -392,7 +435,16 @@ export class HandsFree {
     }
   }
 
+  /** A line in the panel's "Microphone details" log (for working out what a phone does). */
+  _log(text) {
+    const t = new Date();
+    const stamp = `${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}.${String(t.getMilliseconds()).padStart(3, '0').slice(0, 1)}`;
+    this.logLines = [...(this.logLines ?? []), `${stamp} ${text}`].slice(-60);
+    if (this.el.log) this.el.log.textContent = this.logLines.join('\n');
+  }
+
   _listenState(engine, state, msg) {
+    if (state === 'log') return this._log(`${engine} ${msg}`);
     if (engine !== this.engine) return;
     if (state === 'blocked' || state === 'error' || state === 'needs-tap') this.micProblem = msg;
     if (state === 'note') {
@@ -401,6 +453,7 @@ export class HandsFree {
     }
     if (state === 'listening') {
       this.micProblem = null;
+      this.micError = null;
       this.el.note.hidden = true;
     }
     this._render();
@@ -411,17 +464,38 @@ export class HandsFree {
    * permission prompt otherwise, and the built-in recogniser then fails without asking.
    */
   _primeMic() {
-    if (this._micBlockedReason()) return this._render();
-    if (this.engine !== 'builtin' || this.micPrimed || !navigator.mediaDevices?.getUserMedia) return;
+    const sr = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+    this._log(`page: secure=${window.isSecureContext} mediaDevices=${Boolean(navigator.mediaDevices?.getUserMedia)} recogniser=${sr} engine=${this.engine}`);
+    this._log(`browser: ${navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 120)}`);
+    navigator.permissions
+      ?.query({ name: 'microphone' })
+      .then((p) => this._log(`mic permission: ${p.state}`))
+      .catch((err) => this._log(`mic permission: can't tell (${err?.name})`));
+    const blocked = this._micBlockedReason();
+    if (blocked) {
+      this._log(`mic: blocked: ${blocked}`);
+      return this._render();
+    }
+    if (this.engine !== 'builtin' || this.micPrimed) return;
     this.micPrimed = true;
+    this._log('mic: asking (getUserMedia, inside the tap)');
+    let answered = false;
+    setTimeout(() => !answered && this._log('mic: no answer after 6 s (permission prompt not shown or not answered?)'), 6000);
     navigator.mediaDevices
       .getUserMedia({ audio: true })
-      .then((stream) => stream.getTracks().forEach((t) => t.stop()))
+      .then((stream) => {
+        answered = true;
+        const tracks = stream?.getTracks?.() ?? [];
+        this._log(`mic: allowed (${tracks.map((t) => t.label || 'track').join(', ') || 'no label'})`);
+        tracks.forEach((t) => t.stop?.());
+      })
       .catch((err) => {
+        answered = true;
         this.micPrimed = false;
-        this.micProblem =
+        this._log(`mic: refused ${err?.name}: ${err?.message}`);
+        this.micError =
           err?.name === 'NotAllowedError'
-            ? `Microphone refused (${err.message || err.name}): allow it for this site in Chrome’s site settings, then tap 🎙 to talk. Or type your moves.`
+            ? `Microphone refused (${err.name}: ${err.message}). Allow it for this site in Chrome’s site settings, then tap 🎙 to talk. Or type your moves.`
             : `Microphone unavailable (${err?.name || 'error'}: ${err?.message || err}). Type your moves.`;
         this._render();
       });
@@ -586,6 +660,7 @@ export class HandsFree {
     e.engine.value = this.engine;
     const insecure = this._micBlockedReason();
     if (insecure) status = insecure;
+    else if (this.micError) status = this.micError;
     else if (!this.listener.available) status = 'This browser can’t listen: type your moves below.';
     else if (this.micProblem) status = this.micProblem;
     else if (this.listener.loading) status = '⏳ Loading the offline speech model (about 30 MB, first time only)…';
