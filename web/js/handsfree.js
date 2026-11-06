@@ -1,6 +1,7 @@
 // Hands-free training: the app reads the opponent's moves aloud and listens for yours.
-// Speech out is the browser's speechSynthesis; speech in is SpeechRecognition (Chrome, Edge,
-// Android Chrome; not Firefox, where you can type moves instead).
+// Speech out is the browser's speechSynthesis. Speech in is the browser's SpeechRecognition
+// (Chrome, Edge, Samsung Internet, Safari) or, where there is none (Firefox) or if chosen, Vosk
+// running offline in the page (vosk-listener.js). Typing moves always works.
 //
 // Safeguards so a mishearing never fails a line:
 // - every guess the recogniser makes is checked; if any is the expected move, it counts;
@@ -12,6 +13,7 @@
 
 import { interpret, interpretTyped, heardYesNo, pieceName, sanToSpeech } from './speech-core.js';
 import { store } from './ui.js';
+import { VoskListener } from './vosk-listener.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -135,6 +137,10 @@ class Listener {
     this.want = false;
     if (this.running) this.rec?.abort();
   }
+
+  release() {
+    this.stop();
+  }
 }
 
 export class HandsFree {
@@ -161,12 +167,18 @@ export class HandsFree {
       input: $('hf-input'),
       undo: $('hf-undo'),
       blind: $('hf-blind'),
+      engineBox: $('hf-engine-box'),
+      engine: $('hf-engine'),
     };
     this.speaker = new Speaker();
-    this.listener = new Listener(
-      (alts) => this._heard(alts),
-      (state, msg) => this._listenState(state, msg),
-    );
+    const heard = (alts) => this._heard(alts);
+    this.listeners = {
+      builtin: new Listener(heard, (state, msg) => this._listenState('builtin', state, msg)),
+      offline: new VoskListener(heard, (state, msg) => this._listenState('offline', state, msg)),
+    };
+    this.engine = this._pickEngine(store.get('voiceEngine', null));
+    this.el.engine.value = this.engine;
+    this.el.engine.addEventListener('change', () => this.setEngine(this.el.engine.value));
     this.blind = Boolean(store.get('blindfold', false));
     this.el.toggle.addEventListener('click', () => this.setOn(!this.on));
     this.el.undo.addEventListener('click', () => this._mishearing());
@@ -187,6 +199,29 @@ export class HandsFree {
 
   get trainer() {
     return this.getTrainer();
+  }
+
+  get listener() {
+    return this.listeners[this.engine];
+  }
+
+  /** The browser's own recogniser where there is one, else offline (Vosk); a saved choice wins if it works here. */
+  _pickEngine(wanted) {
+    const ok = (e) => this.listeners[e]?.available;
+    if (wanted && ok(wanted)) return wanted;
+    return ok('builtin') ? 'builtin' : 'offline';
+  }
+
+  setEngine(engine) {
+    engine = this._pickEngine(engine);
+    if (engine === this.engine) return;
+    const mode = this.mode;
+    this.listener.release();
+    this.engine = engine;
+    store.set('voiceEngine', engine);
+    this.micProblem = null;
+    if (this.on && (mode === 'move' || mode === 'confirm')) this._listenFor(mode);
+    this._render();
   }
 
   /** Training started: switch on if it was on last time. */
@@ -216,7 +251,7 @@ export class HandsFree {
       if (resume) this._afterTrainerChange(true);
     } else {
       this.speaker.cancel();
-      this.listener.stop();
+      this.listener.release();
       this.wakeLock?.release().catch(() => {});
       this.wakeLock = null;
     }
@@ -313,11 +348,13 @@ export class HandsFree {
     }
   }
 
-  _listenState(state, msg) {
+  _listenState(engine, state, msg) {
+    if (engine !== this.engine) return;
     if (state === 'blocked' || state === 'error') {
       this.micProblem = msg;
-      this.el.input.focus();
+      if (this.on) this.el.input.focus();
     }
+    if (state === 'listening') this.micProblem = null;
     this._render();
   }
 
@@ -461,8 +498,12 @@ export class HandsFree {
     if (!this.on) return;
     const t = this.trainer;
     let status;
+    const both = this.listeners.builtin.available && this.listeners.offline.available;
+    e.engineBox.hidden = !both;
+    e.engine.value = this.engine;
     if (!this.listener.available) status = 'This browser can’t listen: type your moves below.';
     else if (this.micProblem) status = this.micProblem;
+    else if (this.listener.loading) status = '⏳ Loading the offline speech model (about 30 MB, first time only)…';
     else if (this.mode === 'confirm') status = '🎙 Yes or no?';
     else if (this.mode === 'move' && this.listener.running) status = '🎙 Listening for your move…';
     else if (this.mode === 'move') status = '🔊 …then your move';

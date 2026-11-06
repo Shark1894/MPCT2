@@ -12,8 +12,8 @@ import re
 from html import escape
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
@@ -42,6 +42,12 @@ def build_id(web_dir: Path = WEB_DIR) -> str:
 
 BUILD_ID = build_id()
 ASSETS_PREFIX = f"/assets/{BUILD_ID}"
+
+
+def voice_model_name() -> str | None:
+    """File name of the installed Vosk model (vosk-model-*.tar.gz), or None."""
+    found = sorted(Path(settings.voice_model_dir).glob("vosk-model-*.tar.gz"))
+    return found[-1].name if found else None
 ENV_THEME_COLOR = "#b5651d"
 
 
@@ -105,7 +111,7 @@ def create_app() -> FastAPI:
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
         path = request.url.path
-        if path.startswith("/assets/") and response.status_code == 200:
+        if (path.startswith("/assets/") or path.startswith("/voice/")) and response.status_code == 200:
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         else:
             response.headers["Cache-Control"] = "no-store"
@@ -135,6 +141,18 @@ def create_app() -> FastAPI:
     app.include_router(puzzles.router)
     app.include_router(game_puzzles.router)
     app.include_router(game_puzzles.reviews_router)
+
+    @app.get("/api/voice", include_in_schema=False)
+    def voice_status() -> dict:
+        """The offline speech model, if installed: its URL (versioned, so it's cached for good)."""
+        name = voice_model_name()
+        return {"model_url": f"/voice/{name}" if name else None}
+
+    @app.get("/voice/{name}", include_in_schema=False)
+    def voice_model(name: str) -> FileResponse:
+        if name != voice_model_name():
+            raise HTTPException(404, "No such speech model")
+        return FileResponse(Path(settings.voice_model_dir) / name, media_type="application/gzip")
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     @app.get("/index.html", response_class=HTMLResponse, include_in_schema=False)

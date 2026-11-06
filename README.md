@@ -227,9 +227,22 @@ and keeps the screen awake while on. Sessions count as real reviews, with the sa
 - **Type a move** in the box instead (SAN or the spoken form); typed wrong moves count without asking.
   **Hide pieces** trains blindfold (the board keeps its squares and last-move highlight).
 
-Speech out uses the browser's voices; listening needs Chrome or Edge (desktop or Android) and the microphone allowed
-for the site. Other browsers (Firefox) read moves out and you type yours. Recognition is done by the browser's
-speech service, so it needs a connection.
+Speech out uses the browser's voices. For listening there are two recognisers:
+
+- **The browser's speech service** (Chrome, Edge, Samsung Internet, Safari): used by default where it exists, e.g.
+  Chrome on Android. Gives several guesses per move; needs a connection (it's Google's/Apple's service).
+- **Offline, in this browser**: [Vosk](https://alphacephei.com/vosk/) compiled to WebAssembly (Lichess's fork of
+  vosk-browser, `web/vendor/vosk/`), listening only for chess words, so it's accurate for moves. Used automatically
+  where there's no built-in recogniser (**Firefox**), and selectable under **Recognition** where both work. The
+  model (`vosk-model-small-en-us-0.15`, about 30 MB) downloads the first time and is kept in the browser after that
+  (IndexedDB); nothing you say leaves the device. It doesn't know “kingside” or “mishearing”: say “castles king
+  side” and “undo”.
+
+Either way the microphone has to be allowed for the site. The Docker build downloads the Vosk model from
+alphacephei.com once (`scripts/fetch_voice_model.py`; Docker's cache keeps it) into `/srv/mpct/voice`, served at a
+versioned `/voice/...` URL that browsers cache for good. If that download fails the build carries on and the offline
+recogniser says the model isn't installed (typing still works); rebuild with internet access to fix it.
+`VOICE_MODEL_DIR` overrides where the server looks.
 
 ## Position drill
 
@@ -511,6 +524,9 @@ uvicorn app.main:app --reload --port 8010
 
 Without `DATABASE_URL` the board still works; the repertoire API answers 503.
 
+For offline hands-free recognition locally (Firefox), fetch the speech model once and point the server at it:
+`python scripts/fetch_voice_model.py ./voice` then `VOICE_MODEL_DIR=./voice` (fish: `set -x VOICE_MODEL_DIR ./voice`).
+
 ## Database changes
 
 Models live in `app/db/models.py`. After changing them:
@@ -560,6 +576,8 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/gamepuzzles.e2e.cjs  # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/gaps.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/masters.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/handsfree.e2e.cjs    # empty database (fake speech in and out)
+# optional, real speech through the offline recogniser: server with VOICE_MODEL_DIR set, WAVs made with espeak-ng
+MPCT_URL=http://localhost:8010/ node tests/e2e/voskvoice.e2e.cjs
 ```
 
 ## Deploy on the home server
@@ -737,6 +755,7 @@ web/              frontend served as-is
   js/masters.js   board Masters panel: masters moves and top games for the position
   js/speech-core.js hands-free: moves to speech, heard text to moves/commands (pure, unit tested)
   js/handsfree.js hands-free training: speech out/in, confirmations, typing, blindfold
+  js/vosk-listener.js hands-free: offline recognition with Vosk (Firefox), chess words only
   js/puzzle.js    one puzzle's rules + rating chart path (pure logic, unit tested)
   js/puzzles.js   Puzzles tab + puzzle mode on the board
   js/sounds.js    move sounds (Web Audio; choosing the sound is unit tested)
@@ -756,6 +775,8 @@ tests/            pytest (backend), tests/js (Node), tests/e2e (Playwright)
 | chessground | 9.2.1 | GPL-3.0-or-later | `web/vendor/chessground/` |
 | chess.js | 1.4.0 | BSD-2-Clause | `web/vendor/chess.js/` |
 | Stockfish.js (Lite builds) | 19.0.1 | GPL-3.0 | `web/vendor/stockfish/` |
+| @lichess-org/vosk-browser (Vosk WebAssembly) | 0.0.3 | Apache-2.0 | `web/vendor/vosk/` |
+| Vosk model vosk-model-small-en-us-0.15 | 0.15 | Apache-2.0 | downloaded at image build (`scripts/fetch_voice_model.py`) |
 | python-chess | 1.11.2 | GPL-3.0-or-later | `requirements.txt` |
 
 The cburnett piece set and brown board theme ship with chessground. Because chessground and python-chess are GPL-3.0, keep this

@@ -30,5 +30,9 @@ class Settings(BaseSettings):
     # Cached explorer answers older than this are asked for again.
     explorer_cache_days: int = 180
 
+    # Hands-free training in browsers without built-in speech recognition (Firefox): the Vosk
+    # model the page downloads (once). The image fetches it at build time (scripts/fetch_voice_model.py).
+    voice_model_dir: str = "/srv/mpct/voice"
+
 
 settings = Settings()

@@ -3150,6 +3150,19 @@ body.puzzle-locked .engine {
   min-width: 0;
 }
 
+.hf-engine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.hf-engine select {
+  flex: 1;
+  min-width: 0;
+}
+
 .hf-actions {
   display: flex;
   flex-wrap: wrap;

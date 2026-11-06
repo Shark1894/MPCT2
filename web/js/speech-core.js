@@ -76,10 +76,25 @@ const FILLER = new Set(['to', 'the', 'on', 'goes', 'moves', 'move', 'play', 'pla
 export const COMMANDS = {
   repeat: ['repeat', 'say again', 'say that again', 'again', 'what was that', 'pardon'],
   moves: ['moves', 'read the moves', 'moves so far', 'read the line', 'the line', 'where are we'],
-  mishearing: ['mishearing', 'misheard', 'undo', 'that was a mishearing', 'you misheard', 'not what i said'],
+  mishearing: ['mishearing', 'misheard', 'undo', 'that was a mishearing', 'that was misheard', 'you misheard', 'not what i said'],
   stop: ['stop', 'stop listening', 'hands free off', 'hands-free off', 'quiet'],
   next: ['next', 'next line', 'continue', 'carry on'],
 };
+/**
+ * The words the offline recogniser (Vosk) may hear: restricting it to these makes it far more
+ * accurate than open dictation. All are in Vosk's small English model ("kingside" isn't: say
+ * "king side").
+ */
+export const VOSK_WORDS = [
+  'king', 'queen', 'rook', 'bishop', 'knight', 'pawn',
+  'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
+  'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight',
+  'takes', 'take', 'captures', 'castles', 'castle', 'side', 'short', 'long', 'promotes', 'to', 'check',
+  'yes', 'yeah', 'yep', 'no', 'nope', 'correct', 'right', 'wrong',
+  'repeat', 'again', 'say', 'moves', 'that', 'was', 'misheard', 'undo', 'stop', 'next',
+  '[unk]',
+];
+
 const YES = ['yes', 'yeah', 'yep', 'yup', 'correct', 'right', "that's right", 'that is right', 'confirm', 'affirmative', 'sure'];
 const NO = ['no', 'nope', 'nah', 'wrong', 'incorrect', 'not right', "that's wrong", 'no it was not'];
 

@@ -9,6 +9,11 @@ WORKDIR /srv/mpct
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# Offline speech model for hands-free training in browsers without built-in speech recognition
+# (Firefox). Downloaded once; Docker's cache keeps it for later builds. Never fails the build.
+COPY scripts/fetch_voice_model.py ./fetch_voice_model.py
+RUN python fetch_voice_model.py /srv/mpct/voice
+
 COPY alembic.ini .
 COPY scripts/start.sh ./start.sh
 COPY app ./app

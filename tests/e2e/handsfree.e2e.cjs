@@ -207,7 +207,7 @@ const sans = (page) => page.evaluate(() => mpct.game.moves.slice(0, mpct.game.pl
   check(await page.evaluate(() => mpct.trainer.active), 'training carries on');
   await page.click('#train-stop');
 
-  // ---- a browser that can't listen --------------------------------------------------------------
+  // ---- a browser without built-in recognition (Firefox) --------------------------------------------
   const ctx2 = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   await ctx2.addInitScript(() => {
     window.__noListening = true;
@@ -227,7 +227,8 @@ const sans = (page) => page.evaluate(() => mpct.game.moves.slice(0, mpct.game.pl
   await settle(p2, 900);
   await p2.click('#train-handsfree');
   await settle(p2, 300);
-  check((await text(p2, '#hf-status')).includes('can’t listen') && (await p2.isVisible('#hf-input')), 'no speech recognition: says so, typing offered');
+  check((await p2.evaluate(() => mpct.handsFree.engine)) === 'offline' && (await p2.isHidden('#hf-engine-box')), 'no built-in recognition (Firefox): the offline recogniser is used, no choice to make');
+  check(await p2.isVisible('#hf-input'), 'typing offered too');
   await p2.fill('#hf-input', 'c6');
   await p2.press('#hf-input', 'Enter');
   await settle(p2, 800);

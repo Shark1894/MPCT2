@@ -128,6 +128,8 @@ export const api = {
   markWildViewed: (id) => request('POST', `/wild-games/${id}/viewed`),
   wildGamePgnUrl: (id) => `/api/wild-games/${id}/pgn`,
 
+  voice: () => request('GET', '/voice'),
+
   masters: (fen) => request('GET', '/masters', { params: { fen } }),
   mastersGame: (id) => request('GET', `/masters/games/${encodeURIComponent(id)}`),
   saveMastersGame: (id) => request('POST', `/masters/games/${encodeURIComponent(id)}/save`),
