@@ -238,6 +238,10 @@ Speech out uses the browser's voices. For listening there are two recognisers:
   (IndexedDB); nothing you say leaves the device. It doesn't know “kingside” or “mishearing”: say “castles king
   side” and “undo”.
 
+Reading moves aloud uses the system's voices. **Firefox on Linux** has none until speech-dispatcher and a voice
+engine are installed (Arch: `sudo pacman -S speech-dispatcher espeak-ng`, then restart Firefox; test with
+`spd-say hello`); the panel says so when there are no voices.
+
 Either way the microphone has to be allowed for the site. The Docker build downloads the Vosk model from
 alphacephei.com once (`scripts/fetch_voice_model.py`; Docker's cache keeps it) into `/srv/mpct/voice`, served at a
 versioned `/voice/...` URL that browsers cache for good. If that download fails the build carries on and the offline

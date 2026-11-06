@@ -35,6 +35,11 @@ class Speaker {
     return Boolean(this.synth && window.SpeechSynthesisUtterance);
   }
 
+  /** Whether the browser has any voice to speak with (Firefox on Linux has none without speech-dispatcher). */
+  hasVoices() {
+    return (this.synth?.getVoices?.() ?? []).length > 0;
+  }
+
   /** Queue a sentence; resolves when it has been said (or skipped by cancel). */
   get busy() {
     return this.pending > 0;
@@ -332,6 +337,16 @@ export class HandsFree {
     if (on) {
       this.micProblem = null;
       this._keepAwake();
+      // Voices can arrive a moment after the page loads: check once they've had time.
+      setTimeout(() => {
+        if (!this.on || this.speaker.hasVoices()) return;
+        this._log('speech out: the browser has no voices');
+        this.noVoices = navigator.userAgent.includes('Linux') && !navigator.userAgent.includes('Android')
+          ? 'This browser has no voices to read moves aloud. On Linux, install speech-dispatcher and espeak-ng, then restart the browser.'
+          : 'This browser has no voices to read moves aloud: check its text-to-speech settings.';
+        this.el.note.textContent = this.noVoices;
+        this.el.note.hidden = false;
+      }, 1500);
       if (!quiet || !this.listener.available) {
         this.speaker.say(this.listener.available ? 'Hands-free on.' : 'Hands-free on. I can read moves out, but this browser can’t listen: type your moves.');
       }

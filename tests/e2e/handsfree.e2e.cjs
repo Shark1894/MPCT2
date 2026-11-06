@@ -30,7 +30,7 @@ const FAKE_SPEECH = () => {
       },
       cancel() {},
       getVoices() {
-        return [];
+        return window.__noVoices ? [] : [{ name: 'Fake', lang: 'en-GB' }];
       },
       addEventListener() {},
     },
@@ -252,6 +252,7 @@ const sans = (page) => page.evaluate(() => mpct.game.moves.slice(0, mpct.game.pl
   const ctx2 = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   await ctx2.addInitScript(() => {
     window.__noListening = true;
+    window.__noVoices = true; // and no voices either, as Firefox on Linux without speech-dispatcher
     delete window.webkitSpeechRecognition;
     delete window.SpeechRecognition;
   });
@@ -270,6 +271,8 @@ const sans = (page) => page.evaluate(() => mpct.game.moves.slice(0, mpct.game.pl
   await settle(p2, 300);
   check((await p2.evaluate(() => mpct.handsFree.engine)) === 'offline' && (await p2.isHidden('#hf-engine-box')), 'no built-in recognition (Firefox): the offline recogniser is used, no choice to make');
   check(await p2.isVisible('#hf-input'), 'typing offered too');
+  await settle(p2, 1700);
+  check((await text(p2, '#hf-note')).startsWith('This browser has no voices to read moves aloud'), 'no voices: says so: ' + (await text(p2, '#hf-note')));
   await p2.fill('#hf-input', 'c6');
   await p2.press('#hf-input', 'Enter');
   await settle(p2, 800);
