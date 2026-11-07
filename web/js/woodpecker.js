@@ -72,7 +72,7 @@ export class WoodpeckerPage {
     actions.appendChild(button('Edit', 'small', () => this.onEdit?.(course), 'Rename, move to another group or delete'));
     text.appendChild(actions);
     const list = [];
-    for (let i = 0; i < Math.max(MAX_RINGS, o.cycles.length + (c ? 0 : 1)); i++) {
+    for (let i = 0; i < Math.min(MAX_RINGS, Math.max(1, o.cycles.length + (c ? 0 : 1))); i++) {
       const cy = o.cycles[i];
       list.push({ p: cy ? (cy.finished_at ? 1 : cy.done / Math.max(cy.total, 1)) : 0, cls: cy?.finished_at ? 'wp dim' : 'wp' });
     }
