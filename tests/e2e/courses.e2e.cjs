@@ -175,7 +175,7 @@ async function importFile(page, file) {
   const covers = await page.$$eval('.tr-shelf .tr-cover[data-course]', (cs) => cs.map((c) => `${c.className.match(/kind-(\w+)/)[1]}: ${c.querySelector('.tr-cover-name').textContent}`));
   check(covers.join(' | ') === 'woodpecker: The Woodpecker Method | tactics: Test Tactics', `course covers (${covers.join(' | ')})`);
   check((await text(page, '.tr-cover.kind-woodpecker .tr-cover-big')) === 'No cycle yet', 'woodpecker cover: no cycle yet');
-  check((await page.$$('.tr-drill[data-drill]')).length === 5, 'endgame drills in their own section');
+  check((await page.$$('.tr-drill[data-drill]')).length === 13, 'endgame drills in their own section');
   check((await page.$$('#tr-courses .tr-drill')).length === 0, 'drills are not mixed in with courses');
   const next = await page.$$eval('.tr-next-card', (cs) => cs.map((c) => c.dataset.kind));
   check(next[0] === 'woodpecker' && next.includes('drill'), `up next (${next.join(', ')})`);

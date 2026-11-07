@@ -8,7 +8,7 @@
 import { api } from './api.js';
 import { pickFile, readCourse, slimLine } from './courseimport.js';
 import { KINDS, guessKind, queueFor } from './courses.js';
-import { DRILLS, drillById } from './endgame-core.js';
+import { DRILLS, GROUPS as DRILL_GROUPS, drillById, goalText } from './endgame-core.js';
 import { EndgamePage } from './endgames.js';
 import { WoodpeckerPage } from './woodpecker.js';
 import { pace } from './woodpecker-core.js';
@@ -428,9 +428,14 @@ export class TrainingView {
     random.append(diceIcon(14), ' a new random position every time');
     head.querySelector('.tr-sec-title h2').after(random);
     sec.appendChild(head);
-    const grid = el('div', 'tr-drills');
-    for (const d of DRILLS) grid.appendChild(this._drillTile(d));
-    sec.appendChild(grid);
+    for (const [group, title] of DRILL_GROUPS) {
+      const drills = DRILLS.filter((d) => d.group === group);
+      if (!drills.length) continue;
+      const h = el('h3', 'tr-drill-group', title);
+      const grid = el('div', 'tr-drills');
+      for (const d of drills) grid.appendChild(this._drillTile(d));
+      sec.append(h, grid);
+    }
     return sec;
   }
 
@@ -442,10 +447,10 @@ export class TrainingView {
     b.setAttribute('aria-label', `${d.name} (${d.pieces}): ${lvl}`);
     const top = el('span', 'tr-drill-top');
     const glyphs = el('span', 'tr-glyphs');
-    glyphs.append(d.glyphs, el('span', 'tr-vs', 'v'), el('span', 'tr-lone', '♚'));
+    glyphs.append(d.glyphs, el('span', 'tr-vs', 'v'), el('span', 'tr-lone', d.vs ?? '♚'));
     top.append(glyphs, el('span', `tr-level ${lvl.toLowerCase()}`, lvl));
     const name = el('span', 'tr-stack');
-    name.append(el('span', 'tr-drill-name', d.name), el('span', 'tr-drill-goal', d.goal === 'mate' ? 'Mate within 50 moves' : 'Queen with the win kept'));
+    name.append(el('span', 'tr-drill-name', d.name), el('span', `tr-drill-goal ${d.goal === 'draw' ? 'defend' : ''}`, goalText(d)));
     const strip = el('span', 'tr-strip');
     strip.setAttribute('aria-hidden', 'true');
     for (const r of runStrip(st?.recent ?? [], 8)) strip.appendChild(el('span', `tr-tick ${r}`));

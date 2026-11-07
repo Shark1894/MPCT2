@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from app.core.endgames import DRILLS
 from app.db.models import EndgameAttempt
 
-SUCCESS = ("mate", "promoted")
-FAILURE = ("fifty", "stalemate", "material", "repetition", "thrown", "gave-up")
+SUCCESS = ("mate", "promoted", "captured", "held")
+FAILURE = ("fifty", "stalemate", "material", "repetition", "thrown", "lost", "gave-up")
 RECENT = 10
 
 

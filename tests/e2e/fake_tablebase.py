@@ -20,29 +20,45 @@ import chess
 LOG = []
 
 
+VALUE = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3, chess.ROOK: 5, chess.QUEEN: 9}
+
+
 def material(board, color):
     return [p for p in board.piece_map().values() if p.color == color and p.piece_type != chess.KING]
 
 
+def value(board, color):
+    return sum(VALUE[p.piece_type] for p in material(board, color))
+
+
 def strong_side(board):
+    """The winning side: the only one with material, or two points or more ahead; else None."""
     w, b = material(board, chess.WHITE), material(board, chess.BLACK)
     if w and not b:
         return chess.WHITE
     if b and not w:
         return chess.BLACK
-    return None
+    diff = value(board, chess.WHITE) - value(board, chess.BLACK)
+    return chess.WHITE if diff >= 2 else chess.BLACK if diff <= -2 else None
 
 
-def can_grab(board):
-    """The defender (to move) can take a piece and leave too little to mate."""
+def capture_result(board):
+    """Best the side to move gets by taking something now: 'win', 'draw' or None (no capture helps)."""
+    best = None
     for m in board.legal_moves:
-        if board.is_capture(m):
-            board.push(m)
-            dead = board.is_insufficient_material()
-            board.pop()
-            if dead:
-                return True
-    return False
+        if not board.is_capture(m):
+            continue
+        board.push(m)
+        if board.is_insufficient_material():
+            out = "draw"
+        else:
+            strong = strong_side(board)
+            out = "win" if strong == (not board.turn) else "draw" if strong is None else None
+        board.pop()
+        if out == "win":
+            return "win"
+        best = best or out
+    return best
 
 
 def category(board):
@@ -51,13 +67,12 @@ def category(board):
         return "loss"
     if board.is_stalemate() or board.is_insufficient_material():
         return "draw"
+    grab = capture_result(board)
     strong = strong_side(board)
     if strong is None:
-        return "draw"
+        return "win" if grab == "win" else "draw"
     if board.turn != strong:
-        return "draw" if can_grab(board) else "loss"
-    if board.pieces(chess.PAWN, strong) and not (board.pieces(chess.QUEEN, strong) or board.pieces(chess.ROOK, strong)):
-        return "win"
+        return grab or "loss"
     return "win"
 
 

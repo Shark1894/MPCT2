@@ -71,3 +71,34 @@ test('rule ends', () => {
   assert.equal(ruleEnd(new Chess('7k/8/6K1/8/8/8/8/5Q2 b - - 100 80')), 'fifty');
   assert.equal(ruleEnd(new Chess('7k/8/6K1/8/8/8/8/5Q2 b - - 10 80')), null);
 });
+
+import { DRILLS, GROUPS, drawingMoves, goalText, isSuccess, judgeDefence } from '../../web/js/endgame-core.js';
+
+test('every drill is complete', () => {
+  const groups = new Set(GROUPS.map(([g]) => g));
+  for (const d of DRILLS) {
+    assert.ok(groups.has(d.group), `${d.id}: group`);
+    assert.equal(d.steps.length, 3, `${d.id}: three steps`);
+    assert.ok(d.glyphs && d.vs && d.pieces && d.tip, d.id);
+    assert.ok(['mate', 'promote', 'capture', 'draw'].includes(d.goal), d.id);
+    if (d.goal === 'draw') assert.ok(d.hold >= 10, `${d.id}: hold`);
+    if (d.key) {
+      const c = new Chess(d.key.fen);
+      assert.equal(c.isGameOver(), false, d.id);
+      assert.ok(d.key.caption, d.id);
+    }
+    if (!['kq', 'kr', 'kbb', 'kbn', 'kp'].includes(d.id)) assert.ok(d.server && d.guide?.length && d.key, `${d.id}: server, guide, key`);
+  }
+  assert.equal(new Set(DRILLS.map((d) => d.id)).size, DRILLS.length);
+});
+
+test('defend drills', () => {
+  assert.equal(goalText(DRILLS.find((d) => d.id === 'philidor')), 'Defend: hold for 15 moves');
+  assert.equal(judgeDefence({ category: 'draw' }), 'ok');
+  assert.equal(judgeDefence({ category: 'cursed-win' }), 'ok'); // a win for them only past the 50-move rule
+  assert.equal(judgeDefence({ category: 'win' }), 'lost');
+  assert.equal(judgeDefence({ category: 'loss' }), 'ok'); // they blundered: even better
+  const info = { moves: [{ uci: 'a', category: 'win' }, { uci: 'b', category: 'draw' }, { uci: 'c', category: 'cursed-win' }] };
+  assert.deepEqual(drawingMoves(info).map((m) => m.uci), ['b', 'c']);
+  assert.equal(isSuccess('held') && isSuccess('captured') && !isSuccess('lost'), true);
+});

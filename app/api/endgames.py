@@ -8,14 +8,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app import tablebase
-from app.core.endgames import generate_kp
+from app.core.endgames import SERVER_DRILLS, generate
 from app.db.session import get_session
 from app.repositories import endgames as repo
 
 router = APIRouter(prefix="/api", tags=["endgames"])
 Db = Annotated[Session, Depends(get_session)]
-Drill = Literal["kq", "kr", "kbb", "kbn", "kp"]
-Result = Literal["mate", "promoted", "fifty", "stalemate", "material", "repetition", "thrown", "gave-up"]
+Drill = Literal["kq", "kr", "kbb", "kbn", "kp", "lucena", "philidor", "vancura", "qvp", "qvr", "rvb", "wrongb", "reti"]
+Result = Literal["mate", "promoted", "captured", "held", "fifty", "stalemate", "material", "repetition", "thrown", "lost", "gave-up"]
 
 
 class TbMove(BaseModel):
@@ -40,11 +40,11 @@ class TbOut(BaseModel):
     moves: list[TbMove]  # best first for the side to move
 
 
-class KpOut(BaseModel):
+class PositionOut(BaseModel):
     fen: str
-    color: str
-    winning_moves: int
+    color: str  # the side you play
     tries: int
+    winning_moves: int | None = None  # K+P v K: how many moves win
 
 
 class AttemptIn(BaseModel):
@@ -97,16 +97,25 @@ def tablebase_lookup(fen: Annotated[str, Query(max_length=100)]):
         _unavailable(exc)
 
 
-@router.get("/endgames/kp", response_model=KpOut)
-def kp_position():
-    """A K+P v K position that's won but needs the right idea (at most two winning moves)."""
+@router.get("/endgames/position/{drill}", response_model=PositionOut)
+def drill_position(drill: str):
+    """A starting position for a drill made on the server (K+P v K and the named endgames),
+    checked in the tablebase."""
+    if drill not in SERVER_DRILLS:
+        raise HTTPException(404, f"No server positions for {drill!r}")
     try:
-        found = generate_kp(tablebase.lookup)
+        found = generate(drill, tablebase.lookup)
     except tablebase.TablebaseUnavailable as exc:
         _unavailable(exc)
     if found is None:
         raise HTTPException(503, "No suitable position found this time: try again")
     return found
+
+
+@router.get("/endgames/kp", response_model=PositionOut)
+def kp_position():
+    """K+P v K (kept for older pages): same as /endgames/position/kp."""
+    return drill_position("kp")
 
 
 @router.post("/endgames/attempts", response_model=AttemptOut)

@@ -5101,3 +5101,42 @@ button.wp-cell:hover {
 .eg-start-foot .eg-again {
   align-self: flex-start;
 }
+
+/* endgame drills: groups, defend drills, guides */
+.tr-drill-group {
+  margin: 6px 0 -4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #9fd9cf;
+}
+
+.tr-drill-goal.defend {
+  color: #f0dc9a;
+}
+
+.tr-glyphs {
+  font-size: 26px;
+  white-space: nowrap;
+}
+
+.eg-guide {
+  border-top: 1px solid #22403d;
+  padding-top: 10px;
+}
+
+.eg-guide summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #9fd9cf;
+}
+
+.eg-guide p {
+  margin: 10px 0 0;
+  line-height: 1.55;
+  color: #cfe3df;
+  max-width: 75ch;
+}
+
+.eg-key-play {
+  align-self: flex-start;
+}

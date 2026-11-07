@@ -104,6 +104,7 @@ export const api = {
   woodpecker: (courseId) => request('GET', `/courses/${courseId}/woodpecker`),
   tablebase: (fen) => request('GET', '/tablebase', { params: { fen } }),
   endgameKp: () => request('GET', '/endgames/kp'),
+  endgamePosition: (drill) => request('GET', `/endgames/position/${drill}`),
   endgameAttempt: (body) => request('POST', '/endgames/attempts', { body }),
   endgameStats: () => request('GET', '/endgames/stats'),
   woodpeckerTimes: (courseId) => request('GET', `/courses/${courseId}/woodpecker/times`),

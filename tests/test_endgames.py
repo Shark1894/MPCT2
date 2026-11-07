@@ -110,3 +110,79 @@ def test_attempts_and_stats(client, db):
     assert [a["result"] for a in kbn["recent"]] == ["fifty", "mate", "mate"]
     assert st["kp"]["attempts"] == 0 and st["kp"]["recent"] == []
     assert client.post("/api/endgames/attempts", json={"drill": "krr", "start_fen": KBN, "color": "white", "result": "mate", "moves": 1, "seconds": 1}).status_code == 422
+
+
+# ---- named endgames --------------------------------------------------------------------------------
+
+MATERIAL = {  # (yours, theirs) without kings, as sorted piece letters
+    "lucena": ("PR", "R"), "philidor": ("R", "PR"), "vancura": ("R", "PR"), "qvp": ("Q", "P"),
+    "qvr": ("Q", "R"), "rvb": ("B", "R"), "wrongb": ("", "BP"), "reti": ("P", "P"),
+}
+
+
+def ok_answer(drill):
+    """A stand-in tablebase answer that passes the drill's check."""
+    if drill in endgames.DEFEND:
+        return tb_answer("draw", moves=[{"category": "draw"}, {"category": "win"}, {"category": "win"}])
+    return tb_answer("win", moves=[{"category": "loss", "san": "Kd2"}, {"category": "draw", "san": "Ke2"}])
+
+
+def side_material(board, colour):
+    return "".join(sorted(p.symbol().upper() for p in board.piece_map().values() if p.color == colour and p.piece_type != chess.KING))
+
+
+@pytest.mark.parametrize("drill", list(MATERIAL))
+def test_named_endgame_templates(drill):
+    rng = random.Random(11)
+    seen = set()
+    for _ in range(40):
+        found = endgames.generate(drill, lambda fen: ok_answer(drill), rng)
+        assert found, drill
+        b = chess.Board(found["fen"])
+        you = chess.WHITE if found["color"] == "white" else chess.BLACK
+        assert b.is_valid() and not b.is_check() and b.turn == you
+        assert (side_material(b, you), side_material(b, not you)) == MATERIAL[drill], found["fen"]
+        seen.add(found["fen"])
+    assert len(seen) >= (4 if drill == "reti" else 20), f"{drill}: {len(seen)} different"  # Réti: the study and its mirrors
+
+
+def test_named_endgame_patterns():
+    rng = random.Random(3)
+    for _ in range(50):
+        b = endgames._lucena(rng)
+        if b is None:
+            continue
+        pawn = next(iter(b.pieces(chess.PAWN, chess.WHITE)))
+        assert chess.square_rank(pawn) == 6 and b.king(chess.WHITE) == pawn + 8  # king on the queening square
+        assert abs(chess.square_file(b.king(chess.BLACK)) - chess.square_file(pawn)) == 2  # cut off
+    for _ in range(50):
+        b = endgames._wrongb(rng)
+        if b is None:
+            continue
+        pawn = next(iter(b.pieces(chess.PAWN, chess.BLACK)))
+        corner = chess.square(chess.square_file(pawn), 0)
+        bishop = next(iter(b.pieces(chess.BISHOP, chess.BLACK)))
+        light = lambda s: bool(chess.BB_LIGHT_SQUARES & chess.BB_SQUARES[s])  # noqa: E731
+        assert chess.square_file(pawn) in (0, 7) and light(bishop) != light(corner)  # the wrong bishop
+
+
+def test_good_start_rules():
+    assert endgames.good_start("philidor", tb_answer("draw", moves=[{"category": "win"}, {"category": "win"}, {"category": "draw"}]))
+    assert not endgames.good_start("philidor", tb_answer("draw", moves=[{"category": "draw"}] * 3))  # nothing to get wrong
+    assert not endgames.good_start("philidor", tb_answer("loss", moves=[{"category": "win"}] * 3))  # already lost
+    assert endgames.good_start("lucena", tb_answer("win", moves=[{"category": "loss"}, {"category": "draw"}]))
+    assert not endgames.good_start("lucena", tb_answer("win", moves=[{"category": "loss"}] * 4))  # every move wins
+    assert not endgames.good_start("qvr", tb_answer("win", moves=[{"category": "loss", "san": "Qxd7+"}, {"category": "draw"}]))
+
+
+def test_api_positions(client, monkeypatch):
+    monkeypatch.setattr(tablebase, "_fetch", lambda fen: ok_answer("lucena"))
+    r = client.get("/api/endgames/position/lucena")
+    assert r.status_code == 200 and r.json()["color"] in ("white", "black")
+    assert client.get("/api/endgames/position/kq").status_code == 404  # made in the browser
+    tablebase.clear_cache()
+    monkeypatch.setattr(tablebase, "_fetch", lambda fen: tb_answer("draw", moves=[{"category": "draw"}] * 3))
+    assert client.get("/api/endgames/position/lucena").status_code == 503  # nothing suitable
+    for result in ("held", "captured"):
+        assert client.post("/api/endgames/attempts", json={"drill": "philidor", "start_fen": KBN, "color": "black", "result": result, "moves": 15, "seconds": 60}).json()["success"]
+    assert not client.post("/api/endgames/attempts", json={"drill": "philidor", "start_fen": KBN, "color": "black", "result": "lost", "moves": 3, "seconds": 9}).json()["success"]

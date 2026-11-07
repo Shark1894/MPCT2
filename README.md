@@ -44,6 +44,7 @@ The full plan, decisions and data model are in the project's
 | — | Puzzles moved into the Training tab | Done |
 | — | Endgame drills: random mates and K+P v K against perfect (tablebase) defence | Done |
 | — | Training tab redesign: a hub where puzzles, courses and drills each have their own look | Done |
+| — | Named endgames: Lucena, Philidor, Vančura, Q v P, Q v R, R v B, wrong rook pawn, Réti (win and defend drills with guides) | Done |
 
 ## Using the board
 
@@ -621,8 +622,24 @@ through in order, move by move, on the board.
 
 ### Endgame drills
 
-In **Endgame drills** on the Training page: **Queen mate** (K+Q v K), **Rook mate** (K+R v K), **Two bishops**
-(K+B+B v K), **Bishop and knight** (K+B+N v K) and **King and pawn** (K+P v K). A drill's page has **New random
+In **Endgame drills** on the Training page, in four groups:
+
+- **Basic mates**: Queen mate (K+Q v K), Rook mate (K+R v K), Two bishops (K+B+B v K), Bishop and knight (K+B+N v K).
+- **Pawn endings**: King and pawn (K+P v K, win), Réti manoeuvre (K+P v K+P, defend: Réti's 1921 study and its
+  mirror images), Wrong rook pawn (lone king v K+B+rook pawn with the wrong bishop, defend: get to the corner).
+- **Rook endings**: Lucena position (win: build a bridge), Philidor position (defend: third-rank defence),
+  Vančura position (defend: attack the rook pawn from the side).
+- **Queen and minor pieces**: Queen v pawn on the 7th (win the pawn; centre and knight pawns), Queen v rook (win
+  the rook), Rook v bishop (defend: the right corner).
+
+Win drills pass by mating, queening (Lucena, K+P) or winning the material (Q v P, Q v R) with the win kept.
+**Defend drills** pass by holding the draw for a set number of your moves (12 to 20) or reaching a draw by the
+rules; Stockfish plays the attacking side (the tablebase would only shuffle in a drawn position) and the tablebase
+checks every move of yours: one that turns the draw into a loss ends the attempt (take back to carry on as
+practice; **Hint** shows a drawing move). The named endgames' positions are random variations of the pattern
+(files, sides, the pieces' squares, either colour) made on the server (`GET /api/endgames/position/{drill}`) and
+kept only when the tablebase agrees on the result and some of your moves would spoil it. Each has a guide (**How
+it works**), three steps and the classic key position (**Play this position** tries it). A drill's page has **New random
 position**, the method (three steps; the mating corners for B+N), your mastery level, results and a chart of
 moves used against perfect play and the 50-move limit, and your recent starting positions as boards (**Again**
 replays one).

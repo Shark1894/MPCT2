@@ -12,7 +12,10 @@ import { Engine } from './engine.js';
 import {
   RESULT_TEXT,
   bestDefence,
+  drawingMoves,
   drillById,
+  goalText,
+  judgeDefence,
   isSuccess,
   judge,
   movesToMate,
@@ -85,10 +88,10 @@ export class EndgameTrainer {
     this._message('Setting up…');
     if (!fen) {
       try {
-        fen = drill.id === 'kp' ? (await api.endgameKp()).fen : randomMatePosition(drill.id);
+        fen = drill.server ? (await api.endgamePosition(drill.id)).fen : randomMatePosition(drill.id);
       } catch (err) {
         this._message(
-          drill.id === 'kp' ? `K+P positions come from the tablebase, which can't be reached right now (${err.message}).` : err.message,
+          drill.server ? `These positions are checked in the tablebase, which can't be reached right now (${err.message}).` : err.message,
           'wrong',
         );
         this.el.playing.hidden = true;
@@ -124,7 +127,9 @@ export class EndgameTrainer {
     this.el.title.textContent = `${drill.name} · ${drill.pieces}`;
     this.el.sub.textContent = drill.tip;
     this.onLock(true);
+    this._status(); // straight away, not after the tablebase answers
     this.render();
+    if (drill.goal === 'draw') this.engine ??= new Engine({ onUpdate: () => {}, onStatus: () => {} });
     try {
       const info = await api.tablebase(fen);
       if (this.run !== run) return;
@@ -134,7 +139,14 @@ export class EndgameTrainer {
       this._engineMode('The tablebase can’t be reached: Stockfish defends, and slips aren’t pointed out.');
     }
     const side = you === 'white' ? 'White' : 'Black';
-    this._message(drill.goal === 'mate' ? `You play ${side}: mate the king.` : `You play ${side}: queen the pawn and keep the win.`);
+    this._message(
+      {
+        mate: `You play ${side}: mate the king.`,
+        promote: `You play ${side}: queen the pawn and keep the win.`,
+        capture: `You play ${side}: win their material and keep the win.`,
+        draw: `You play ${side}: hold the draw for ${drill.hold} moves.`,
+      }[drill.goal],
+    );
     this._status();
   }
 
@@ -193,10 +205,13 @@ export class EndgameTrainer {
     this.render();
     this._status();
     const ended = ruleEnd(this._chess());
+    const goal = run.drill.goal;
+    if (goal === 'draw') return this._afterDefence(ended, before);
     if (ended === 'mate') return this._finish('mate');
     if (ended && ended !== 'fifty') return this._slip(ended, before); // stalemate, nothing left, repetition
     if (run.mode === 'engine') {
-      if (run.drill.goal === 'promote' && played.promotion) return this._finish('promoted');
+      if (goal === 'promote' && played.promotion) return this._finish('promoted');
+      if (goal === 'capture' && this._bareKing()) return this._finish('captured');
       if (ended) return this._finish(ended);
       return this._reply();
     }
@@ -213,11 +228,42 @@ export class EndgameTrainer {
     if (this.run !== run) return;
     this.busy = false;
     const verdict = judge(info);
-    if (verdict === 'ok' && run.drill.goal === 'promote' && played.promotion) return this._finish('promoted');
+    if (verdict === 'ok' && goal === 'promote' && played.promotion) return this._finish('promoted');
+    if (verdict === 'ok' && goal === 'capture' && this._bareKing()) return this._finish('captured');
     if (ended === 'fifty') return this._finish('fifty');
     if (verdict === 'mate') return this._finish('mate');
     if (verdict !== 'ok') return this._slip(verdict, before);
     return this._reply(info);
+  }
+
+  /** Their side has only its king left. */
+  _bareKing() {
+    const theirs = this.run.you === 'white' ? 'b' : 'w';
+    return this._chess()
+      .board()
+      .flat()
+      .filter((p) => p && p.color === theirs).length === 1;
+  }
+
+  /** A defend drill, after your move: any draw by the rules holds; else the tablebase judges. */
+  async _afterDefence(ended, before) {
+    const run = this.run;
+    if (ended) return this._finish('held');
+    if (run.mode === 'tablebase') {
+      this.busy = true;
+      let info = null;
+      try {
+        info = await api.tablebase(this.game.fen());
+      } catch {
+        if (this.run !== run) return;
+        this._engineMode('The tablebase stopped answering: your moves aren’t checked from here.');
+      }
+      if (this.run !== run) return;
+      this.busy = false;
+      if (info && judgeDefence(info) === 'lost') return this._slip('lost', before);
+    }
+    if (run.moves >= run.drill.hold) return this._finish('held');
+    return this._reply(); // Stockfish tries to win
   }
 
   /** The defender's move: the tablebase's best defence (or Stockfish's). */
@@ -237,6 +283,7 @@ export class EndgameTrainer {
     this.render();
     this._status();
     const ended = ruleEnd(this._chess());
+    if (run.drill.goal === 'draw' && ended) return this._finish(ended === 'mate' ? 'lost' : 'held');
     if (ended) return this._finish(ended);
     this._message('Your move.');
   }
@@ -250,10 +297,12 @@ export class EndgameTrainer {
       stalemate: 'Stalemate!',
       material: 'Nothing left to mate with.',
       repetition: 'That repeats the position a third time: a draw.',
+      lost: 'That loses: the tablebase says it’s a win for them now.',
     }[verdict];
     await this._finish(verdict, { keepBoard: true });
     if (this.run !== run) return;
-    this._message(`${text} Take it back to see a winning move and carry on (practice).`, 'wrong');
+    const good = run.drill.goal === 'draw' ? 'a drawing move' : 'a winning move';
+    this._message(`${text} Take it back to see ${good} and carry on (practice).`, 'wrong');
     this.el.takeBack.hidden = false;
     this.slipFen = beforeFen;
   }
@@ -290,15 +339,16 @@ export class EndgameTrainer {
       return;
     }
     if (this.run !== run) return;
-    const best = winningMoves(info)[0];
+    const defend = run.drill.goal === 'draw';
+    const best = (defend ? drawingMoves(info) : winningMoves(info))[0];
     if (!best) {
-      this._message('No winning move here.', 'wrong');
+      this._message(defend ? 'No drawing move here.' : 'No winning move here.', 'wrong');
       return;
     }
     if (!run.practice) run.hints += 1;
     this._arrow(best.uci);
-    const left = movesToMate(info.dtm);
-    this._message(`${prefix ? `${prefix} ` : ''}Best: ${best.san}${left ? ` (mate in ${left})` : ''}.`);
+    const left = defend ? null : movesToMate(info.dtm);
+    this._message(`${prefix ? `${prefix} ` : ''}${defend ? 'A drawing move' : 'Best'}: ${best.san}${left ? ` (mate in ${left})` : ''}.`);
   }
 
   giveUp() {
@@ -349,10 +399,11 @@ export class EndgameTrainer {
     const run = this.run;
     if (!run) return;
     const half = Number(this.game.fen().split(' ')[4]);
-    const parts = [`Moves: ${run.moves}`];
+    const parts = [run.drill.goal === 'draw' ? `Held: ${run.moves}/${run.drill.hold} moves` : `Moves: ${run.moves}`];
     if (run.drill.goal === 'mate') parts.push(`50-move count: ${Math.floor(half / 2)}/50`);
+    if (run.drill.goal === 'draw') parts.push('Stockfish attacks, the tablebase checks your moves');
     if (run.optimal) parts.push(`perfect play mates in ${run.optimal}`);
-    if (run.mode === 'engine') parts.push('Stockfish defending');
+    if (run.mode === 'engine') parts.push(run.drill.goal === 'draw' ? 'moves not checked' : 'Stockfish defending');
     this.el.status.textContent = parts.join(' · ');
   }
 
@@ -407,7 +458,7 @@ export class EndgamePage {
     const hero = el('section', 'tr-hero eg-hero cv-head-card');
     const glyphs = el('div', 'eg-hero-glyphs');
     glyphs.setAttribute('aria-hidden', 'true');
-    glyphs.append(drill.glyphs, el('span', 'tr-vs', 'v'), el('span', 'tr-lone', '♚'));
+    glyphs.append(drill.glyphs, el('span', 'tr-vs', 'v'), el('span', 'tr-lone', drill.vs ?? '♚'));
     const text = el('div', 'tr-hero-text');
     const title = el('div', 'cv-title');
     title.append(el('h1', 'dash-h', drill.name), el('span', 'tr-chip kind-drill', drill.pieces));
@@ -417,15 +468,18 @@ export class EndgamePage {
       el(
         'p',
         'tr-hero-line',
-        drill.goal === 'mate'
-          ? 'Mate before the 50-move rule against perfect defence. Every start is random.'
-          : 'Won positions that need the right idea, against perfect defence. Done when the pawn queens with the win kept.',
+        {
+          mate: 'Mate before the 50-move rule against perfect defence. Every start is random.',
+          promote: drill.id === 'kp' ? 'Won positions that need the right idea, against perfect defence. Done when the pawn queens with the win kept.' : 'A new variation of the pattern each time, checked in the tablebase. Done when the pawn queens with the win kept.',
+          capture: 'A new variation each time, against perfect defence. Done when you win their material (or mate) with the win kept.',
+          draw: `You defend. A new variation each time; Stockfish tries to win and the tablebase checks every move of yours. Hold for ${drill.hold} moves.`,
+        }[drill.goal],
       ),
     );
     const cta = el('div', 'eg-cta');
     const go = button('', 'primary tr-cta big', () => this.onStart(drillId));
     go.append(diceIcon(20), ' New random position');
-    cta.append(go, el('span', 'tr-muted', 'You play White or Black at random'));
+    cta.append(go, el('span', 'tr-muted', `${goalText(drill)} · either colour`));
     hero.append(glyphs, text, cta);
 
     // method
@@ -435,6 +489,13 @@ export class EndgamePage {
     if (drill.id === 'kbn') {
       const fig = el('figure', 'eg-figure');
       fig.append(cornerBoard(), el('figcaption', 'tr-muted', 'Light bishop: mate on a8 or h1'));
+      mbody.appendChild(fig);
+    } else if (drill.key) {
+      const fig = el('figure', 'eg-figure');
+      const flipped = drill.key.fen.split(' ')[1] === 'b';
+      fig.append(miniBoard(drill.key.fen, drill.key.caption, flipped), el('figcaption', 'tr-muted', drill.key.caption));
+      const play = button('Play this position', 'small eg-key-play', () => this.onStart(drillId, drill.key.fen), 'Try the classic position itself');
+      fig.appendChild(play);
       mbody.appendChild(fig);
     }
     const ol = el('ol', 'eg-steps');
@@ -451,6 +512,13 @@ export class EndgamePage {
     }
     mbody.appendChild(ol);
     method.appendChild(mbody);
+    if (drill.guide) {
+      const guide = el('details', 'eg-guide');
+      guide.open = true;
+      guide.appendChild(el('summary', '', 'How it works'));
+      for (const para of drill.guide) guide.appendChild(el('p', '', para));
+      method.appendChild(guide);
+    }
 
     // mastery
     const mastery = el('section', 'tr-card eg-mastery');

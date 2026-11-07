@@ -46,7 +46,7 @@ const start = (p, drill, fen) => p.evaluate(([d, f]) => mpct.endgameTrainer.star
   await page.click('#view-courses');
   await settle(page, 800);
   const drills = await page.$$eval('.tr-drill[data-drill]', (bs) => bs.map((b) => b.querySelector('.tr-drill-name').textContent));
-  check(drills.join(' | ') === 'Queen mate | Rook mate | Two bishops | Bishop and knight | King and pawn', `drills listed (${drills.join(' | ')})`);
+  check(drills.slice(0, 5).join(' | ') === 'Queen mate | Rook mate | Two bishops | Bishop and knight | King and pawn' && drills.length === 13, `drills listed (${drills.join(' | ')})`);
   check((await text(page, '.tr-drill[data-drill=kbn] .tr-drill-stat')) === 'Not tried yet', 'not tried yet');
   check((await text(page, '.tr-drill[data-drill=kbn] .tr-level')) === 'New', 'level: New');
   await page.click('.tr-drill[data-drill=kbn]');
@@ -136,6 +136,62 @@ const start = (p, drill, fen) => p.evaluate(([d, f]) => mpct.endgameTrainer.star
   await page.click('.eg-start .eg-again');
   await waitTurn(page);
   check((await page.evaluate(() => mpct.game.fen())) === '7k/8/6K1/8/8/8/8/1Q6 w - - 0 1', 'Again: the same start position');
+  await page.click('#eg-giveup');
+  await waitEnd(page);
+
+  // ---- the named endgames: groups, guides, key positions ---------------------------------------------
+  await page.click('#eg-stop');
+  await page.waitForSelector('#courses-view:not([hidden])');
+  await settle(page, 800);
+  if (await page.isVisible('.tr-crumb')) await page.click('.tr-crumb >> nth=0');
+  await settle(page, 600);
+  const groups = await page.$$eval('.tr-drill-group', (h) => h.map((x) => x.textContent));
+  check(groups.join(' | ') === 'Basic mates | Pawn endings | Rook endings | Queen and minor pieces', `drill groups (${groups.join(' | ')})`);
+  check((await page.$$('.tr-drill[data-drill]')).length === 13, '13 drills');
+  check((await text(page, '.tr-drill[data-drill=philidor] .tr-drill-goal')) === 'Defend: hold for 15 moves', 'defend drill goal');
+  await page.click('.tr-drill[data-drill=philidor]');
+  await settle(page);
+  check((await text(page, '.eg-guide')).includes('third rank'), 'the guide');
+  check(await page.isVisible('.eg-figure .mb'), 'the key position');
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/eg-philidor.png`, fullPage: true });
+
+  // a defend drill from the key position: a losing move, take back, then hold
+  await page.click('.eg-key-play');
+  await waitTurn(page);
+  check((await page.evaluate(() => mpct.board.orientation())) === 'black', 'you defend with Black');
+  check((await text(page, '#eg-status')).startsWith('Held: 0/15 moves'), `hold count (${await text(page, '#eg-status')})`);
+  await move(page, 'h6d6'); // Rd6+?? Kxd6
+  await waitEnd(page);
+  check((await text(page, '#eg-message')).includes('That loses'), `losing move spotted (${await text(page, '#eg-message')})`);
+  check((await text(page, '#eg-result')).includes('That lost the draw'), 'counted as not passed');
+  await page.click('#eg-takeback');
+  await waitTurn(page);
+  await page.waitForFunction(() => document.querySelector('#eg-message').textContent.includes('A drawing move'), null, { timeout: 5000 });
+  check(true, `hint for a drawing move (${await text(page, '#eg-message')})`);
+  const legal = () => page.evaluate(() => {
+    const d = mpct.game.dests();
+    for (const [from, tos] of d) for (const to of tos) if (from !== 'h6' || to[1] === '6') return from + to; // keep it simple: any move but the rook leaving its rank
+    return null;
+  });
+  await move(page, await legal());
+  await page.waitForFunction(() => mpct.endgameTrainer.canMove() || !document.querySelector('#eg-end').hidden, null, { timeout: 20000 });
+  check((await page.evaluate(() => mpct.game.moves.length)) >= 2, 'Stockfish attacked');
+  check((await text(page, '#eg-status')).startsWith('Held: 1/15'), `held one (${await text(page, '#eg-status')})`);
+  await page.click('#eg-giveup');
+  await waitEnd(page);
+
+  // win the material: queen takes rook
+  await start(page, 'qvr', '7k/1r6/6K1/8/8/8/8/1Q6 w - - 0 1'); // Qxb7 wins the rook (not mate: Kg8)
+  await waitTurn(page);
+  await move(page, 'b1b7');
+  await waitEnd(page);
+  check((await text(page, '#eg-result')).includes('Material won'), `captured (${await text(page, '#eg-result')})`);
+
+  // a server-made variation (Q v R)
+  await start(page, 'qvr');
+  await waitTurn(page);
+  const qvr = (await page.evaluate(() => mpct.game.fen())).split(' ')[0].replace(/[0-9/]/g, '');
+  check([...qvr].sort().join('') === 'KQkr' || [...qvr].sort().join('') === 'KRkq', `Q v R from the server (${qvr})`);
   await page.click('#eg-giveup');
   await waitEnd(page);
 
