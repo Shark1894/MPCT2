@@ -60,6 +60,7 @@ const start = (p, drill, fen) => p.evaluate(([d, f]) => mpct.endgameTrainer.star
   await page.click('.cv-head-card button.primary');
   await page.waitForSelector('#eg:not([hidden])');
   await waitTurn(page);
+  check(JSON.stringify(await page.evaluate(() => mpct.currentActivity())) === JSON.stringify({ category: 'endgames', activity: 'endgame-drill', detail: 'kbn' }), 'time counts as the B+N drill');
   const startFen = await page.evaluate(() => mpct.game.fen());
   const you = startFen.split(' ')[1] === 'w' ? 'white' : 'black';
   check((await page.evaluate(() => mpct.board.orientation())) === you, `board from your side (${you})`);

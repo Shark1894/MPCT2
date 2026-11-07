@@ -610,3 +610,22 @@ class EndgameAttempt(Base):
     hints: Mapped[int] = mapped_column(server_default="0")
     seconds: Mapped[float]
     finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ActivitySession(Base):
+    """Time spent in one part of the app (Stats tab). The browser counts active seconds (visible
+    and touched within the last 2 minutes) per stretch of one activity, and sends them under a
+    key of its own making, so repeated reports of the same stretch update one row.
+    category: openings / tactics / endgames / strategy / games / analysis; activity: the part of
+    the app (opening-training, puzzles-rated, woodpecker, endgame-drill, ...)."""
+
+    __tablename__ = "activity_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(36), unique=True)
+    category: Mapped[str] = mapped_column(String(10))
+    activity: Mapped[str] = mapped_column(String(20))
+    detail: Mapped[str | None] = mapped_column(String(100))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    seconds: Mapped[float]
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

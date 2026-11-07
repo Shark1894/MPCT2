@@ -22,6 +22,8 @@ import { Sounds, movedOneForward } from './sounds.js';
 import { PuzzleController, PuzzlesView } from './puzzles.js';
 import { CourseTrainer } from './courses.js';
 import { TrainingView } from './training-hub.js';
+import { startTimeTracking } from './activity.js';
+import { StatsView } from './stats.js';
 import { EndgameTrainer } from './endgames.js';
 import { isModalOpen, plural, store, toast } from './ui.js';
 import { reviewComplete, reviewPayload } from './gamereview.js';
@@ -113,7 +115,7 @@ function trainingMode(active, badge, bodyClass = 'training') {
   document.body.classList.toggle(bodyClass, active);
   $('mode-badge').textContent = badge;
   $('mode-badge').hidden = !active;
-  for (const v of ['dashboard', 'games', 'wild', 'courses']) $(`view-${v}`).disabled = active;
+  for (const v of ['dashboard', 'games', 'wild', 'courses', 'stats']) $(`view-${v}`).disabled = active;
   repertoire.setTraining(active);
 }
 
@@ -262,6 +264,37 @@ const coursesView = new TrainingView({
     courseTrainer.start(list, label, opts);
   },
 });
+
+// ---- time spent (Stats tab) --------------------------------------------------------
+
+const COURSE_CATEGORY = { tactics: 'tactics', woodpecker: 'tactics', strategy: 'strategy', endgames: 'endgames' };
+const openingName = () => repertoire._opening()?.name ?? null;
+
+/** What you're doing right now, for the time tracker (null: not counted). */
+function currentActivity() {
+  const a = (category, activity, detail = null) => ({ category, activity, detail });
+  if (view === 'dashboard') return a('openings', 'dashboard', openingName());
+  if (view === 'games') return a('games', 'games-list');
+  if (view === 'wild') return a('openings', 'wild');
+  if (view !== 'board') return null; // the Training hub and Stats are for choosing and looking, not training
+  if (trainer.active) return a('openings', 'opening-training', openingName());
+  if (drill.active) return a('openings', 'position-drill', openingName());
+  if (puzzles.active) return a('tactics', puzzles.mode === 'mine' ? 'puzzles-mine' : 'puzzles-rated');
+  if (courseTrainer.active) {
+    if (courseTrainer.wp) return a('tactics', 'woodpecker', courseTrainer.wp.course ?? null);
+    const c = courseTrainer.course;
+    return a(COURSE_CATEGORY[c?.kind] ?? 'analysis', 'course', c?.name ?? null);
+  }
+  if (endgameTrainer.active) return a('endgames', 'endgame-drill', endgameTrainer.run?.drill?.id ?? null);
+  if (play.active) return a('games', 'play');
+  if (review.running) return a('games', 'engine-review');
+  if (gamePanel.isOpen) return a('games', 'game-study');
+  if (repertoire.openingId) return a('openings', 'repertoire', openingName());
+  return a('analysis', 'analysis');
+}
+
+const timeTracking = startTimeTracking(currentActivity);
+const statsView = new StatsView({ flush: () => timeTracking.flush() });
 
 // ---- games -------------------------------------------------------------------
 
@@ -432,7 +465,7 @@ async function startTraining(opening, mode, lineId, tag, label) {
 
 // ---- views: Board | Dashboard | Games -----------------------------------------------
 
-const VIEWS = { board: 'main.layout', dashboard: '#dashboard', games: '#games-view', wild: '#wild-view', courses: '#courses-view' };
+const VIEWS = { board: 'main.layout', dashboard: '#dashboard', games: '#games-view', wild: '#wild-view', courses: '#courses-view', stats: '#stats-view' };
 let view = 'board';
 
 function setView(next) {
@@ -465,6 +498,7 @@ function setView(next) {
   else wildView.hide();
   if (view === 'courses') coursesView.refresh();
   else coursesView.hide();
+  if (view === 'stats') statsView.refresh();
   window.scrollTo(0, 0);
 }
 
@@ -728,4 +762,4 @@ repertoire.init().then(async () => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, courseTrainer, coursesView, endgameTrainer, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval, masters, myGames, lichessGames, handsFree: trainer.voice };
+window.mpct = { statsView, timeTracking, currentActivity, game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, courseTrainer, coursesView, endgameTrainer, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval, masters, myGames, lichessGames, handsFree: trainer.voice };

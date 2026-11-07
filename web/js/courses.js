@@ -114,7 +114,8 @@ export class CourseTrainer {
 
   /**
    * Go through these exercises ({id}) in order. opts.woodpecker = {cycleId, number, done, total,
-   * course}: a Woodpecker cycle (each puzzle timed, first go recorded in the cycle).
+   * course}: a Woodpecker cycle (each puzzle timed, first go recorded in the cycle). opts.course =
+   * {name, kind}: the course they come from (for the time spent on it).
    */
   start(list, label, opts = {}) {
     if (!list.length) {
@@ -125,6 +126,7 @@ export class CourseTrainer {
     this.total = list.length;
     this.label = label;
     this.wp = opts.woodpecker ? { ...opts.woodpecker } : null;
+    this.course = opts.course ? { name: opts.course.name, kind: opts.course.kind } : null;
     this.session = { solved: 0, missed: 0, read: 0, seconds: 0 };
     this.el.clockBox.hidden = !this.wp;
     clearInterval(this.ticker);

@@ -106,6 +106,10 @@ async function importFile(page, file) {
 
   await waitTurn(page);
   check((await text(page, '#cx-title')) === 'Puzzle 2', 'first exercise');
+  {
+    const a = await page.evaluate(() => mpct.currentActivity());
+    check(a.category === 'tactics' && a.activity === 'course' && a.detail === 'Test Tactics', 'time counts as a tactics course');
+  }
   check((await page.evaluate(() => mpct.game.moves.map((m) => m.san))).join(' ') === 'h6', "opponent's first move played for you");
   check((await page.evaluate(() => mpct.board.orientation())) === 'white', 'board from your side');
   check((await notes(page)).join('|') === 'White to play and win.', 'start note shown, later notes hidden');
@@ -208,6 +212,10 @@ async function importFile(page, file) {
   await page.click('.wp-current button.primary'); // Start solving
   await waitTurn(page);
   check(await page.isVisible('#cx-clock'), 'clock shown');
+  {
+    const a = await page.evaluate(() => mpct.currentActivity());
+    check(a.category === 'tactics' && a.activity === 'woodpecker' && a.detail === 'The Woodpecker Method', 'time counts as Woodpecker');
+  }
   check((await text(page, '#cx-progress')).includes('Cycle 1 · puzzle 1 of 2'), 'cycle progress in the panel');
   await page.waitForTimeout(1300);
   check((await text(page, '#cx-timer')) === '0:01', 'clock running');

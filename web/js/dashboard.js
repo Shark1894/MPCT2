@@ -219,8 +219,6 @@ export class DashboardView {
     this.el.mastery.innerHTML = '';
     this.el.fcChart.innerHTML = '';
     this.el.fcNote.textContent = '';
-    this.el.ppList.innerHTML = '';
-    this.el.ppEmpty.hidden = true;
     this.el.showing.textContent = '';
     this.el.trainShown.hidden = true;
     this.el.lines.innerHTML = '';

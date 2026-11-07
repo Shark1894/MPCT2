@@ -33,6 +33,9 @@ export class TrainingView {
    */
   constructor(deps) {
     Object.assign(this, deps);
+    // Every start says which course it's from (for the Stats tab): the one last opened or started.
+    const start = deps.onStart;
+    this.onStart = (list, label, opts = {}) => start(list, label, { course: this.activeCourse ?? null, ...opts });
     this.el = { page: $('tr-page'), puzzles: $('puzzles-view') };
     this.page = store.get('trainingPage', { view: 'hub' });
     this.details = new Map();
@@ -204,6 +207,7 @@ export class TrainingView {
   }
 
   async _continueCycle(c) {
+    this.activeCourse = c;
     let o;
     try {
       o = await api.woodpecker(c.id);
@@ -466,6 +470,7 @@ export class TrainingView {
   // ---- a course's page ---------------------------------------------------------------------------------
 
   async _coursePage(box, c) {
+    this.activeCourse = c;
     if (!c) return this.go({ view: 'hub' });
     const crumbs = this._crumbs([['Courses', 'tr-courses'], [c.name]]);
     if (c.kind === 'woodpecker') {
@@ -550,6 +555,7 @@ export class TrainingView {
   }
 
   async _startCourse(c, which) {
+    this.activeCourse = c;
     if (!this.details.has(c.id)) await this._load(c.id);
     const full = this.details.get(c.id);
     if (!full) return;

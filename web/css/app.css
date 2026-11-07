@@ -5032,3 +5032,349 @@ button.wp-cell:hover {
   .tr-hero { padding: 14px; }
   .wp-rings svg { width: 120px; height: 120px; }
 }
+
+/* ==== Stats tab: time spent per category and activity, in the dashboard's cards. ========== */
+
+.st-view {
+  max-width: 1000px;
+}
+
+.st-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.st-h {
+  font-size: 20px;
+  margin: 0;
+}
+
+.st-sub {
+  margin: 4px 0 0;
+}
+
+.st-total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.st-total-n {
+  font-size: 32px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.st-swatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.st-bar {
+  display: flex;
+  gap: 2px; /* a surface gap between segments */
+  height: 14px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.st-bar.empty {
+  background: var(--surface-2);
+}
+
+.st-bar-seg {
+  flex-basis: 0;
+  min-width: 3px;
+}
+
+.st-legend {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 24px;
+}
+
+@media (max-width: 640px) {
+  .st-legend {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.st-legend li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: 'sw name time' '. share share';
+  align-items: center;
+  column-gap: 8px;
+}
+
+.st-legend li .st-swatch { grid-area: sw; }
+.st-legend-name { grid-area: name; color: var(--text); }
+.st-legend-time { grid-area: time; font-variant-numeric: tabular-nums; color: var(--text); }
+.st-legend-share { grid-area: share; font-size: 12px; }
+
+.st-legend li.none {
+  opacity: 0.45;
+}
+
+.st-legend-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.st-legend-inline li {
+  display: flex;
+  gap: 6px;
+}
+
+.st-chart {
+  position: relative;
+  padding: 4px 0 22px 44px; /* room for the axis labels and the dates */
+}
+
+.st-plot {
+  position: relative;
+  height: 200px;
+}
+
+.st-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--border);
+}
+
+.st-grid:first-child {
+  border-top-color: var(--text-dim);
+}
+
+.st-grid-label {
+  position: absolute;
+  right: calc(100% + 6px);
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.st-cols {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(30, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.st-col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  outline: none;
+  border-radius: 4px 4px 0 0;
+}
+
+.st-col:hover,
+.st-col:focus-visible {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.st-col:focus-visible {
+  box-shadow: 0 0 0 2px var(--blue);
+}
+
+.st-col[data-label]::after {
+  content: attr(data-label);
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.st-col.today[data-label]::after {
+  color: var(--text);
+}
+
+.st-stack {
+  display: flex;
+  flex-direction: column-reverse; /* first category at the baseline */
+  gap: 2px;
+  width: min(100%, 16px);
+  margin: 0 auto;
+  border-radius: 4px 4px 0 0;
+  overflow: hidden;
+  min-height: 2px;
+}
+
+.st-seg {
+  flex-basis: 0;
+  min-height: 2px;
+}
+
+.st-tip {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  z-index: 2;
+  min-width: 150px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.st-tip strong { color: var(--text); }
+.st-tip-total { color: var(--text-dim); margin-bottom: 2px; }
+
+.st-tip-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.st-tip-v { font-variant-numeric: tabular-nums; }
+
+.st-table {
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.st-table summary {
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.st-tbl {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.st-tbl th,
+.st-tbl td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.st-tbl th { color: var(--text-dim); font-weight: 500; }
+.st-tbl .num { text-align: right; }
+
+.st-acts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.st-act {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.st-act:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.st-act-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+}
+
+.st-act-time {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.st-act-meter {
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.st-act-meter span {
+  display: block;
+  height: 100%;
+  background: var(--text-dim);
+  border-radius: 2px;
+}
+
+.st-act-details {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.st-note {
+  font-size: 12px;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .st-chart { padding-left: 38px; }
+  .st-col[data-label]::after { font-size: 10px; }
+}
+
+/* Six tabs on a phone: tighter, and the row scrolls sideways rather than widening the page. */
+@media (max-width: 520px) {
+  .topbar {
+    gap: 8px;
+    padding: 0 10px;
+  }
+
+  .views {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 2px;
+  }
+
+  .views::-webkit-scrollbar {
+    display: none;
+  }
+
+  .view-tab {
+    flex: none;
+    padding: 4px 5px;
+    font-size: 13px;
+  }
+}

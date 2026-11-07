@@ -45,6 +45,7 @@ The full plan, decisions and data model are in the project's
 | — | Endgame drills: random mates and K+P v K against perfect (tablebase) defence | Done |
 | — | Training tab redesign: a hub where puzzles, courses and drills each have their own look | Done |
 | — | Named endgames: Lucena, Philidor, Vančura, Q v P, Q v R, R v B, wrong rook pawn, Réti (win and defend drills with guides) | Done |
+| — | Stats tab: time spent on openings, tactics, endgames, strategy, games and analysis | Done |
 
 ## Using the board
 
@@ -690,6 +691,37 @@ current cycle, puzzles still to do), `POST /api/courses/{id}/woodpecker/cycles` 
 `POST /api/woodpecker/cycles/{id}/attempts` (`{"exercise_id": 1, "solved": true, "seconds": 12.5}`; a second go
 isn't stored), `GET /api/courses/{id}/woodpecker/times`.
 
+## Stats (time spent)
+
+The **Stats** tab shows where your time goes: a period's total (Today / 7 days / 30 days / All
+time) split by category — **openings**, **tactics**, **endgames**, **strategy**, **games** and
+**analysis** — the last 30 days as stacked bars (hover a day for its split, or show them as a
+table), and a breakdown by activity with the openings, courses and drills you spent it on.
+
+Time counts while the app is visible and you've clicked, typed, scrolled or moved the mouse in
+the last **2 minutes**; a hidden tab or an idle one isn't counted. What counts as what:
+
+| On screen | Category · activity |
+| --- | --- |
+| Opening training, position drills | Openings · opening training / position drills (with the opening) |
+| The board with an opening chosen; Dashboard; Wild | Openings · repertoire & board / dashboard / wild |
+| Rated puzzles, puzzles from your games, Woodpecker cycles | Tactics |
+| A course | By its kind: tactics → Tactics, strategy → Strategy, endgame courses → Endgames, other → Analysis |
+| Endgame drills | Endgames (with the drill) |
+| Playing the engine, an engine review, a game open on the board, the Games list | Games |
+| The board with no opening chosen | Analysis |
+| The Training hub, Stats | not counted (choosing, not training) |
+
+The browser keeps a stretch per activity (a new one when the activity or the day changes, or
+after being idle) and sends it every 30 seconds, when it ends and when the page is hidden.
+Before tracking began, the only times kept were per attempt for rated puzzles, Woodpecker
+puzzles and endgame drills: those are included up to the first tracked stretch (each capped at
+10 minutes, in case it was left open), so your history isn't empty.
+
+`POST /api/time` (`{"key", "category", "activity", "detail", "started_at", "seconds"}`; the same
+key updates the stretch and never lowers its time), `GET /api/time?tz=Europe/London` (seconds
+per local day, category, activity and detail).
+
 ## Importing from the desktop app
 
 `app/tools/import_legacy.py` copies the openings, lines and position comments from a PyQt MPCT repertoire file
@@ -785,6 +817,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/masters.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/lichess.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/courseimport.e2e.cjs  # empty database (COURSE_FILE=export.json also imports a real one)
 MPCT_URL=http://localhost:8010/ node tests/e2e/courses.e2e.cjs      # empty database (Training tab)
+MPCT_URL=http://localhost:8010/ node tests/e2e/stats.e2e.cjs        # empty database (time tracking, Stats tab)
 MPCT_URL=http://localhost:8010/ node tests/e2e/endgames.e2e.cjs     # empty database; app run with LICHESS_TABLEBASE_URL=http://localhost:8098 and tests/e2e/fake_tablebase.py running (FAKE_TB_PID=<its pid> also checks the Stockfish fallback)
 MPCT_URL=http://localhost:8010/ node tests/e2e/mygames.e2e.cjs      # empty database (game groups, Your games explorer)
 MPCT_URL=http://localhost:8010/ node tests/e2e/handsfree.e2e.cjs    # empty database (fake speech in and out)

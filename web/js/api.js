@@ -107,6 +107,7 @@ export const api = {
   endgamePosition: (drill) => request('GET', `/endgames/position/${drill}`),
   endgameAttempt: (body) => request('POST', '/endgames/attempts', { body }),
   endgameStats: () => request('GET', '/endgames/stats'),
+  timeSpent: (tz) => request('GET', '/time', { params: { tz } }),
   woodpeckerTimes: (courseId) => request('GET', `/courses/${courseId}/woodpecker/times`),
   startWoodpeckerCycle: (courseId, body) => request('POST', `/courses/${courseId}/woodpecker/cycles`, { body }),
   abandonWoodpeckerCycle: (cycleId) => request('DELETE', `/woodpecker/cycles/${cycleId}`),
