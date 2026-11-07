@@ -42,7 +42,11 @@ def test_cycle_lifecycle(client, db):
     summary = client.get("/api/courses").json()[0]
     assert summary["cycle"]["number"] == 1 and summary["cycle"]["finished_at"]
 
+    # by chapter, for the last (finished) cycle: one missed in chapter 1, one solved in chapter 2
+    assert [(c["in_cycle"], c["done"], c["solved"]) for c in o["chapters"]] == [(True, 1, 0), (True, 1, 1)]
     c2 = client.post(f"/api/courses/{cid}/woodpecker/cycles", json={"chapter_ids": [o["chapters"][1]["id"]], "target_days": 5}).json()
+    o2 = client.get(f"/api/courses/{cid}/woodpecker").json()
+    assert [(c["in_cycle"], c["done"]) for c in o2["chapters"]] == [(False, 0), (True, 0)]
     assert (c2["number"], c2["total"]) == (2, 1)
     client.post(f"/api/woodpecker/cycles/{c2['id']}/attempts", json={"exercise_id": second, "solved": True, "seconds": 4})
     times = client.get(f"/api/courses/{cid}/woodpecker/times").json()

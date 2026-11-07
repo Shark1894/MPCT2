@@ -169,6 +169,7 @@ def test_summary(client, imported):
     assert len(s["history"]) == 1 and s["history"][0]["rating"] == s["rating"]
     assert [r["puzzle_id"] for r in s["recent"]] == ["0009B", "0009B", "0000D", "00008"]
     assert s["recent"][0]["rated"] is False and "Hanging piece" in s["recent"][3]["themes"]
+    assert s["recent"][3]["fen"] and " w " in s["recent"][3]["fen"]  # 00008: Black's set-up move played, White to solve
     assert s["themes"] == []  # fewer than 5 attempts per theme
 
 

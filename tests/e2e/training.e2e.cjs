@@ -31,7 +31,7 @@ const sans = (page) => page.evaluate(() => mpct.game.moves.slice(0, mpct.game.pl
 const text = (page, sel) => page.textContent(sel);
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
   const page = await browser.newPage({ viewport: { width: 1440, height: 860 } });
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));

@@ -53,6 +53,10 @@ const waitEnd = (p) => p.waitForSelector('#cx-end:not([hidden])', { timeout: 500
 const notes = (p) => p.$$eval('#cx-notes .cx-note', (els) => els.map((e) => e.textContent));
 
 async function importFile(page, file) {
+  if (!(await page.isVisible('#cv-import'))) {
+    await page.click('.tr-crumb >> nth=0'); // the import button is on the hub
+    await page.waitForSelector('#cv-import');
+  }
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('#cv-import')]);
   await chooser.setFiles(file);
   await page.waitForSelector('dialog[open] input[name=name]');
@@ -87,7 +91,8 @@ async function importFile(page, file) {
   await page.click('dialog[open] button[type=submit]');
   await settle(page);
   check((await text(page, '.cv-head-card .cv-counts')).includes('3 exercises · 0 solved · 0 missed · 3 to do'), 'course card counts');
-  check((await page.$$('.cv-chapter')).length === 2, 'chapters listed (course selected after import)');
+  check((await page.$$('.cv-chapter')).length === 2, 'chapters listed (the course opens after import)');
+  check((await text(page, '.tr-crumbs')).includes('Training›Courses›Test Tactics'), 'breadcrumb');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/courses-tab.png` });
 
   // ---- work through it -----------------------------------------------------------------------------
@@ -160,18 +165,34 @@ async function importFile(page, file) {
   await page.waitForFunction(() => document.querySelector('dialog[open] h2')?.textContent === 'Course imported', null, { timeout: 15000 });
   await page.click('dialog[open] button[type=submit]');
   await settle(page, 800);
-  const groups = await page.$$eval('.cv-group', (gs) => gs.map((g) => `${g.querySelector('.cv-group-h').textContent}: ${[...g.querySelectorAll('.cv-item-name')].map((n) => n.textContent).join(',')}`));
-  check(groups.join(' | ') === 'Puzzles: Rated puzzles,From your games | Endgames: Queen mate (K+Q v K),Rook mate (K+R v K),Two bishops (K+B+B v K),Bishop and knight (K+B+N v K),King and pawn (K+P v K) | Woodpecker1: The Woodpecker Method | Tactics1: Test Tactics', `courses grouped by kind (${groups.join(' | ')})`);
-  check((await text(page, '.cv-item.selected .cv-item-name')) === 'The Woodpecker Method', 'imported course selected');
-  check((await text(page, '.cv-item.selected .cv-item-progress')) === 'No cycle yet', 'woodpecker progress in the list');
+  check((await text(page, '.cv-head-card .dash-h')) === 'The Woodpecker Method', 'the imported Woodpecker course opens');
   check((await text(page, '.wp-current .wp-h')) === 'The Woodpecker Method', 'woodpecker intro');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/wp-empty.png` });
 
-  // select the other course and back
-  await page.click('.cv-item:has-text("Test Tactics")');
+  // the hub: up next, a shelf of covers (each kind its own look), drills apart from courses
+  await page.click('.tr-crumb >> nth=0');
+  await settle(page, 800);
+  const covers = await page.$$eval('.tr-shelf .tr-cover[data-course]', (cs) => cs.map((c) => `${c.className.match(/kind-(\w+)/)[1]}: ${c.querySelector('.tr-cover-name').textContent}`));
+  check(covers.join(' | ') === 'woodpecker: The Woodpecker Method | tactics: Test Tactics', `course covers (${covers.join(' | ')})`);
+  check((await text(page, '.tr-cover.kind-woodpecker .tr-cover-big')) === 'No cycle yet', 'woodpecker cover: no cycle yet');
+  check((await page.$$('.tr-drill[data-drill]')).length === 5, 'endgame drills in their own section');
+  check((await page.$$('#tr-courses .tr-drill')).length === 0, 'drills are not mixed in with courses');
+  const next = await page.$$eval('.tr-next-card', (cs) => cs.map((c) => c.dataset.kind));
+  check(next[0] === 'woodpecker' && next.includes('drill'), `up next (${next.join(', ')})`);
+  await page.click('.tr-chip-btn[data-filter=tactics]');
+  await settle(page);
+  check((await page.$$('.tr-shelf .tr-cover[data-course]')).length === 1, 'filter: tactics only');
+  await page.click('.tr-chip-btn[data-filter=""]');
+  await settle(page);
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/hub-e2e.png`, fullPage: true });
+
+  // a course page and back
+  await page.click('.tr-cover.kind-tactics');
   await settle(page);
   check((await text(page, '.cv-head-card .dash-h')) === 'Test Tactics', 'selecting a course shows it');
-  await page.click('.cv-item:has-text("The Woodpecker Method")');
+  await page.click('.tr-crumb >> nth=0');
+  await settle(page);
+  await page.click('.tr-cover.kind-woodpecker');
   await settle(page);
 
   // ---- a cycle ---------------------------------------------------------------------------------------
@@ -216,12 +237,17 @@ async function importFile(page, file) {
   check((await text(page, '.wp-current .wp-h')).includes('Ready for cycle 2'), 'ready for cycle 2');
   const row = await page.$$eval('.wp-history tbody tr td', (t) => t.map((x) => x.textContent));
   check(row[0] === '1' && row[4] === '2/2' && row[5] === '50%', `cycle table (${row.join(', ')})`);
-  check((await text(page, '.cv-item.selected .cv-item-progress')) === 'Cycle 1 done', 'list shows the cycle');
+  check((await page.$$('.wp-grid .wp-cell')).length === 2 && (await page.$$('.wp-grid .wp-cell.miss')).length === 1, 'puzzle map: 2 puzzles, 1 missed');
+  check((await page.$$eval('.wp-ch', (r) => r.length)) === 2, 'cycle by chapter');
   await page.click('.wp-times summary');
   await page.waitForSelector('.wp-times-table');
   const times = await page.$$eval('.wp-times-table tbody tr', (rs) => rs.map((r) => [...r.children].slice(0, 3).map((c) => c.textContent).join(' ')));
   check(times.length === 2 && times.some((t) => t.startsWith('Puzzle 3 Intermediate ✗ 0:0')), `puzzle times (${times.join(' | ')})`);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/wp-done.png`, fullPage: true });
+  await page.click('.tr-crumb >> nth=0');
+  await settle(page);
+  check((await text(page, '.tr-cover.kind-woodpecker .tr-cover-big')) === 'Cycle 1', 'the cover shows the cycle');
+  check((await text(page, '.tr-next-card[data-kind=woodpecker] .tr-cta')) === 'Start cycle 2', 'up next: start cycle 2');
 
   check(errors.length === 0, `no page errors ${errors.join(' | ')}`);
   await browser.close();

@@ -43,6 +43,7 @@ The full plan, decisions and data model are in the project's
 | — | Training tab grouped by kind; Woodpecker Method cycles with timed puzzles | Done |
 | — | Puzzles moved into the Training tab | Done |
 | — | Endgame drills: random mates and K+P v K against perfect (tablebase) defence | Done |
+| — | Training tab redesign: a hub where puzzles, courses and drills each have their own look | Done |
 
 ## Using the board
 
@@ -590,12 +591,19 @@ through in order, move by move, on the board.
   guessed from the name) and tick the chapters. Lines may start from any position and be for either side.
   Importing the same course again updates titles, moves and notes and adds what's new; your progress is kept,
   except for exercises whose moves changed (they're new again).
-- **Puzzles** sits at the top of the list: **Rated puzzles** (the Lichess puzzle database and your puzzle rating,
-  shown in the list) and **From your games** (your own mistakes; the list shows how many are due). They used to be
-  a tab of their own; a saved Puzzles view opens here.
-- Courses are listed below, grouped by kind (Woodpecker, Tactics, Strategy, Endgames, Other) with a progress
-  bar each; click one to show it on the right (the choice is remembered). **Edit** renames it, moves it to
-  another group, resets progress or deletes it.
+- The tab is one page (**Overview**, with links to its three sections), and each family looks different on purpose:
+  - **Up next**: one suggestion from each: your Woodpecker cycle (or a course to continue), your own puzzles when
+    due (else rated puzzles), and the endgame drill you're furthest from mastering.
+  - **Puzzles** (amber): your rating with its change this week and trend line, rated puzzles (theme, Start, your
+    weakest themes), from your games (due count, Practise due, Manage), and your recent puzzles as boards (click to
+    try one again). **All puzzle stats** and **Manage** open the full puzzle pages (database download, rating
+    history, themes, your names); they used to be a tab of their own and a saved Puzzles view opens there.
+  - **Courses** (blue; Woodpecker purple): a shelf of covers with a progress ring each (Woodpecker: the cycle),
+    filter chips by kind, **Import course**.
+  - **Endgame drills** (teal), apart from endgame courses: one tile per drill with its pieces, level (New /
+    Learning / Solid: 3 of the last 5 passed / Mastered: the last 5 passed) and the last 8 results.
+- A course, a drill or the puzzle pages open as their own page with a breadcrumb back (the page is remembered).
+  **Edit** on a course renames it, changes its kind, resets progress or deletes it.
 - A course shows its progress (solved, missed, to do) and its chapters; open a chapter to see its exercises
   (green solved, red missed) and click one to start from there. **Start / Continue** goes through the exercises
   not solved yet in course order; **Retry missed** goes through the missed ones; each chapter has its own
@@ -613,9 +621,11 @@ through in order, move by move, on the board.
 
 ### Endgame drills
 
-Under **Endgames** in the Training list (above any imported endgame courses): **Queen mate** (K+Q v K), **Rook
-mate** (K+R v K), **Two bishops** (K+B+B v K), **Bishop and knight** (K+B+N v K) and **King and pawn** (K+P v K),
-each with a technique tip, your results and the latest attempts (**Again** replays a start position).
+In **Endgame drills** on the Training page: **Queen mate** (K+Q v K), **Rook mate** (K+R v K), **Two bishops**
+(K+B+B v K), **Bishop and knight** (K+B+N v K) and **King and pawn** (K+P v K). A drill's page has **New random
+position**, the method (three steps; the mating corners for B+N), your mastery level, results and a chart of
+moves used against perfect play and the 50-move limit, and your recent starting positions as boards (**Again**
+replays one).
 
 - Every **New position** is random. Mates: you (White or Black) to move, the lone king in the middle, nothing of
   yours hanging, the bishops on opposite colours. K+P v K: the server makes realistic candidates (your king near
@@ -646,11 +656,14 @@ the same set again, faster, each cycle aiming at half the days of the one before
   the cycle. **Pause** (or **P**) stops the clock and hides the board. With **Next puzzle automatically** a solved
   puzzle moves straight on. The cycle finishes by itself with its last puzzle. Information pages and reference
   lines aren't puzzles and are left out.
-- The page shows the current cycle (done, accuracy, total time, time a puzzle, days against the target, pace:
+- The page leads with the book and one ring per cycle, then the current cycle (done, accuracy, total time, time a puzzle, days against the target, pace:
   puzzles ahead of or behind the target pace and how many a day finish on time, time left at your average; the
   mark on the bar is where target pace would be), every cycle side by side (days against target, accuracy, time,
   time a puzzle and its change from the cycle before), and **Puzzle times**: each puzzle's time per cycle (✗ =
-  missed), slowest or most missed first, with **Practise** to solve one now (not recorded in a cycle).
+  missed), slowest or most missed first, with **Practise** to solve one now (not recorded in a cycle). Also the
+  **halving staircase** (days per cycle against each target, the next targets halving), the cycle **by chapter**,
+  and the **puzzle map**: one square per puzzle, coloured by its time in the cycle (under 15 s, up to 60 s, over,
+  missed, not yet); click one to practise it.
 
 API: `GET /api/courses`, `POST /api/courses/import`, `GET|PATCH|DELETE /api/courses/{id}`,
 `POST /api/courses/{id}/reset` (`{"chapter_id": null}` = the whole course), `GET /api/exercises/{id}`,
@@ -945,6 +958,9 @@ web/              frontend served as-is
   js/woodpecker.js  Woodpecker page in the Training tab
   js/endgame-core.js  endgame drills: random mates, reading the tablebase (pure logic, unit tested)
   js/endgames.js  endgame drills on the board + their page in the Training tab
+  js/training-hub.js  the Training tab: hub, course pages, puzzle pages
+  js/training-core.js  mini boards, drill levels, rating trend (pure logic, unit tested)
+  js/dom.js       small DOM builders (mini boards, rings, breadcrumbs)
   js/woodpecker-core.js  Woodpecker times, pace and sorting (pure logic, unit tested)
   js/sounds.js    move sounds (Web Audio; choosing the sound is unit tested)
   js/play.js      play vs engine: levels, engine replies, takeback, resign, save

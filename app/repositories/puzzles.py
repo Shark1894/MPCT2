@@ -9,6 +9,8 @@ Only the first go at a puzzle is rated, as on Lichess; retries are recorded but 
 """
 
 import random
+
+import chess
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select, text
@@ -136,6 +138,19 @@ def record_attempt(s: Session, puzzle_id: str, solved: bool, seconds: int | None
     }
 
 
+def _solver_fen(p: Puzzle | None) -> str | None:
+    """The position you solve from (after the opponent's set-up move), for thumbnails; None if
+    the puzzle is no longer in the database."""
+    if p is None:
+        return None
+    try:
+        board = chess.Board(p.fen)
+        board.push_uci(p.moves.split()[0] if isinstance(p.moves, str) else p.moves[0])
+        return board.fen()
+    except (ValueError, IndexError):
+        return None
+
+
 def summary(s: Session, now: datetime | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     r = get_rating(s)
@@ -169,9 +184,12 @@ def summary(s: Session, now: datetime | None = None) -> dict:
             .order_by(last_per_day.c.day)
         ).all()
     ]
+    attempts = list(s.scalars(select(PuzzleAttempt).order_by(PuzzleAttempt.id.desc()).limit(RECENT)))
+    shown = {p.id: p for p in s.scalars(select(Puzzle).where(Puzzle.id.in_({a.puzzle_id for a in attempts})))} if attempts else {}
     recent = [
         {
             "puzzle_id": a.puzzle_id,
+            "fen": _solver_fen(shown.get(a.puzzle_id)),
             "attempted_at": a.attempted_at,
             "solved": a.solved,
             "rated": a.rated,
@@ -179,7 +197,7 @@ def summary(s: Session, now: datetime | None = None) -> dict:
             "change": round(a.rating_after) - round(a.rating_before),
             "themes": [THEMES[t] for t in a.themes if t in THEMES][:3],
         }
-        for a in s.scalars(select(PuzzleAttempt).order_by(PuzzleAttempt.id.desc()).limit(RECENT))
+        for a in attempts
     ]
     # Theme results (rated attempts): where you're strongest and weakest
     themes = []

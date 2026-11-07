@@ -45,13 +45,15 @@ const start = (p, drill, fen) => p.evaluate(([d, f]) => mpct.endgameTrainer.star
   // ---- the drills in the Training tab ---------------------------------------------------------------
   await page.click('#view-courses');
   await settle(page, 800);
-  const drills = await page.$$eval('.cv-item[data-drill]', (bs) => bs.map((b) => b.querySelector('.cv-item-name').textContent));
-  check(drills.join(' | ') === 'Queen mate (K+Q v K) | Rook mate (K+R v K) | Two bishops (K+B+B v K) | Bishop and knight (K+B+N v K) | King and pawn (K+P v K)', `drills listed (${drills.join(' | ')})`);
-  check((await text(page, '.cv-item[data-drill=kbn] .cv-item-progress')) === 'not tried', 'not tried yet');
-  await page.click('.cv-item[data-drill=kbn]');
+  const drills = await page.$$eval('.tr-drill[data-drill]', (bs) => bs.map((b) => b.querySelector('.tr-drill-name').textContent));
+  check(drills.join(' | ') === 'Queen mate | Rook mate | Two bishops | Bishop and knight | King and pawn', `drills listed (${drills.join(' | ')})`);
+  check((await text(page, '.tr-drill[data-drill=kbn] .tr-drill-stat')) === 'Not tried yet', 'not tried yet');
+  check((await text(page, '.tr-drill[data-drill=kbn] .tr-level')) === 'New', 'level: New');
+  await page.click('.tr-drill[data-drill=kbn]');
   await settle(page);
   check((await text(page, '.cv-head-card .dash-h')) === 'Bishop and knight', 'drill page');
-  check((await text(page, '.cv-head-card')).includes('corner of the bishop’s colour'), 'technique tip');
+  check((await text(page, '.eg-method')).includes('corner of the bishop’s colour'), 'the method');
+  check(await page.isVisible('.eg-corners'), 'mating corners diagram (B+N)');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/eg-page.png` });
 
   // ---- a random B+N position from the page ----------------------------------------------------------------
@@ -118,15 +120,20 @@ const start = (p, drill, fen) => p.evaluate(([d, f]) => mpct.endgameTrainer.star
   await page.click('#eg-stop');
   await page.waitForSelector('#courses-view:not([hidden])');
   await settle(page, 800);
-  check((await text(page, '.cv-item[data-drill=kq] .cv-item-progress')) === '1/1', 'K+Q: 1 of 1 in the list');
-  check((await text(page, '.cv-item[data-drill=kr] .cv-item-progress')) === '0/1', 'K+R: the slip counted, the practice not');
-  await page.click('.cv-item[data-drill=kq]');
+  await page.click('.tr-crumb >> nth=0');
+  await settle(page, 800);
+  check((await text(page, '.tr-drill[data-drill=kq] .tr-drill-stat')).startsWith('1/1'), 'K+Q: 1 of 1 on the hub');
+  check((await text(page, '.tr-drill[data-drill=kq] .tr-level')) === 'Learning', 'K+Q level: Learning');
+  check((await text(page, '.tr-drill[data-drill=kr] .tr-drill-stat')).startsWith('0/1'), 'K+R: the slip counted, the practice not');
+  check((await page.$$eval('.tr-drill[data-drill=kr] .tr-tick.fail', (t) => t.length)) === 1, 'result strip');
+  await page.click('.tr-drill[data-drill=kq]');
   await settle(page);
   const values = await page.$$eval('.wp-stat-value', (e) => e.map((x) => x.textContent));
   check(values[0] === '1' && values[1] === '100%' && values[2] === '1 move', `stats (${values.join(', ')})`);
-  check((await page.$$('.wp-table tbody tr')).length === 1, 'recent attempt listed');
+  check((await page.$$('.eg-start')).length === 1, 'recent start listed with its board');
+  check((await page.$$('.eg-ladder li.on')).length === 2, 'mastery ladder at Learning');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/eg-stats.png` });
-  await page.click('.wp-table tbody button'); // Again
+  await page.click('.eg-start .eg-again');
   await waitTurn(page);
   check((await page.evaluate(() => mpct.game.fen())) === '7k/8/6K1/8/8/8/8/1Q6 w - - 0 1', 'Again: the same start position');
   await page.click('#eg-giveup');

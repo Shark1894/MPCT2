@@ -20,7 +20,8 @@ import { HandsFree } from './handsfree.js';
 import { WildView } from './wild.js';
 import { Sounds, movedOneForward } from './sounds.js';
 import { PuzzleController, PuzzlesView } from './puzzles.js';
-import { CourseTrainer, CoursesView } from './courses.js';
+import { CourseTrainer } from './courses.js';
+import { TrainingView } from './training-hub.js';
 import { EndgameTrainer } from './endgames.js';
 import { isModalOpen, plural, store, toast } from './ui.js';
 import { reviewComplete, reviewPayload } from './gamereview.js';
@@ -245,8 +246,11 @@ const endgameTrainer = new EndgameTrainer({
   onFinished: () => setView('courses'),
 });
 
-const coursesView = new CoursesView({
-  puzzles: puzzlesView, // the Puzzles pages live in the Training tab
+const coursesView = new TrainingView({
+  puzzles: puzzlesView, // the full Puzzles pages live in the Training tab
+  onPuzzleStart: (theme) => puzzlesView.onStart(theme),
+  onOwnPuzzles: (list) => puzzlesView.onStartOwn(list),
+  onPuzzleOpen: (id) => puzzlesView.onRetry(id),
   onEndgame: async (drillId, fen) => {
     if (!(await startBoardMode())) return;
     setView('board');

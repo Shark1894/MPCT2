@@ -58,6 +58,7 @@ class HistoryPoint(BaseModel):
 
 class RecentAttempt(BaseModel):
     puzzle_id: str
+    fen: str | None = None  # the position you solved from (None if the puzzle is gone)
     attempted_at: datetime
     solved: bool
     rated: bool

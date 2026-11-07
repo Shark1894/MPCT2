@@ -97,6 +97,21 @@ def overview(s: Session, course_id: int) -> dict:
     rows = list(s.scalars(select(WoodpeckerCycle).where(WoodpeckerCycle.course_id == course.id).order_by(WoodpeckerCycle.number)))
     cycles = [_stats(s, c) for c in rows]
     current = next((c for c in cycles if not c["finished_at"]), None)
+    # The current cycle (else the last one) by chapter: puzzles done and solved in it.
+    shown = current or (cycles[-1] if cycles else None)
+    by_chapter: dict[int, tuple[int, int]] = {}
+    if shown:
+        for chapter_id, done, solved in s.execute(
+            select(CourseExercise.chapter_id, func.count(), func.count().filter(WoodpeckerAttempt.solved))
+            .join(WoodpeckerAttempt, WoodpeckerAttempt.exercise_id == CourseExercise.id)
+            .where(WoodpeckerAttempt.cycle_id == shown["id"])
+            .group_by(CourseExercise.chapter_id)
+        ):
+            by_chapter[chapter_id] = (done, solved)
+    for ch in chapters:
+        done, solved = by_chapter.get(ch["id"], (0, 0))
+        ch["in_cycle"] = bool(shown) and (not shown["chapter_ids"] or ch["id"] in shown["chapter_ids"])
+        ch["done"], ch["solved"] = done, solved
     todo: list[int] = []
     if current:
         tried = set(s.scalars(select(WoodpeckerAttempt.exercise_id).where(WoodpeckerAttempt.cycle_id == current["id"])))

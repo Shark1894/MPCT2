@@ -22,15 +22,11 @@ import {
 } from './endgame-core.js';
 import { clock, duration } from './woodpecker-core.js';
 import { plural, toast } from './ui.js';
+import { button, diceIcon, el, miniBoard } from './dom.js';
+import { drillLevel } from './training-core.js';
 
 const $ = (id) => document.getElementById(id);
 const REPLY_DELAY_MS = 350;
-const el = (tag, cls, text) => {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text != null) e.textContent = text;
-  return e;
-};
 
 export class EndgameTrainer {
   /**
@@ -372,10 +368,28 @@ export class EndgameTrainer {
 
 // ---- a drill's page in the Training tab -----------------------------------------------------------
 
-/** "12/15" style progress for the list. */
+/** "12/15" style progress for lists. */
 export function drillProgress(st) {
   if (!st?.attempts) return 'not tried';
   return `${st.successes}/${st.attempts}`;
+}
+
+const LADDER = ['New', 'Learning', 'Solid', 'Mastered'];
+
+/** B+N: the mating corners for a light-squared bishop (a8, h1), as a small diagram. */
+function cornerBoard() {
+  const b = el('div', 'mb eg-corners');
+  b.setAttribute('role', 'img');
+  b.setAttribute('aria-label', 'The mating corners: a8 and h1 for a light-squared bishop, a1 and h8 for a dark one');
+  for (let r = 0; r < 8; r++) {
+    for (let f = 0; f < 8; f++) {
+      const light = (r + f) % 2 === 0;
+      const corner = (r === 0 && f === 0) || (r === 7 && f === 7);
+      const near = !corner && ((r <= 1 && f <= 1) || (r >= 6 && f >= 6));
+      b.appendChild(el('span', `mb-sq ${light ? 'l' : 'd'}${corner ? ' corner' : near ? ' near' : ''}`));
+    }
+  }
+  return b;
 }
 
 export class EndgamePage {
@@ -387,37 +401,76 @@ export class EndgamePage {
   render(box, drillId, stats) {
     const drill = drillById(drillId);
     const st = stats?.[drillId] ?? { attempts: 0, successes: 0, recent: [] };
-    const head = el('section', 'dash-card cv-head-card');
-    const top = el('div', 'cv-head');
+    const level = drillLevel(st);
+
+    // hero
+    const hero = el('section', 'tr-hero eg-hero cv-head-card');
+    const glyphs = el('div', 'eg-hero-glyphs');
+    glyphs.setAttribute('aria-hidden', 'true');
+    glyphs.append(drill.glyphs, el('span', 'tr-vs', 'v'), el('span', 'tr-lone', '♚'));
+    const text = el('div', 'tr-hero-text');
     const title = el('div', 'cv-title');
-    title.append(el('h2', 'dash-h', drill.name), el('span', 'cv-kind cv-kind-endgames', drill.pieces));
-    top.appendChild(title);
-    const actions = el('div', 'cv-actions');
-    const go = el('button', 'primary', st.attempts ? 'New position' : 'Start');
-    go.type = 'button';
-    go.addEventListener('click', () => this.onStart(drillId));
-    actions.appendChild(go);
-    top.appendChild(actions);
-    head.appendChild(top);
-    head.appendChild(el('p', 'meta eg-tip', drill.tip));
-    head.appendChild(
+    title.append(el('h1', 'dash-h', drill.name), el('span', 'tr-chip kind-drill', drill.pieces));
+    text.append(
+      el('span', 'tr-eyebrow', `Endgame drill · ${drill.pieces}`),
+      title,
       el(
         'p',
-        'meta',
+        'tr-hero-line',
         drill.goal === 'mate'
-          ? 'A random position each time; the defence is perfect (the longest resistance). Pass = mate before the 50-move rule.'
-          : 'A position that’s won but needs the right idea; the defence is perfect. Pass = queening with the win still there.',
+          ? 'Mate before the 50-move rule against perfect defence. Every start is random.'
+          : 'Won positions that need the right idea, against perfect defence. Done when the pawn queens with the win kept.',
       ),
     );
+    const cta = el('div', 'eg-cta');
+    const go = button('', 'primary tr-cta big', () => this.onStart(drillId));
+    go.append(diceIcon(20), ' New random position');
+    cta.append(go, el('span', 'tr-muted', 'You play White or Black at random'));
+    hero.append(glyphs, text, cta);
 
-    const card = el('section', 'dash-card');
-    card.appendChild(el('h3', 'wp-h', 'Your results'));
-    const stats_ = el('div', 'wp-stats');
+    // method
+    const method = el('section', 'tr-card eg-method');
+    method.appendChild(el('h2', 'tr-card-title', 'The method'));
+    const mbody = el('div', 'eg-method-body');
+    if (drill.id === 'kbn') {
+      const fig = el('figure', 'eg-figure');
+      fig.append(cornerBoard(), el('figcaption', 'tr-muted', 'Light bishop: mate on a8 or h1'));
+      mbody.appendChild(fig);
+    }
+    const ol = el('ol', 'eg-steps');
+    for (const step of drill.steps) {
+      const li = el('li');
+      // "Edge first: all three pieces…" -> a bold lead-in, then the rest (sentence case)
+      const cut = step.indexOf(': ');
+      const head = cut > 0 ? step.slice(0, cut) : '';
+      if (head && head.length <= 32 && !head.includes('.')) {
+        const rest = step.slice(cut + 2);
+        li.append(el('strong', '', `${head}.`), ` ${rest[0].toUpperCase()}${rest.slice(1)}`);
+      } else li.textContent = step;
+      ol.appendChild(li);
+    }
+    mbody.appendChild(ol);
+    method.appendChild(mbody);
+
+    // mastery
+    const mastery = el('section', 'tr-card eg-mastery');
+    const mh = el('div', 'tr-card-head');
+    mh.append(el('h2', 'tr-card-title', 'Mastery'), el('span', 'tr-muted', 'Pass 5 in a row to master it'));
+    mastery.appendChild(mh);
+    const ladder = el('ol', 'eg-ladder');
+    ladder.setAttribute('aria-label', `Level: ${level}`);
+    LADDER.forEach((name, i) => {
+      const li = el('li', i <= LADDER.indexOf(level) ? 'on' : '');
+      li.append(el('span', 'eg-rung'), el('span', name === level ? 'eg-rung-name now' : 'eg-rung-name', name));
+      ladder.appendChild(li);
+    });
+    mastery.appendChild(ladder);
+    const statsRow = el('div', 'wp-stats');
     const stat = (label, value, sub = '') => {
       const s = el('div', 'wp-stat');
       s.append(el('span', 'stat-label', label), el('span', 'wp-stat-value', value));
       if (sub) s.appendChild(el('span', 'meta', sub));
-      stats_.appendChild(s);
+      statsRow.appendChild(s);
     };
     const rate = st.attempts ? Math.round((100 * st.successes) / st.attempts) : null;
     stat('Attempts', String(st.attempts));
@@ -427,34 +480,66 @@ export class EndgamePage {
       stat('Average', st.avg_moves != null ? `${st.avg_moves} move${st.avg_moves === 1 ? '' : 's'}` : '—', st.avg_optimal != null ? `perfect play ${st.avg_optimal}` : '');
     }
     stat('Time', st.avg_seconds != null ? duration(st.avg_seconds) : '—', st.avg_seconds != null ? 'average' : '');
-    card.appendChild(stats_);
+    mastery.appendChild(statsRow);
+    if (drill.goal === 'mate' && st.recent.length) mastery.appendChild(this._chart(st.recent));
 
+    const row = el('div', 'tr-row-cards');
+    row.append(method, mastery);
+
+    // recent starts
+    const recent = el('section', 'tr-card eg-recent');
+    recent.appendChild(el('h2', 'tr-card-title', 'Recent starts'));
     if (st.recent.length) {
-      const table = el('table', 'wp-table');
-      const h = el('tr');
-      for (const t of ['When', 'Result', 'Moves', 'Time', '']) h.appendChild(el('th', '', t));
-      table.appendChild(el('thead')).appendChild(h);
-      const body = table.appendChild(el('tbody'));
+      const grid = el('div', 'eg-starts');
       for (const a of st.recent) {
-        const tr = el('tr');
-        tr.appendChild(el('td', '', new Date(a.finished_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })));
-        tr.appendChild(el('td', a.success ? 'good' : 'bad', `${a.success ? '✓' : '✗'} ${RESULT_TEXT[a.result] ?? a.result}${a.hints ? ` (${plural(a.hints, 'hint')})` : ''}`));
-        tr.appendChild(el('td', 'num', `${a.moves}${a.optimal ? ` / ${a.optimal}` : ''}`));
-        tr.appendChild(el('td', 'num', clock(a.seconds)));
-        const td = el('td');
-        const again = el('button', 'small', 'Again');
-        again.type = 'button';
-        again.title = 'Play this starting position again';
-        again.addEventListener('click', () => this.onStart(drillId, a.start_fen));
-        td.appendChild(again);
-        tr.appendChild(td);
-        body.appendChild(tr);
+        const card = el('div', 'eg-start');
+        card.dataset.result = a.success ? 'pass' : 'fail';
+        card.appendChild(miniBoard(a.start_fen, `Start position, you played ${a.color}`, a.color === 'black'));
+        const foot = el('div', 'eg-start-foot');
+        const info = el('div', 'tr-stack');
+        const when = new Date(a.finished_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+        info.append(
+          el('span', `eg-start-result ${a.success ? 'ok' : 'bad'}`, `${a.success ? '✓' : '✗'} ${RESULT_TEXT[a.result] ?? a.result}`),
+          el('span', 'tr-muted', `${when} · ${a.moves} moves${a.optimal ? ` (perfect ${a.optimal})` : ''}${a.hints ? ` · ${plural(a.hints, 'hint')}` : ''}`),
+        );
+        foot.append(info, button('Again', 'small eg-again', () => this.onStart(drillId, a.start_fen), 'Play this starting position again'));
+        card.appendChild(foot);
+        grid.appendChild(card);
       }
-      const wrap = el('div', 'wp-table-wrap');
-      wrap.appendChild(table);
-      card.appendChild(el('h3', 'wp-h eg-recent-h', 'Recent'));
-      card.appendChild(wrap);
+      recent.appendChild(grid);
+    } else recent.appendChild(el('p', 'tr-muted', 'Your starting positions show here, to replay any of them.'));
+    box.replaceChildren(hero, row, recent);
+  }
+
+  /** Moves used per attempt (oldest first) against perfect play and the 50-move limit. */
+  _chart(recent) {
+    const wrap = el('div', 'eg-chart-wrap');
+    wrap.appendChild(el('span', 'tr-muted', 'Moves used per attempt, against perfect play'));
+    const chart = el('div', 'eg-chart');
+    chart.setAttribute('role', 'img');
+    const items = [...recent].reverse();
+    chart.setAttribute('aria-label', items.map((a) => `${a.success ? 'passed' : 'not passed'} in ${a.moves}${a.optimal ? ` (perfect ${a.optimal})` : ''}`).join('; '));
+    chart.appendChild(el('span', 'eg-limit', '50-move limit'));
+    for (const a of items) {
+      const col = el('div', 'eg-col');
+      const bar = el('div', `eg-bar ${a.success ? 'ok' : 'bad'}`);
+      bar.style.height = `${(Math.min(a.moves, 50) / 50) * 100}%`;
+      col.appendChild(bar);
+      if (a.optimal) {
+        const p = el('div', 'eg-perfect');
+        p.style.bottom = `${(Math.min(a.optimal, 50) / 50) * 100}%`;
+        col.appendChild(p);
+      }
+      chart.appendChild(col);
     }
-    box.replaceChildren(head, card);
+    wrap.appendChild(chart);
+    const legend = el('div', 'eg-legend');
+    for (const [cls, label] of [['ok', 'passed'], ['bad', 'not passed'], ['perfect', 'perfect play']]) {
+      const item = el('span', 'eg-legend-item');
+      item.append(el('span', `eg-key ${cls}`), label);
+      legend.appendChild(item);
+    }
+    wrap.appendChild(legend);
+    return wrap;
   }
 }

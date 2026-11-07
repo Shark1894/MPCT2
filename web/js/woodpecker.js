@@ -4,20 +4,9 @@
 import { api } from './api.js';
 import { clock, days, duration, pace, scopeText, sortPuzzles, timeToGo } from './woodpecker-core.js';
 import { confirmDialog, formDialog, plural, store, toast } from './ui.js';
+import { button, el, rings } from './dom.js';
 
-const el = (tag, cls, text) => {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text != null) e.textContent = text;
-  return e;
-};
-const button = (label, cls, onClick, title) => {
-  const b = el('button', cls, label);
-  b.type = 'button';
-  if (title) b.title = title;
-  b.addEventListener('click', onClick);
-  return b;
-};
+const MAX_RINGS = 6; // cycles drawn as rings in the hero (the book's plan is about six)
 const dateText = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const pct = (n) => (n == null ? '—' : `${Math.round(n)}%`);
 const PAGE = 100; // puzzle-times rows shown before "Show all"
@@ -28,9 +17,10 @@ export class WoodpeckerPage {
    * @param {(cycle: object, todo: number[], course: object) => void} deps.onSolve   go through the cycle's puzzles
    * @param {(exerciseId: number) => void} deps.onPractise                          one puzzle, not recorded
    * @param {() => void} deps.onChanged                                              reload the tab
+   * @param {(course: object) => void} deps.onEdit                                   rename / move / delete
    */
-  constructor({ onSolve, onPractise, onChanged }) {
-    Object.assign(this, { onSolve, onPractise, onChanged });
+  constructor({ onSolve, onPractise, onChanged, onEdit }) {
+    Object.assign(this, { onSolve, onPractise, onChanged, onEdit });
   }
 
   /** Fill `box` for the course (summary from the course list). */
@@ -44,13 +34,178 @@ export class WoodpeckerPage {
     }
     this.o = o;
     this.course = course;
-    box.replaceChildren(this._current(o), this._history(o), this._times(o));
+    const row = el('div', 'tr-row-cards top');
+    row.append(this._staircase(o), this._chapters(o));
+    box.replaceChildren(this._hero(o, course), this._current(o), row, this._map(o), this._history(o), this._times(o));
+  }
+
+  // ---- the hero: the book and its cycle rings ------------------------------------------------------
+
+  _hero(o, course) {
+    const hero = el('section', 'tr-hero wp-hero cv-head-card');
+    const cover = el('div', 'tr-cover tr-cover-hero kind-woodpecker');
+    cover.setAttribute('aria-hidden', 'true');
+    cover.appendChild(el('span', 'tr-spine'));
+    const cb = el('span', 'tr-cover-body');
+    cb.append(el('span', 'tr-cover-kind', 'Woodpecker'), el('span', 'tr-cover-name', course.name), el('span', 'tr-cover-by', plural(o.puzzles, 'puzzle')));
+    cover.appendChild(cb);
+    const text = el('div', 'tr-hero-text');
+    const c = o.current;
+    const last = o.cycles.at(-1);
+    const eyebrow = c ? `Cycle ${c.number} · ${plural(o.puzzles, 'puzzle')}` : `${plural(o.puzzles, 'puzzle')} · ${o.cycles.length ? `${plural(o.cycles.length, 'cycle')} done` : 'no cycle yet'}`;
+    const headline = o.cycles.length > (c ? 1 : 0) ? 'Same puzzles. Half the days.' : 'Solve the set. Then again, faster.';
+    let line;
+    if (c && o.cycles.length > 1) {
+      const prev = o.cycles[o.cycles.length - 2];
+      line = `Cycle ${prev.number} took ${days(prev.days)}. Cycle ${c.number}${c.target_days ? `’s target is ${plural(c.target_days, 'day')}` : ' has no target'}: you’re ${days(c.days)} in, with ${c.done} of ${c.total} done.`;
+    } else if (c) {
+      line = `Cycle ${c.number}${c.target_days ? `, aiming for ${plural(c.target_days, 'day')}` : ''}: ${c.done} of ${c.total} done after ${days(c.days)}.`;
+    } else if (last) {
+      line = `Cycle ${last.number} took ${days(last.days)}. Next: the same puzzles in ${o.suggested_target_days ? plural(o.suggested_target_days, 'day') : 'half the time'}.`;
+    } else {
+      line = 'Every puzzle timed, only your first go counts. Then the whole set again in half the days, and again, until it takes a day or two.';
+    }
+    const title = el('div', 'cv-title');
+    title.append(el('h1', 'dash-h', course.name), el('span', 'tr-chip kind-woodpecker', 'Woodpecker'));
+    text.append(el('span', 'tr-eyebrow', eyebrow), title, el('p', 'tr-hero-line', `${headline} ${line}`));
+    const actions = el('div', 'cv-actions');
+    actions.appendChild(button('Edit', 'small', () => this.onEdit?.(course), 'Rename, move to another group or delete'));
+    text.appendChild(actions);
+    const list = [];
+    for (let i = 0; i < Math.max(MAX_RINGS, o.cycles.length + (c ? 0 : 1)); i++) {
+      const cy = o.cycles[i];
+      list.push({ p: cy ? (cy.finished_at ? 1 : cy.done / Math.max(cy.total, 1)) : 0, cls: cy?.finished_at ? 'wp dim' : 'wp' });
+    }
+    const pctNow = c ? `${Math.round((100 * c.done) / Math.max(c.total, 1))}%` : o.cycles.length ? '✓' : '0';
+    const ringBox = el('div', 'wp-rings');
+    ringBox.setAttribute('role', 'img');
+    ringBox.setAttribute('aria-label', o.cycles.map((cy) => `cycle ${cy.number} ${cy.finished_at ? 'done' : `${Math.round((100 * cy.done) / Math.max(cy.total, 1))}%`}`).join(', ') || 'No cycles yet');
+    ringBox.appendChild(rings(210, list.slice(0, MAX_RINGS), { width: 9, gap: 15, text: pctNow, sub: c ? `cycle ${c.number}` : o.cycles.length ? `${o.cycles.length} done` : 'start' }));
+    hero.append(cover, text, ringBox);
+    return hero;
+  }
+
+  // ---- days per cycle against the target: the halving staircase ------------------------------------------
+
+  _staircase(o) {
+    const card = el('section', 'tr-card wp-stairs');
+    card.appendChild(el('h2', 'tr-card-title', 'The halving staircase'));
+    card.appendChild(el('span', 'tr-muted', 'Days per cycle; the outline is the target'));
+    const bars = [];
+    o.cycles.forEach((c) => bars.push({ name: `C${c.number}`, days: c.days, target: c.target_days, state: c.finished_at ? 'done' : 'now' }));
+    let next = o.current ? (o.current.target_days ?? null) : (o.suggested_target_days ?? (o.cycles.length ? null : 28));
+    for (let n = o.cycles.length + 1; bars.length < 6 && next; n++) {
+      if (!o.current || n > o.current.number) {
+        bars.push({ name: `C${n}`, days: 0, target: next, state: 'next' });
+      }
+      next = next > 1 ? Math.ceil(next / 2) : null;
+    }
+    const max = Math.max(1, ...bars.map((b) => Math.max(b.days, b.target ?? 0)));
+    const chart = el('div', 'wp-bars');
+    chart.setAttribute('role', 'img');
+    chart.setAttribute('aria-label', bars.map((b) => `${b.name}: ${b.days ? days(b.days) : 'to come'}${b.target ? `, target ${b.target}` : ''}`).join('; '));
+    for (const b of bars) {
+      const col = el('div', 'wp-bar-col');
+      col.appendChild(el('span', `wp-bar-label ${b.state}`, b.days ? `${Math.round(b.days * 10) / 10}d` : `${b.target}d`));
+      const stack = el('div', 'wp-bar-stack');
+      if (b.target) {
+        const t = el('div', 'wp-bar-target');
+        t.style.height = `${(100 * b.target) / max}%`;
+        stack.appendChild(t);
+      }
+      if (b.days) {
+        const f = el('div', `wp-bar-fill ${b.state}`);
+        f.style.height = `${Math.max(2, (100 * b.days) / max)}%`;
+        stack.appendChild(f);
+      }
+      col.append(stack, el('span', 'wp-bar-name', b.name));
+      chart.appendChild(col);
+    }
+    if (!bars.length) card.appendChild(el('p', 'tr-muted', 'Your cycles show here once you start one.'));
+    else card.appendChild(chart);
+    return card;
+  }
+
+  // ---- this cycle by chapter ---------------------------------------------------------------------
+
+  _chapters(o) {
+    const card = el('section', 'tr-card wp-chapters');
+    const shown = o.current ?? o.cycles.at(-1);
+    card.appendChild(el('h2', 'tr-card-title', shown ? `Cycle ${shown.number} by chapter` : 'Chapters'));
+    for (const ch of o.chapters.filter((c) => c.puzzles)) {
+      const row = el('div', `wp-ch ${ch.in_cycle || !shown ? '' : 'out'}`);
+      const top = el('div', 'wp-ch-top');
+      const acc = ch.done ? ` · ${Math.round((100 * ch.solved) / ch.done)}%` : '';
+      top.append(el('span', 'wp-ch-name', ch.title), el('span', 'tr-muted', shown && !ch.in_cycle ? 'not in this cycle' : `${ch.done} / ${ch.puzzles}${acc}`));
+      const bar = el('div', 'tr-minibar wide');
+      bar.setAttribute('aria-hidden', 'true');
+      const a = el('span', 'ok wp');
+      a.style.width = `${(100 * ch.solved) / ch.puzzles}%`;
+      const b = el('span', 'bad');
+      b.style.width = `${(100 * (ch.done - ch.solved)) / ch.puzzles}%`;
+      bar.append(a, b);
+      row.append(top, bar);
+      card.appendChild(row);
+    }
+    return card;
+  }
+
+  // ---- the puzzle map: one square per puzzle, coloured by its time this cycle --------------------------
+
+  _map(o) {
+    const card = el('section', 'tr-card wp-map');
+    const shown = o.current ?? o.cycles.at(-1);
+    const head = el('div', 'tr-card-head');
+    head.appendChild(el('h2', 'tr-card-title', shown ? `Puzzle map · cycle ${shown.number}` : 'Puzzle map'));
+    const legend = el('div', 'wp-legend');
+    for (const [cls, label] of [['fast', 'under 15s'], ['mid', '15–60s'], ['slow', 'over 60s'], ['miss', 'missed'], ['todo', 'not yet']]) {
+      const item = el('span', 'wp-legend-item');
+      item.append(el('span', `wp-cell ${cls}`), label);
+      legend.appendChild(item);
+    }
+    head.appendChild(legend);
+    card.appendChild(head);
+    const box = el('div', 'wp-map-box');
+    box.appendChild(el('p', 'tr-muted', 'Loading…'));
+    card.appendChild(box);
+    card.appendChild(el('span', 'tr-muted', 'Click a square to practise that puzzle (not recorded in a cycle).'));
+    this._fillMap(box, o, shown);
+    return card;
+  }
+
+  async _fillMap(box, o, shown) {
+    let data;
+    try {
+      data = await api.woodpeckerTimes(o.course_id);
+    } catch (err) {
+      box.replaceChildren(el('p', 'tr-muted', err.message));
+      return;
+    }
+    this.timesData = data;
+    const groups = new Map();
+    for (const p of data.puzzles) {
+      if (!groups.has(p.chapter)) groups.set(p.chapter, []);
+      groups.get(p.chapter).push(p);
+    }
+    const parts = [];
+    for (const [chapter, puzzles] of groups) {
+      parts.push(el('span', 'wp-map-chapter', `${chapter} (${puzzles.length})`));
+      const grid = el('div', 'wp-grid');
+      for (const p of puzzles) {
+        const t = shown ? p.times[shown.number] : null;
+        const cls = !t ? 'todo' : !t.solved ? 'miss' : t.seconds < 15 ? 'fast' : t.seconds <= 60 ? 'mid' : 'slow';
+        const label = `${p.title}: ${!t ? 'not tried this cycle' : `${t.solved ? 'solved' : 'missed'} in ${clock(t.seconds)}`}`;
+        grid.appendChild(button('', `wp-cell ${cls}`, () => this.onPractise(p.id), label));
+      }
+      parts.push(grid);
+    }
+    box.replaceChildren(...(parts.length ? parts : [el('p', 'tr-muted', 'No puzzles.')]));
   }
 
   // ---- the current cycle -----------------------------------------------------------------------
 
   _current(o) {
-    const card = el('section', 'dash-card wp-current');
+    const card = el('section', 'tr-card wp-current');
     const c = o.current;
     if (!o.puzzles) {
       card.appendChild(el('p', 'meta', 'This course has no puzzles to solve (only pages to read).'));
@@ -68,7 +223,7 @@ export class WoodpeckerPage {
             : `Solve all ${o.puzzles} puzzles in course order, each one timed; only your first go in a cycle counts. Then do the whole set again in half the days, and again, until it takes a day or two. The first cycle is the long one: give it a few weeks.`,
         ),
       );
-      card.appendChild(button(`Start cycle ${next}`, 'primary', () => this._start(o)));
+      card.appendChild(button(`Start cycle ${next}`, 'primary tr-cta', () => this._start(o)));
       return card;
     }
     const head = el('div', 'wp-cur-head');
@@ -113,7 +268,7 @@ export class WoodpeckerPage {
     card.appendChild(stats);
 
     const actions = el('div', 'cv-actions');
-    actions.appendChild(button(c.done ? `Continue cycle ${c.number}` : `Start solving`, 'primary', () => this.onSolve(c, o.todo, this.course)));
+    actions.appendChild(button(c.done ? `Continue cycle ${c.number}` : `Start solving`, 'primary tr-cta', () => this.onSolve(c, o.todo, this.course)));
     actions.appendChild(button('Abandon cycle', 'small', () => this._abandon(c), 'Delete this cycle and its times'));
     card.appendChild(actions);
     return card;
@@ -180,7 +335,7 @@ export class WoodpeckerPage {
   // ---- every cycle ---------------------------------------------------------------------------------
 
   _history(o) {
-    const card = el('section', 'dash-card wp-history');
+    const card = el('section', 'tr-card wp-history');
     card.appendChild(el('h3', 'wp-h', 'Cycles'));
     if (!o.cycles.length) {
       card.appendChild(el('p', 'meta', 'Your cycles will be compared here: days, accuracy and time per puzzle.'));
@@ -220,7 +375,7 @@ export class WoodpeckerPage {
   // ---- each puzzle's times ------------------------------------------------------------------------
 
   _times(o) {
-    const card = el('details', 'dash-card wp-times');
+    const card = el('details', 'tr-card wp-times');
     card.appendChild(el('summary', 'wp-h', 'Puzzle times'));
     const tools = el('div', 'wp-times-tools');
     const sort = el('select');

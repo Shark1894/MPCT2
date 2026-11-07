@@ -64,7 +64,7 @@ const waitTurn = (p) => p.waitForFunction(() => mpct.puzzles.canMove(), null, { 
   check(imported.imported === 1, 'game imported');
 
   // ---- the panel before any review ----------------------------------------------------------------
-  await page.click('#view-courses'); await page.click('.cv-item[data-puzzles=mine]');
+  await page.click('#view-courses'); await page.evaluate(() => mpct.coursesView.go({ view: 'puzzles', which: 'mine' }));
   await settle(page, 800);
   check(/They come from games reviewed with the engine/.test(await text(page, '#gp-text')), 'intro text: ' + (await text(page, '#gp-text')));
   check(/0 of 1 game reviewed\. 1 game not reviewed yet/.test(await text(page, '#gp-reviewed')), 'unreviewed game flagged: ' + (await text(page, '#gp-reviewed')));
@@ -92,7 +92,7 @@ const waitTurn = (p) => p.waitForFunction(() => mpct.puzzles.canMove(), null, { 
   const [g1] = await page.evaluate(() => fetch('/api/games').then((r) => r.json()));
   check(g1.review.black_accuracy < g1.review.white_accuracy && g1.review.counts.b.blunder === 1, 'Black blundered once: ' + JSON.stringify(g1.review));
 
-  await page.click('#view-courses'); await page.click('.cv-item[data-puzzles=mine]');
+  await page.click('#view-courses'); await page.evaluate(() => mpct.coursesView.go({ view: 'puzzles', which: 'mine' }));
   await settle(page, 800);
   check(/1 puzzle from your games, 1 due today/.test(await text(page, '#gp-text')), 'puzzle found: ' + (await text(page, '#gp-text')));
   check(/1 of 1 game reviewed\.\s*$/.test(await text(page, '#gp-reviewed')), 'all reviewed: ' + (await text(page, '#gp-reviewed')));
@@ -142,7 +142,7 @@ const waitTurn = (p) => p.waitForFunction(() => mpct.puzzles.canMove(), null, { 
   check(/✓ Reviewed: accuracy White \d+% · Black \d+% · White 1 blunder; Black 1 blunder/.test(await text(page, '#game-review-info')), 'game panel shows the review: ' + (await text(page, '#game-review-info')));
 
   // ---- a new session: found first time --------------------------------------------------------------------------
-  await page.click('#view-courses'); await page.click('.cv-item[data-puzzles=mine]');
+  await page.click('#view-courses'); await page.evaluate(() => mpct.coursesView.go({ view: 'puzzles', which: 'mine' }));
   await settle(page, 600);
   await page.click('#gp-list li button:has-text("Practise")');
   await waitTurn(page);
@@ -154,7 +154,7 @@ const waitTurn = (p) => p.waitForFunction(() => mpct.puzzles.canMove(), null, { 
   await settle(page, 600);
   check(await page.isHidden('#puzzle'), 'Finish ends puzzle mode');
 
-  await page.click('#view-courses'); await page.click('.cv-item[data-puzzles=mine]');
+  await page.click('#view-courses'); await page.evaluate(() => mpct.coursesView.go({ view: 'puzzles', which: 'mine' }));
   await settle(page, 600);
   check(/0 due today/.test(await text(page, '#gp-text')) && (await page.isDisabled('#gp-due')), 'nothing due now');
   check(/tomorrow/.test(await text(page, '#gp-list li')), 'list shows next review');
@@ -194,7 +194,7 @@ const waitTurn = (p) => p.waitForFunction(() => mpct.puzzles.canMove(), null, { 
   await page.click('dialog button[type="submit"]'); // discard
   await settle(page, 400);
 
-  await page.click('#view-courses'); await page.click('.cv-item[data-puzzles=mine]');
+  await page.click('#view-courses'); await page.evaluate(() => mpct.coursesView.go({ view: 'puzzles', which: 'mine' }));
   await settle(page, 600);
 
   // ---- remove ---------------------------------------------------------------------------------------------------------------

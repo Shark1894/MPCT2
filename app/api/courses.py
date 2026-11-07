@@ -195,6 +195,9 @@ class WpChapter(BaseModel):
     id: int
     title: str
     puzzles: int
+    in_cycle: bool = False  # part of the current (else the last) cycle
+    done: int = 0  # puzzles tried in that cycle
+    solved: int = 0
 
 
 class WoodpeckerOut(BaseModel):
