@@ -46,6 +46,11 @@ const text = (page, sel) => page.textContent(sel);
     const o = await post(`/api/repertoires/${rep.id}/openings`, { name: 'Caro-Kann', color: 'black' });
     await post(`/api/openings/${o.id}/lines`, { moves: ['e2e4', 'c7c6', 'd2d4', 'd7d5', 'e4e5', 'c8f5'] });
     await post(`/api/openings/${o.id}/lines`, { moves: ['e2e4', 'c7c6', 'd2d4', 'd7d5', 'b1c3', 'd5e4'] });
+    const put = (fen, comment) =>
+      fetch(`/api/repertoires/${rep.id}/comment`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fen, comment }) });
+    const para = 'A long note about this position, the plans for both sides and the typical mistakes to avoid. ';
+    await put('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', para.repeat(4)); // the start: medium
+    await put('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1', para.repeat(40)); // after 1.e4: very long
   });
   await page.reload();
   await page.waitForTimeout(600);
@@ -63,6 +68,16 @@ const text = (page, sel) => page.textContent(sel);
   check((await text(page, '#train-progress')) === 'Line 1 of 2', 'progress shown');
   check((await page.evaluate(() => mpct.board.cg.state.drawable.autoShapes.length)) === 0, 'no explorer arrows giving answers away');
   check(await page.isVisible('#comments'), 'comments visible while learning a new line');
+  {
+    const m = await page.evaluate(() => {
+      const r = (s) => document.querySelector(s).getBoundingClientRect();
+      const cur = document.getElementById('comment-current'), prev = document.getElementById('comment-previous');
+      return { board: r('cg-board').bottom, panel: r('#comments').bottom, curH: cur.clientHeight, curS: cur.scrollHeight, prevH: prev.clientHeight, prevS: prev.scrollHeight };
+    });
+    check(m.prevS <= m.prevH + 1 && m.prevH > 100, `previous comment grows to show all of it (${m.prevH}px)`);
+    check(m.curH > 150 && m.curS > m.curH, `the very long comment takes the rest and scrolls (${m.curH}px)`);
+    check(m.panel <= m.board + 1, `comments end by the bottom of the board (${Math.round(m.panel)} ≤ ${Math.round(m.board)})`);
+  }
 
   // Navigation locked
   await page.keyboard.press('ArrowLeft');
