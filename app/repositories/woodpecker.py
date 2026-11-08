@@ -5,6 +5,10 @@ the cycle), in course order, then again, each cycle ideally in half the days of 
 Every puzzle is timed and only its first go in a cycle counts (a retry in the same cycle is
 practice). A cycle ends by itself when every puzzle in it has been tried. Information pages and
 reference lines aren't puzzles and are left out.
+
+Cycles come in sets: a fresh run of halving cycles, numbered from 1 within the set (say the easy
+chapters first, then a new set with every puzzle). Older sets stay as they were, to look back on.
+Starting a new set ends a cycle still open where it stands.
 """
 
 import math
@@ -59,6 +63,7 @@ def _stats(s: Session, cycle: WoodpeckerCycle, total: int | None = None) -> dict
         total = len(scope(s, cycle.course_id, cycle.chapter_ids))
     return {
         "id": cycle.id,
+        "set_number": cycle.set_number,
         "number": cycle.number,
         "chapter_ids": cycle.chapter_ids,
         "target_days": cycle.target_days,
@@ -82,10 +87,33 @@ def suggested_target(cycles: list[dict]) -> int | None:
     return max(1, math.ceil(finished[-1]["days"] / 2))
 
 
-def overview(s: Session, course_id: int) -> dict:
-    """Everything the Woodpecker page shows: chapters (with puzzle counts), every cycle's stats,
-    the current cycle and the puzzles still to do in it (in order)."""
+def _latest_set(s: Session, course_id: int) -> int:
+    return s.scalar(select(func.max(WoodpeckerCycle.set_number)).where(WoodpeckerCycle.course_id == course_id)) or 1
+
+
+def _sets(s: Session, course_id: int) -> list[dict]:
+    """Every set of cycles, oldest first: its number, cycles, chapters (of its first cycle), when it
+    started and whether a cycle in it is still open."""
+    sets: dict[int, dict] = {}
+    for c in s.scalars(
+        select(WoodpeckerCycle).where(WoodpeckerCycle.course_id == course_id).order_by(WoodpeckerCycle.set_number, WoodpeckerCycle.number)
+    ):
+        st = sets.setdefault(
+            c.set_number, {"number": c.set_number, "cycles": 0, "chapter_ids": c.chapter_ids, "started_at": c.started_at, "open": False}
+        )
+        st["cycles"] += 1
+        st["open"] = st["open"] or c.finished_at is None
+    return list(sets.values())
+
+
+def overview(s: Session, course_id: int, set_number: int | None = None) -> dict:
+    """Everything the Woodpecker page shows for one set of cycles (default: the latest): chapters
+    (with puzzle counts), the set's cycles, its current cycle and the puzzles still to do in it (in
+    order), and the list of sets."""
     course = _course(s, course_id)
+    latest = _latest_set(s, course.id)
+    if set_number is None:
+        set_number = latest
     counts = dict(
         s.execute(
             select(CourseExercise.chapter_id, func.count())
@@ -94,7 +122,13 @@ def overview(s: Session, course_id: int) -> dict:
         ).all()
     )
     chapters = [{"id": ch.id, "title": ch.title, "puzzles": counts.get(ch.id, 0)} for ch in course.chapters]
-    rows = list(s.scalars(select(WoodpeckerCycle).where(WoodpeckerCycle.course_id == course.id).order_by(WoodpeckerCycle.number)))
+    rows = list(
+        s.scalars(
+            select(WoodpeckerCycle)
+            .where(WoodpeckerCycle.course_id == course.id, WoodpeckerCycle.set_number == set_number)
+            .order_by(WoodpeckerCycle.number)
+        )
+    )
     cycles = [_stats(s, c) for c in rows]
     current = next((c for c in cycles if not c["finished_at"]), None)
     # The current cycle (else the last one) by chapter: puzzles done and solved in it.
@@ -119,6 +153,9 @@ def overview(s: Session, course_id: int) -> dict:
     return {
         "course_id": course.id,
         "course": course.name,
+        "set_number": set_number,
+        "latest_set": latest,
+        "sets": _sets(s, course.id),
         "puzzles": sum(c["puzzles"] for c in chapters),
         "chapters": chapters,
         "cycles": cycles,
@@ -128,12 +165,17 @@ def overview(s: Session, course_id: int) -> dict:
     }
 
 
-def start_cycle(s: Session, course_id: int, chapter_ids: list[int] | None = None, target_days: int | None = None) -> dict:
+def start_cycle(
+    s: Session, course_id: int, chapter_ids: list[int] | None = None, target_days: int | None = None, new_set: bool = False
+) -> dict:
+    """The next cycle of the latest set; with new_set, cycle 1 of a new set (a cycle still open is
+    ended where it stands and kept)."""
     course = _course(s, course_id)
     if course.kind != "woodpecker":
         raise InvalidCourse("Cycles are for Woodpecker courses: set the course's kind to Woodpecker first")
-    if s.scalar(select(WoodpeckerCycle).where(WoodpeckerCycle.course_id == course.id, WoodpeckerCycle.finished_at.is_(None))):
-        raise Conflict("Finish (or abandon) the current cycle first")
+    open_cycle = s.scalar(select(WoodpeckerCycle).where(WoodpeckerCycle.course_id == course.id, WoodpeckerCycle.finished_at.is_(None)))
+    if open_cycle is not None and not new_set:
+        raise Conflict("Finish (or abandon) the current cycle first, or start a new set")
     if chapter_ids:
         own = set(s.scalars(select(CourseChapter.id).where(CourseChapter.course_id == course.id)))
         if not set(chapter_ids) <= own:
@@ -144,8 +186,17 @@ def start_cycle(s: Session, course_id: int, chapter_ids: list[int] | None = None
         raise InvalidCourse("No puzzles in the chosen chapters")
     if target_days is not None and target_days < 1:
         raise InvalidCourse("A target is at least one day")
-    number = (s.scalar(select(func.max(WoodpeckerCycle.number)).where(WoodpeckerCycle.course_id == course.id)) or 0) + 1
-    cycle = WoodpeckerCycle(course_id=course.id, number=number, chapter_ids=chapter_ids, target_days=target_days)
+    has_cycles = s.scalar(select(func.count()).select_from(WoodpeckerCycle).where(WoodpeckerCycle.course_id == course.id))
+    set_number = _latest_set(s, course.id) + (1 if new_set and has_cycles else 0)
+    if open_cycle is not None:
+        open_cycle.finished_at = datetime.now(timezone.utc)
+    number = (
+        s.scalar(
+            select(func.max(WoodpeckerCycle.number)).where(WoodpeckerCycle.course_id == course.id, WoodpeckerCycle.set_number == set_number)
+        )
+        or 0
+    ) + 1
+    cycle = WoodpeckerCycle(course_id=course.id, set_number=set_number, number=number, chapter_ids=chapter_ids, target_days=target_days)
     s.add(cycle)
     s.flush()
     s.refresh(cycle)
@@ -153,10 +204,16 @@ def start_cycle(s: Session, course_id: int, chapter_ids: list[int] | None = None
 
 
 def abandon_cycle(s: Session, cycle_id: int) -> None:
-    """Delete the latest cycle (and its attempts), e.g. one started by mistake."""
+    """Delete the latest cycle (and its attempts), e.g. one started by mistake. Abandoning the
+    first cycle of a set removes the set."""
     cycle = _cycle(s, cycle_id)
-    latest = s.scalar(select(func.max(WoodpeckerCycle.number)).where(WoodpeckerCycle.course_id == cycle.course_id))
-    if cycle.number != latest:
+    latest = s.scalar(
+        select(WoodpeckerCycle.id)
+        .where(WoodpeckerCycle.course_id == cycle.course_id)
+        .order_by(WoodpeckerCycle.set_number.desc(), WoodpeckerCycle.number.desc())
+        .limit(1)
+    )
+    if cycle.id != latest:
         raise Conflict("Only the latest cycle can be removed")
     s.delete(cycle)
     s.flush()
@@ -202,10 +259,16 @@ def accept(s: Session, cycle_id: int, exercise_id: int) -> dict:
     return _stats(s, cycle)
 
 
-def puzzle_times(s: Session, course_id: int) -> dict:
-    """Every puzzle with its time and result in each cycle: {cycles: [numbers], puzzles: [...]}."""
+def puzzle_times(s: Session, course_id: int, set_number: int | None = None) -> dict:
+    """Every puzzle with its time and result in each cycle of a set (default: the latest):
+    {cycles: [numbers], puzzles: [...]}."""
     course = _course(s, course_id)
-    numbers = {c.id: c.number for c in s.scalars(select(WoodpeckerCycle).where(WoodpeckerCycle.course_id == course.id))}
+    if set_number is None:
+        set_number = _latest_set(s, course.id)
+    numbers = {
+        c.id: c.number
+        for c in s.scalars(select(WoodpeckerCycle).where(WoodpeckerCycle.course_id == course.id, WoodpeckerCycle.set_number == set_number))
+    }
     times: dict[int, dict[int, dict]] = {}
     if numbers:
         for a in s.scalars(select(WoodpeckerAttempt).where(WoodpeckerAttempt.cycle_id.in_(list(numbers)))):
@@ -217,6 +280,7 @@ def puzzle_times(s: Session, course_id: int) -> dict:
         .order_by(CourseChapter.position, CourseChapter.id, CourseExercise.position, CourseExercise.id)
     ).all()
     return {
+        "set_number": set_number,
         "cycles": sorted(numbers.values()),
         "puzzles": [{"id": i, "title": t, "chapter": ch, "times": times.get(i, {})} for i, t, ch in rows],
     }
@@ -225,6 +289,6 @@ def puzzle_times(s: Session, course_id: int) -> dict:
 def latest_cycle(s: Session, course_id: int) -> dict | None:
     """The current cycle, or the last finished one (for the course list), or None."""
     cycle = s.scalar(
-        select(WoodpeckerCycle).where(WoodpeckerCycle.course_id == course_id).order_by(WoodpeckerCycle.number.desc()).limit(1)
+        select(WoodpeckerCycle).where(WoodpeckerCycle.course_id == course_id).order_by(WoodpeckerCycle.set_number.desc(), WoodpeckerCycle.number.desc()).limit(1)
     )
     return _stats(s, cycle) if cycle else None

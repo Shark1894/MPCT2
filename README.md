@@ -669,6 +669,10 @@ the same set again, faster, each cycle aiming at half the days of the one before
 
 - **Start cycle N** asks for a target in days (28 offered for the first; after that half the days the last cycle
   took, rounded up) and the chapters. One cycle at a time; **Abandon cycle** deletes the current one.
+- Cycles come in **sets**. **Start a new set** begins again at cycle 1 (say the easy chapters first, then a set
+  with every puzzle), with its own numbering, halving targets and history; a cycle still open ends where it
+  stands and is kept (shown as "ended early"). With more than one set, chips under the hero switch between them;
+  an earlier set is read only, there to look back on. Abandoning a set's first cycle removes the set.
 - Every puzzle is timed, from the moment your first move is due to the end. Only the first go at a puzzle in a
   cycle counts (solved or missed, and its time); **Retry** afterwards is practice. **Skip** leaves it for later in
   the cycle. **Pause** (or **P**) stops the clock and hides the board. With **Next puzzle automatically** a solved
@@ -689,7 +693,7 @@ API: `GET /api/courses`, `POST /api/courses/import`, `GET|PATCH|DELETE /api/cour
 `POST /api/courses/{id}/reset` (`{"chapter_id": null}` = the whole course), `GET /api/exercises/{id}`,
 `POST /api/exercises/{id}/attempt` (`{"solved": true}`); Woodpecker: `GET /api/courses/{id}/woodpecker` (cycles,
 current cycle, puzzles still to do), `POST /api/courses/{id}/woodpecker/cycles` (`{"target_days": 14,
-"chapter_ids": null}`), `DELETE /api/woodpecker/cycles/{id}` (the latest only),
+"chapter_ids": null, "new_set": false}`); the overview and times take `?set=N` (default: the latest set), `DELETE /api/woodpecker/cycles/{id}` (the latest only),
 `POST /api/woodpecker/cycles/{id}/attempts` (`{"exercise_id": 1, "solved": true, "seconds": 12.5}`; a second go
 isn't stored), `POST /api/woodpecker/cycles/{id}/attempts/{exercise_id}/accept` (a missed first go counted as
 solved), `GET /api/courses/{id}/woodpecker/times`.

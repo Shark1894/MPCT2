@@ -26,7 +26,8 @@ class Progress(BaseModel):
 
 class CycleOut(BaseModel):
     id: int
-    number: int
+    set_number: int
+    number: int  # within its set
     chapter_ids: list[int] | None
     target_days: int | None
     started_at: datetime
@@ -200,9 +201,20 @@ class WpChapter(BaseModel):
     solved: int = 0
 
 
+class WpSet(BaseModel):
+    number: int
+    cycles: int
+    chapter_ids: list[int] | None  # its first cycle's chapters (None = all)
+    started_at: datetime
+    open: bool  # a cycle in it is still going
+
+
 class WoodpeckerOut(BaseModel):
     course_id: int
     course: str
+    set_number: int  # the set shown
+    latest_set: int
+    sets: list[WpSet]  # oldest first
     puzzles: int
     chapters: list[WpChapter]
     cycles: list[CycleOut]  # oldest first
@@ -214,6 +226,7 @@ class WoodpeckerOut(BaseModel):
 class CycleIn(BaseModel):
     chapter_ids: list[int] | None = Field(default=None, max_length=500)  # None = every chapter
     target_days: int | None = Field(default=None, ge=1, le=3650)
+    new_set: bool = False  # cycle 1 of a new set (ends a cycle still open)
 
 
 class WpAttemptIn(BaseModel):
@@ -241,18 +254,19 @@ class PuzzleTimes(BaseModel):
 
 
 class PuzzleTimesOut(BaseModel):
+    set_number: int
     cycles: list[int]
     puzzles: list[PuzzleTimes]
 
 
 @router.get("/courses/{course_id}/woodpecker", response_model=WoodpeckerOut)
-def woodpecker(course_id: int, s: Db):
-    return wp.overview(s, course_id)
+def woodpecker(course_id: int, s: Db, set: int | None = None):
+    return wp.overview(s, course_id, set)
 
 
 @router.post("/courses/{course_id}/woodpecker/cycles", response_model=CycleOut)
 def start_cycle(course_id: int, body: CycleIn, s: Db):
-    return wp.start_cycle(s, course_id, body.chapter_ids, body.target_days)
+    return wp.start_cycle(s, course_id, body.chapter_ids, body.target_days, body.new_set)
 
 
 @router.delete("/woodpecker/cycles/{cycle_id}", status_code=204)
@@ -273,5 +287,5 @@ def woodpecker_accept(cycle_id: int, exercise_id: int, s: Db):
 
 
 @router.get("/courses/{course_id}/woodpecker/times", response_model=PuzzleTimesOut)
-def puzzle_times(course_id: int, s: Db):
-    return wp.puzzle_times(s, course_id)
+def puzzle_times(course_id: int, s: Db, set: int | None = None):
+    return wp.puzzle_times(s, course_id, set)

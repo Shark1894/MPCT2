@@ -1,5 +1,7 @@
 // The Woodpecker page in the Training tab: the current cycle (progress, time, pace against the
 // target), starting the next cycle, every cycle side by side, and each puzzle's time per cycle.
+// Cycles come in sets (a fresh run from cycle 1, e.g. easy chapters first, then everything): the
+// page shows one set, the latest by default; older sets are there to look back on.
 
 import { api } from './api.js';
 import { clock, days, duration, pace, scopeText, sortPuzzles, timeToGo } from './woodpecker-core.js';
@@ -21,22 +23,53 @@ export class WoodpeckerPage {
    */
   constructor({ onSolve, onPractise, onChanged, onEdit }) {
     Object.assign(this, { onSolve, onPractise, onChanged, onEdit });
+    this.viewing = new Map(); // course id -> set number being looked at (none = the latest)
   }
 
   /** Fill `box` for the course (summary from the course list). */
   async render(box, course) {
     let o;
     try {
-      o = await api.woodpecker(course.id);
+      o = await api.woodpecker(course.id, this.viewing.get(course.id) ?? null);
     } catch (err) {
       box.replaceChildren(el('p', 'meta', `Couldn't load the cycles: ${err.message}`));
       return;
     }
     this.o = o;
     this.course = course;
+    this.box = box;
     const row = el('div', 'tr-row-cards top');
     row.append(this._staircase(o), this._chapters(o));
-    box.replaceChildren(this._hero(o, course), this._current(o), row, this._map(o), this._history(o), this._times(o));
+    const parts = [this._hero(o, course)];
+    if (o.sets.length > 1) parts.push(this._setPicker(o));
+    parts.push(this._current(o), row, this._map(o), this._history(o), this._times(o));
+    box.replaceChildren(...parts);
+  }
+
+  /** Looking at an older set (read only)? */
+  _old(o) {
+    return o.set_number !== o.latest_set;
+  }
+
+  _showSet(number) {
+    if (number === this.o.latest_set) this.viewing.delete(this.course.id);
+    else this.viewing.set(this.course.id, number);
+    this.render(this.box, this.course);
+  }
+
+  /** One chip per set: "Set 1 · Easy · 2 cycles". */
+  _setPicker(o) {
+    const bar = el('div', 'tr-chips wp-sets');
+    bar.setAttribute('role', 'group');
+    bar.setAttribute('aria-label', 'Sets of cycles');
+    for (const st of o.sets) {
+      const scope = scopeText(st, o.chapters);
+      const what = st.open ? 'now' : plural(st.cycles, 'cycle');
+      const b = button(`Set ${st.number} · ${scope} · ${what}`, 'tr-chip-btn', () => this._showSet(st.number), `Started ${dateText(st.started_at)}`);
+      b.setAttribute('aria-pressed', String(st.number === o.set_number));
+      bar.appendChild(b);
+    }
+    return bar;
   }
 
   // ---- the hero: the book and its cycle rings ------------------------------------------------------
@@ -52,7 +85,8 @@ export class WoodpeckerPage {
     const text = el('div', 'tr-hero-text');
     const c = o.current;
     const last = o.cycles.at(-1);
-    const eyebrow = c ? `Cycle ${c.number} · ${plural(o.puzzles, 'puzzle')}` : `${plural(o.puzzles, 'puzzle')} · ${o.cycles.length ? `${plural(o.cycles.length, 'cycle')} done` : 'no cycle yet'}`;
+    const setText = o.sets.length > 1 ? `Set ${o.set_number}${this._old(o) ? ' (earlier)' : ''} · ` : '';
+    const eyebrow = setText + (c ? `Cycle ${c.number} · ${plural(o.puzzles, 'puzzle')}` : `${plural(o.puzzles, 'puzzle')} · ${o.cycles.length ? `${plural(o.cycles.length, 'cycle')} done` : 'no cycle yet'}`);
     const headline = o.cycles.length > (c ? 1 : 0) ? 'Same puzzles. Half the days.' : 'Solve the set. Then again, faster.';
     let line;
     if (c && o.cycles.length > 1) {
@@ -60,6 +94,8 @@ export class WoodpeckerPage {
       line = `Cycle ${prev.number} took ${days(prev.days)}. Cycle ${c.number}${c.target_days ? `’s target is ${plural(c.target_days, 'day')}` : ' has no target'}: you’re ${days(c.days)} in, with ${c.done} of ${c.total} done.`;
     } else if (c) {
       line = `Cycle ${c.number}${c.target_days ? `, aiming for ${plural(c.target_days, 'day')}` : ''}: ${c.done} of ${c.total} done after ${days(c.days)}.`;
+    } else if (last && this._old(o)) {
+      line = `An earlier set: ${plural(o.cycles.length, 'cycle')}, the last taking ${days(last.days)}.`;
     } else if (last) {
       line = `Cycle ${last.number} took ${days(last.days)}. Next: the same puzzles in ${o.suggested_target_days ? plural(o.suggested_target_days, 'day') : 'half the time'}.`;
     } else {
@@ -93,7 +129,9 @@ export class WoodpeckerPage {
     card.appendChild(el('span', 'tr-muted', 'Days per cycle; the outline is the target'));
     const bars = [];
     o.cycles.forEach((c) => bars.push({ name: `C${c.number}`, days: c.days, target: c.target_days, state: c.finished_at ? 'done' : 'now' }));
-    let next = o.current ? (o.current.target_days ?? null) : (o.suggested_target_days ?? (o.cycles.length ? null : 28));
+    // an earlier set has no cycles to come
+    const half = (d) => (d > 1 ? Math.ceil(d / 2) : null);
+    let next = this._old(o) ? null : o.current ? half(o.current.target_days ?? 0) : (o.suggested_target_days ?? (o.cycles.length ? null : 28));
     for (let n = o.cycles.length + 1; bars.length < 6 && next; n++) {
       if (!o.current || n > o.current.number) {
         bars.push({ name: `C${n}`, days: 0, target: next, state: 'next' });
@@ -176,7 +214,7 @@ export class WoodpeckerPage {
   async _fillMap(box, o, shown) {
     let data;
     try {
-      data = await api.woodpeckerTimes(o.course_id);
+      data = await api.woodpeckerTimes(o.course_id, o.set_number);
     } catch (err) {
       box.replaceChildren(el('p', 'tr-muted', err.message));
       return;
@@ -211,6 +249,15 @@ export class WoodpeckerPage {
       card.appendChild(el('p', 'meta', 'This course has no puzzles to solve (only pages to read).'));
       return card;
     }
+    if (this._old(o)) {
+      const st = o.sets.find((x) => x.number === o.set_number);
+      card.appendChild(el('h3', 'wp-h', `Set ${o.set_number}: ${scopeText(st ?? {}, o.chapters)}`));
+      card.appendChild(el('p', 'meta wp-intro', `An earlier set of ${plural(o.cycles.length, 'cycle')}, started ${dateText(st?.started_at ?? o.cycles[0].started_at)}. Kept to look back on; cycles go on in the latest set.`));
+      const back = el('div', 'cv-actions');
+      back.appendChild(button(`Back to set ${o.latest_set}`, 'primary tr-cta', () => this._showSet(o.latest_set)));
+      card.appendChild(back);
+      return card;
+    }
     if (!c) {
       const next = o.cycles.length + 1;
       card.appendChild(el('h3', 'wp-h', o.cycles.length ? `Cycle ${o.cycles.length} done. Ready for cycle ${next}` : 'The Woodpecker Method'));
@@ -223,7 +270,10 @@ export class WoodpeckerPage {
             : `Solve all ${o.puzzles} puzzles in course order, each one timed; only your first go in a cycle counts. Then do the whole set again in half the days, and again, until it takes a day or two. The first cycle is the long one: give it a few weeks.`,
         ),
       );
-      card.appendChild(button(`Start cycle ${next}`, 'primary tr-cta', () => this._start(o)));
+      const actions = el('div', 'cv-actions');
+      actions.appendChild(button(`Start cycle ${next}`, 'primary tr-cta', () => this._start(o)));
+      if (o.cycles.length) actions.appendChild(button('Start a new set', 'tr-cta', () => this._start(o, true), 'Begin again at cycle 1, e.g. with different chapters; this set is kept to look back on'));
+      card.appendChild(actions);
       return card;
     }
     const head = el('div', 'wp-cur-head');
@@ -269,19 +319,21 @@ export class WoodpeckerPage {
 
     const actions = el('div', 'cv-actions');
     actions.appendChild(button(c.done ? `Continue cycle ${c.number}` : `Start solving`, 'primary tr-cta', () => this.onSolve(c, o.todo, this.course)));
+    actions.appendChild(button('Start a new set', 'small', () => this._start(o, true), 'End this cycle where it stands and begin again at cycle 1 (e.g. with every chapter); this set is kept'));
     actions.appendChild(button('Abandon cycle', 'small', () => this._abandon(c), 'Delete this cycle and its times'));
     card.appendChild(actions);
     return card;
   }
 
-  async _start(o) {
-    const number = o.cycles.length + 1;
-    const last = o.cycles.at(-1);
+  async _start(o, newSet = false) {
+    const number = newSet ? 1 : o.cycles.length + 1;
+    const last = newSet ? null : o.cycles.at(-1);
+    const suggested = newSet ? null : o.suggested_target_days;
     const fields = [
       {
         name: 'target',
         label: 'Target (days; empty for none)',
-        value: String(o.suggested_target_days ?? (o.cycles.length ? '' : 28)),
+        value: String(suggested ?? (number > 1 ? '' : 28)),
         required: false,
         placeholder: 'e.g. 14',
       },
@@ -296,10 +348,12 @@ export class WoodpeckerPage {
         });
       }
     }
+    const ending = newSet && o.current ? `Cycle ${o.current.number} ends where it is (${o.current.done} of ${o.current.total} done) and stays in set ${o.set_number}. ` : '';
     const values = await formDialog({
-      title: `Start cycle ${number}`,
+      title: newSet ? `Start set ${o.latest_set + 1}: cycle 1` : `Start cycle ${number}`,
       message:
-        (o.suggested_target_days ? `Suggested target: ${plural(o.suggested_target_days, 'day')}, half of cycle ${number - 1}. ` : '') +
+        (newSet ? `A fresh run of cycles from cycle 1. Set ${o.set_number} is kept to look back on. ${ending}` : '') +
+        (suggested ? `Suggested target: ${plural(suggested, 'day')}, half of cycle ${number - 1}. ` : '') +
         (fields.length > 1 ? 'Choose the chapters for this cycle (e.g. only the easy puzzles to begin with).' : ''),
       fields,
       submit: 'Start',
@@ -313,16 +367,18 @@ export class WoodpeckerPage {
     const chosen = o.chapters.filter((c) => c.puzzles && values[`ch_${c.id}`]).map((c) => c.id);
     const all = o.chapters.filter((c) => c.puzzles).length;
     try {
-      await api.startWoodpeckerCycle(this.course.id, { target_days: target, chapter_ids: fields.length > 1 && chosen.length < all ? chosen : null });
+      await api.startWoodpeckerCycle(this.course.id, { target_days: target, chapter_ids: fields.length > 1 && chosen.length < all ? chosen : null, new_set: newSet });
     } catch (err) {
       toast(err.message, 'error');
       return;
     }
+    this.viewing.delete(this.course.id);
     this.onChanged();
   }
 
   async _abandon(c) {
-    if (!(await confirmDialog('Abandon cycle', `Delete cycle ${c.number} and the ${plural(c.done, 'time')} recorded in it?`, 'Abandon'))) return;
+    const set = c.number === 1 && this.o.sets.length > 1 ? ` Set ${c.set_number} goes with it (set ${c.set_number - 1} is kept).` : '';
+    if (!(await confirmDialog('Abandon cycle', `Delete cycle ${c.number} and the ${plural(c.done, 'time')} recorded in it?${set}`, 'Abandon'))) return;
     try {
       await api.abandonWoodpeckerCycle(c.id);
     } catch (err) {
@@ -352,7 +408,7 @@ export class WoodpeckerPage {
       const daysCell = `${days(c.days)}${c.target_days ? ` / ${c.target_days}` : ''}`;
       const faster = prevAvg && c.avg_seconds ? Math.round((100 * (prevAvg - c.avg_seconds)) / prevAvg) : null;
       const cells = [
-        `${c.number}${c.finished_at ? '' : ' (now)'}`,
+        `${c.number}${!c.finished_at ? ' (now)' : c.done < c.total ? ' (ended early)' : ''}`,
         scopeText(c, o.chapters),
         dateText(c.started_at),
         daysCell,
@@ -432,7 +488,7 @@ export class WoodpeckerPage {
       if (!card.open || data) return;
       box.replaceChildren(el('p', 'meta', 'Loading…'));
       try {
-        data = await api.woodpeckerTimes(o.course_id);
+        data = await api.woodpeckerTimes(o.course_id, o.set_number);
       } catch (err) {
         box.replaceChildren(el('p', 'meta', err.message));
         return;

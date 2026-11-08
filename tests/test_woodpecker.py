@@ -95,3 +95,36 @@ def test_accept_missed_attempt(client, db):
     ex = client.get(f"/api/exercises/{first}").json()
     assert ex["status"] == "solved"
     client.delete(f"/api/courses/{cid}")
+
+
+def test_sets_of_cycles(client, db):
+    """A new set starts again at cycle 1 (ending an open cycle where it stands); older sets stay
+    viewable; abandoning a set's only cycle removes the set."""
+    cid = wp_course(client)
+    o = client.get(f"/api/courses/{cid}/woodpecker").json()
+    easy = o["chapters"][0]["id"]
+    c1 = client.post(f"/api/courses/{cid}/woodpecker/cycles", json={"chapter_ids": [easy]}).json()
+    assert (c1["set_number"], c1["number"], c1["total"]) == (1, 1, 1)
+    first = client.get(f"/api/courses/{cid}/woodpecker").json()["todo"][0]
+    # Nothing done yet in set 1's cycle 1 → still open; start a new set with every chapter.
+    assert client.post(f"/api/courses/{cid}/woodpecker/cycles", json={}).status_code == 409
+    s2 = client.post(f"/api/courses/{cid}/woodpecker/cycles", json={"new_set": True, "target_days": 20}).json()
+    assert (s2["set_number"], s2["number"], s2["total"]) == (2, 1, 2)
+
+    o = client.get(f"/api/courses/{cid}/woodpecker").json()
+    assert (o["set_number"], o["latest_set"], [c["number"] for c in o["cycles"]]) == (2, 2, [1])
+    assert [(st["number"], st["cycles"], st["chapter_ids"], st["open"]) for st in o["sets"]] == [(1, 1, [easy], False), (2, 1, None, True)]
+    old = client.get(f"/api/courses/{cid}/woodpecker?set=1").json()
+    assert old["current"] is None and old["cycles"][0]["finished_at"] and old["cycles"][0]["done"] == 0  # ended early, kept
+
+    client.post(f"/api/woodpecker/cycles/{s2['id']}/attempts", json={"exercise_id": first, "solved": True, "seconds": 7})
+    assert client.get(f"/api/courses/{cid}/woodpecker/times?set=1").json()["cycles"] == [1]
+    t2 = client.get(f"/api/courses/{cid}/woodpecker/times").json()
+    assert t2["set_number"] == 2 and {p["id"]: p["times"] for p in t2["puzzles"]}[first] == {"1": {"seconds": 7.0, "solved": True}}
+    assert client.get("/api/courses").json()[0]["cycle"]["set_number"] == 2
+
+    assert client.delete(f"/api/woodpecker/cycles/{c1['id']}").status_code == 409  # not the latest
+    assert client.delete(f"/api/woodpecker/cycles/{s2['id']}").status_code == 204
+    o = client.get(f"/api/courses/{cid}/woodpecker").json()
+    assert (o["set_number"], len(o["sets"])) == (1, 1)
+    client.delete(f"/api/courses/{cid}")

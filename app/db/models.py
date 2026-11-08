@@ -561,13 +561,16 @@ class CourseExercise(Base):
 class WoodpeckerCycle(Base):
     """One pass through a Woodpecker course's puzzles (the Woodpecker Method: solve the whole set,
     then again faster, each cycle aiming at half the days of the one before). `chapter_ids` limits
-    the cycle to some chapters (None = all). Finished when every puzzle in scope has an attempt."""
+    the cycle to some chapters (None = all). Finished when every puzzle in scope has an attempt
+    (or ended early by starting a new set). Cycles come in sets: a fresh run of halving cycles (e.g.
+    the easy chapters first, then everything), numbered from 1 within each set."""
 
     __tablename__ = "woodpecker_cycles"
-    __table_args__ = (UniqueConstraint("course_id", "number", name="uq_woodpecker_cycles_course_number"),)
+    __table_args__ = (UniqueConstraint("course_id", "set_number", "number", name="uq_woodpecker_cycles_course_set_number"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     course_id: Mapped[int] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
+    set_number: Mapped[int] = mapped_column(server_default="1")
     number: Mapped[int]
     chapter_ids: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))
     target_days: Mapped[int | None]

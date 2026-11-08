@@ -5378,3 +5378,8 @@ button.wp-cell:hover {
     font-size: 13px;
   }
 }
+
+/* Woodpecker: one chip per set of cycles */
+.wp-sets {
+  margin: 4px 0 12px;
+}
