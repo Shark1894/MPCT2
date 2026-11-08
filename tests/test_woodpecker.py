@@ -72,3 +72,26 @@ def test_errors_and_abandon(client, db):
     assert client.get(f"/api/courses/{tactics}/woodpecker").json()["current"] is None
     assert client.post(f"/api/courses/{tactics}/woodpecker/cycles", json={}).json()["number"] == 2
     client.delete(f"/api/courses/{tactics}")
+
+
+def test_accept_missed_attempt(client, db):
+    """A miss can be counted as solved (an alternative solution), in a finished cycle too."""
+    cid = wp_course(client)
+    c1 = client.post(f"/api/courses/{cid}/woodpecker/cycles", json={}).json()
+    first, second = client.get(f"/api/courses/{cid}/woodpecker").json()["todo"]
+    base = f"/api/woodpecker/cycles/{c1['id']}/attempts"
+    assert client.post(f"{base}/{first}/accept").status_code == 404  # not tried yet
+    client.post(base, json={"exercise_id": first, "solved": False, "seconds": 20})
+    client.post(base, json={"exercise_id": second, "solved": False, "seconds": 10})  # finishes the cycle
+
+    r = client.post(f"{base}/{first}/accept")
+    assert r.status_code == 200
+    c = r.json()
+    assert (c["done"], c["solved"], c["accuracy"], c["seconds"]) == (2, 1, 50.0, 30.0)  # time unchanged
+    assert client.post(f"{base}/{first}/accept").json()["solved"] == 1  # idempotent
+
+    times = {p["id"]: p["times"] for p in client.get(f"/api/courses/{cid}/woodpecker/times").json()["puzzles"]}
+    assert times[first] == {"1": {"seconds": 20.0, "solved": True}}
+    ex = client.get(f"/api/exercises/{first}").json()
+    assert ex["status"] == "solved"
+    client.delete(f"/api/courses/{cid}")

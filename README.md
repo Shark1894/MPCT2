@@ -672,7 +672,9 @@ the same set again, faster, each cycle aiming at half the days of the one before
 - Every puzzle is timed, from the moment your first move is due to the end. Only the first go at a puzzle in a
   cycle counts (solved or missed, and its time); **Retry** afterwards is practice. **Skip** leaves it for later in
   the cycle. **Pause** (or **P**) stops the clock and hides the board. With **Next puzzle automatically** a solved
-  puzzle moves straight on. The cycle finishes by itself with its last puzzle. Information pages and reference
+  puzzle moves straight on. A missed puzzle offers **Count as correct**: when your answer was another solution
+  the course doesn't give, it counts that go as solved (time unchanged; works on the cycle's last puzzle too).
+  The cycle finishes by itself with its last puzzle. Information pages and reference
   lines aren't puzzles and are left out.
 - The page leads with the book and one ring per cycle, then the current cycle (done, accuracy, total time, time a puzzle, days against the target, pace:
   puzzles ahead of or behind the target pace and how many a day finish on time, time left at your average; the
@@ -689,7 +691,8 @@ API: `GET /api/courses`, `POST /api/courses/import`, `GET|PATCH|DELETE /api/cour
 current cycle, puzzles still to do), `POST /api/courses/{id}/woodpecker/cycles` (`{"target_days": 14,
 "chapter_ids": null}`), `DELETE /api/woodpecker/cycles/{id}` (the latest only),
 `POST /api/woodpecker/cycles/{id}/attempts` (`{"exercise_id": 1, "solved": true, "seconds": 12.5}`; a second go
-isn't stored), `GET /api/courses/{id}/woodpecker/times`.
+isn't stored), `POST /api/woodpecker/cycles/{id}/attempts/{exercise_id}/accept` (a missed first go counted as
+solved), `GET /api/courses/{id}/woodpecker/times`.
 
 ## Stats (time spent)
 

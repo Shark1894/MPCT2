@@ -266,6 +266,12 @@ def woodpecker_attempt(cycle_id: int, body: WpAttemptIn, s: Db):
     return wp.record(s, cycle_id, body.exercise_id, body.solved, body.seconds)
 
 
+@router.post("/woodpecker/cycles/{cycle_id}/attempts/{exercise_id}/accept", response_model=CycleOut)
+def woodpecker_accept(cycle_id: int, exercise_id: int, s: Db):
+    """Override a missed first go as solved (another solution the course doesn't list)."""
+    return wp.accept(s, cycle_id, exercise_id)
+
+
 @router.get("/courses/{course_id}/woodpecker/times", response_model=PuzzleTimesOut)
 def puzzle_times(course_id: int, s: Db):
     return wp.puzzle_times(s, course_id)

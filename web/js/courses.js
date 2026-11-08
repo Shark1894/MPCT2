@@ -81,6 +81,7 @@ export class CourseTrainer {
       result: $('cx-result'),
       next: $('cx-next'),
       retry: $('cx-retry'),
+      accept: $('cx-accept'),
       stop: $('cx-stop'),
       clockBox: $('cx-clock'),
       timer: $('cx-timer'),
@@ -96,6 +97,7 @@ export class CourseTrainer {
     this.el.skip.addEventListener('click', () => this.next());
     this.el.next.addEventListener('click', () => this.next());
     this.el.retry.addEventListener('click', () => this.retry());
+    this.el.accept.addEventListener('click', () => this.accept());
   }
 
   /** Solving (the board belongs to the exercise): no navigation, no engine. */
@@ -230,6 +232,8 @@ export class CourseTrainer {
     this.run = run;
     this.retrying = retrying;
     this.recorded = false;
+    this.missedGo = null; // a recorded Woodpecker miss that can still be counted as correct
+    this.el.accept.hidden = true;
     this._clockReset();
     this.el.pause.hidden = !this.wp;
     if (!this.active) {
@@ -458,6 +462,10 @@ export class CourseTrainer {
     this.wp.done = r.cycle.done;
     this.wp.total = r.cycle.total;
     this.wp.last = r.cycle;
+    if (r.recorded && !solved) {
+      this.missedGo = { run, seconds };
+      if (this.run === run) this.el.accept.hidden = false;
+    }
     if (r.finished) {
       this.queue = [];
       this.wp.finished = r.cycle;
@@ -466,6 +474,33 @@ export class CourseTrainer {
         this.el.next.textContent = 'Finish';
       }
     }
+  }
+
+  /** Count the missed first go as solved: the answer was another solution the course doesn't give. */
+  async accept() {
+    const go = this.missedGo;
+    if (!go || go.run !== this.run || !this.wp) return;
+    this.el.accept.disabled = true;
+    let cycle;
+    try {
+      cycle = await api.acceptWoodpeckerAttempt(this.wp.cycleId, go.run.ex.id);
+    } catch (err) {
+      toast(`Not changed: ${err.message}`, 'error');
+      this.el.accept.disabled = false;
+      return;
+    }
+    this.el.accept.disabled = false;
+    this.missedGo = null;
+    this.el.accept.hidden = true;
+    this.session.missed -= 1;
+    this.session.solved += 1;
+    this.wp.last = cycle;
+    if (this.wp.finished) this.wp.finished = cycle;
+    if (this.run !== go.run) return;
+    const done = this.wp.finished ? ` Cycle ${cycle.number} complete!` : '';
+    this.el.result.textContent = `✓ Counted as solved (${clock(go.seconds)}).${done}`;
+    this.el.result.className = 'train-result good';
+    this._progress();
   }
 
   _summary() {

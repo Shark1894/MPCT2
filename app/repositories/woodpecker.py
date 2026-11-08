@@ -186,6 +186,22 @@ def record(s: Session, cycle_id: int, exercise_id: int, solved: bool, seconds: f
     return {"recorded": recorded, "finished": finished, "cycle": stats}
 
 
+def accept(s: Session, cycle_id: int, exercise_id: int) -> dict:
+    """Count a missed first go as solved: an alternative solution the course doesn't give. The time
+    stays as recorded; the exercise's own progress is corrected too. Works in a finished cycle."""
+    cycle = _cycle(s, cycle_id)
+    attempt = s.scalar(select(WoodpeckerAttempt).where(WoodpeckerAttempt.cycle_id == cycle.id, WoodpeckerAttempt.exercise_id == exercise_id))
+    if attempt is None:
+        raise NotFound("That puzzle hasn't been tried in this cycle")
+    if not attempt.solved:
+        attempt.solved = True
+        ex = s.get(CourseExercise, exercise_id)
+        ex.solved_count += 1
+        ex.status = "solved"
+        s.flush()
+    return _stats(s, cycle)
+
+
 def puzzle_times(s: Session, course_id: int) -> dict:
     """Every puzzle with its time and result in each cycle: {cycles: [numbers], puzzles: [...]}."""
     course = _course(s, course_id)

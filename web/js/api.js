@@ -111,6 +111,7 @@ export const api = {
   woodpeckerTimes: (courseId) => request('GET', `/courses/${courseId}/woodpecker/times`),
   startWoodpeckerCycle: (courseId, body) => request('POST', `/courses/${courseId}/woodpecker/cycles`, { body }),
   abandonWoodpeckerCycle: (cycleId) => request('DELETE', `/woodpecker/cycles/${cycleId}`),
+  acceptWoodpeckerAttempt: (cycleId, exerciseId) => request('POST', `/woodpecker/cycles/${cycleId}/attempts/${exerciseId}/accept`),
   woodpeckerAttempt: (cycleId, exerciseId, solved, seconds) =>
     request('POST', `/woodpecker/cycles/${cycleId}/attempts`, { body: { exercise_id: exerciseId, solved, seconds } }),
   importPgn: (pgn, category = 'otb') => request('POST', '/games/import-pgn', { body: { pgn, category } }),
