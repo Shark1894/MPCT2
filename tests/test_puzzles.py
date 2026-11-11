@@ -67,6 +67,7 @@ def test_parse_row():
     assert p.id == "0009B" and p.rating == 1450 and p.moves.split()[0] == "b6c5"
     assert p.themes == ["advantage", "middlegame", "short"]
     assert p.opening_tags == ["Kings_Pawn_Game", "Kings_Pawn_Game_Leonardis_Variation"]
+    assert next(read_rows([EXTRA[0]])).opening_tags == ["Caro-Kann_Defense", "Caro-Kann_Defense_Advance_Variation"]  # hyphens kept
     assert p.copy_row()[7] == "{advantage,middlegame,short}"
     assert parse_row(["x", "not a fen", "e2e4"], rng) is None
     assert list(read_rows(["bad,row"])) == []
@@ -138,7 +139,7 @@ def test_next_puzzle_near_the_rating_skips_disliked_and_tried(client, imported):
 def test_next_puzzle_by_theme_and_exclude(client, imported):
     p = client.get("/api/puzzles/next", params={"theme": "mateIn2"}).json()
     assert p["id"] == "000hf" and "Mate in 2" in p["theme_names"]
-    assert p["opening_tags"] == ["Horwitz Defense", "Horwitz Defense Other variations"]
+    assert p["opening_tags"] == ["Horwitz Defense", "Horwitz Defense: other variations"]
     assert p["moves"] == ["e8f7", "e2e6", "f7f8", "e6f7"] and p["tried"] == 0
     assert client.get("/api/puzzles/next", params={"theme": "mateIn2", "exclude": "000hf"}).status_code == 404
     assert client.get("/api/puzzles/next", params={"theme": "nonsense"}).status_code == 422
@@ -183,3 +184,74 @@ def test_import_endpoint_starts_a_background_import(client, monkeypatch):
     monkeypatch.setattr(puzzle_import, "start_import", lambda: started.append(1) or True)
     assert client.post("/api/puzzles/import").status_code == 202
     assert started == [1]
+
+
+# ---- openings filter ------------------------------------------------------------------------
+
+CARO_ADV = ["e2e4", "c7c6", "d2d4", "d7d5", "e4e5", "c8f5"]
+EXTRA = [  # the 0000D position with other ids and opening tags
+    "0caro,5rk1/1p3ppp/pq3b2/8/8/1P1Q1N2/P4PPP/3R2K1 w - - 2 27,d3d6 f8d8 d6d8 f6d8,1550,74,96,25000,advantage endgame short,https://lichess.org/x#53,Caro-Kann_Defense Caro-Kann_Defense_Advance_Variation,",
+    "0cpan,5rk1/1p3ppp/pq3b2/8/8/1P1Q1N2/P4PPP/3R2K1 w - - 2 27,d3d6 f8d8 d6d8 f6d8,1500,74,96,25000,advantage endgame short,https://lichess.org/y#53,Caro-Kann_Defense Caro-Kann_Defense_Panov_Attack,",
+]
+
+
+@pytest.fixture
+def with_openings(db, tmp_path):
+    f = tmp_path / "p.csv"
+    f.write_text("\n".join([HEADER, *ROWS, *EXTRA]) + "\n")
+    puzzle_import.import_puzzles(str(f), engine=get_engine(), seed=1)
+
+
+def test_opening_names_and_keys():
+    from app.core import openings
+
+    assert openings.name_to_key("Queen's Gambit Declined: Semi-Slav") == "Queens_Gambit_Declined_Semi-Slav"
+    assert openings.name_to_key("Grünfeld Defense") == "Grunfeld_Defense"
+    n = openings.split_name("Sicilian Defense: Najdorf Variation, English Attack")
+    assert (n.family, n.variation, n.tag) == ("Sicilian Defense", "Najdorf Variation", "Sicilian_Defense_Najdorf_Variation")
+    assert openings.split_name("Horwitz Defense").tag == "Horwitz_Defense_Other_variations"
+    assert openings.label("Kings_Pawn_Game_Leonardis_Variation") == "King's Pawn Game: Leonardis Variation"
+    assert openings.label("Horwitz_Defense_Other_variations") == "Horwitz Defense: other variations"
+    names = {c["tag"]: c for c in openings.choices()}
+    assert names["Caro-Kann_Defense"]["family"] and not names["Caro-Kann_Defense_Advance_Variation"]["family"]
+
+
+def test_puzzles_from_your_opening(client, with_openings):
+    rep = client.post("/api/repertoires", json={"name": "Main"}).json()
+    caro = client.post(f"/api/repertoires/{rep['id']}/openings", json={"name": "Caro", "color": "black"}).json()
+    empty = client.post(f"/api/repertoires/{rep['id']}/openings", json={"name": "Nothing yet", "color": "white"}).json()
+    client.post(f"/api/openings/{caro['id']}/lines", json={"moves": CARO_ADV})
+    ital = client.post(f"/api/repertoires/{rep['id']}/openings", json={"name": "Italian", "color": "white"}).json()
+    client.post(f"/api/openings/{ital['id']}/lines", json={"moves": ["e2e4", "e7e5", "g1f3"]})  # ends with Black to move
+
+    choices = client.get("/api/puzzles/openings").json()
+    mine = {o["name"]: o for o in choices["mine"]}
+    assert mine["Caro"]["lichess"] == ["Caro-Kann Defense: Advance Variation", "Caro-Kann Defense: other variations"]  # not 1.e4's King's Pawn Game
+    assert mine["Caro"]["repertoire"] == "Main" and mine["Nothing yet"]["lichess"] == []
+    assert choices["mine"][0]["color"] == "white"  # White's openings first
+    # White: 1.e4 (Black to move) counts; the line ends at 2.Nf3, the King's Knight Opening
+    assert mine["Italian"]["lichess"] == ["King's Knight Opening: other variations", "King's Pawn Game: other variations"]
+    assert any(c["tag"] == "Caro-Kann_Defense_Panov_Attack" for c in choices["lichess"])
+
+    p = client.get("/api/puzzles/next", params={"opening_id": caro["id"]}).json()
+    assert p["id"] == "0caro" and p["opening_tags"][-1] == "Caro-Kann Defense: Advance Variation"
+    res = client.get("/api/puzzles/next", params={"opening_id": caro["id"], "exclude": "0caro"})
+    assert res.status_code == 404 and "in your Caro" in res.json()["detail"]
+    assert client.get("/api/puzzles/next", params={"opening_id": empty["id"]}).status_code == 422
+    assert client.get("/api/puzzles/next", params={"opening_id": 9999}).status_code == 404
+
+
+def test_puzzles_from_a_lichess_opening(client, with_openings):
+    family = {client.get("/api/puzzles/next", params={"opening": "Caro-Kann_Defense", "exclude": x}).json()["id"] for x in ("0caro", "0cpan")}
+    assert family == {"0caro", "0cpan"}
+    p = client.get("/api/puzzles/next", params={"opening": "Caro-Kann_Defense_Panov_Attack"}).json()
+    assert p["id"] == "0cpan"
+    assert client.get("/api/puzzles/next", params={"opening": "Caro-Kann_Defense_Panov_Attack", "theme": "mateIn2"}).status_code == 404
+    assert client.get("/api/puzzles/next", params={"opening": "Made_Up"}).status_code == 422
+    assert client.get("/api/puzzles/next", params={"opening": "Caro-Kann_Defense", "opening_id": 1}).status_code == 422
+
+
+def test_import_builds_the_opening_tags_index(with_openings):
+    with get_engine().connect() as c:
+        indexes = set(c.execute(text("SELECT indexname FROM pg_indexes WHERE tablename = 'puzzles'")).scalars())
+    assert "ix_puzzles_opening_tags" in indexes

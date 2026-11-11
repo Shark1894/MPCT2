@@ -65,7 +65,7 @@ def parse_row(row: list[str], rng: random.Random) -> PuzzleRow | None:
         nb_plays=_int(row[6]),
         themes=[t for t in row[7].split() if t.isidentifier()],
         game_url=row[8].strip()[:100] if len(row) > 8 else "",
-        opening_tags=[t for t in (row[9].split() if len(row) > 9 else []) if t.replace("_", "").isalnum()],
+        opening_tags=[t for t in (row[9].split() if len(row) > 9 else []) if t.replace("_", "").replace("-", "").isalnum()],  # hyphens: Caro-Kann_Defense
         rnd=rng.randrange(2**31),
     )
 

@@ -175,8 +175,12 @@ export const api = {
   puzzleImport: () => request('POST', '/puzzles/import'),
   puzzleThemes: () => request('GET', '/puzzles/themes'),
   puzzleSummary: () => request('GET', '/puzzles/summary'),
-  nextPuzzle: (theme = null, exclude = []) =>
-    request('GET', '/puzzles/next', { params: { ...(theme ? { theme } : {}), ...(exclude.length ? { exclude: exclude.join(',') } : {}) } }),
+  puzzleOpenings: () => request('GET', '/puzzles/openings'),
+  /** `opening`: {opening_id} (one of your openings), {opening: <Lichess tag>} or {} (see openingParams). */
+  nextPuzzle: (theme = null, exclude = [], opening = {}) =>
+    request('GET', '/puzzles/next', {
+      params: { ...(theme ? { theme } : {}), ...(exclude.length ? { exclude: exclude.join(',') } : {}), ...opening },
+    }),
   puzzle: (id) => request('GET', `/puzzles/${id}`),
   puzzleAttempt: (id, solved, seconds) => request('POST', `/puzzles/${id}/attempts`, { body: { solved, seconds } }),
 

@@ -655,8 +655,16 @@
               <label class="pz-theme">Theme
                 <select id="pz-theme"><option value="">Any theme</option></select>
               </label>
+              <label class="pz-theme">Opening
+                <select id="pz-opening"><option value="">Any opening</option></select>
+              </label>
+              <label id="pz-opening-search-label" class="pz-theme pz-opening-search" hidden>Lichess opening
+                <input id="pz-opening-search" type="search" list="pz-opening-names" placeholder="e.g. Caro-Kann Defense" autocomplete="off">
+                <datalist id="pz-opening-names"></datalist>
+              </label>
               <button id="pz-start" type="button" class="primary">Start puzzles</button>
             </div>
+            <p id="pz-opening-note" class="meta pz-opening-note" hidden></p>
           </section>
 
           <section id="gp" class="dash-card gp" data-pz="mine">

@@ -26,7 +26,7 @@ export class TrainingView {
    * @param {object} deps
    * @param {(list: {id: number}[], label: string, opts?: object) => void} deps.onStart   course exercises on the board
    * @param {(drillId: string, fen?: string) => void} deps.onEndgame                      an endgame drill
-   * @param {(theme: string|null) => void} deps.onPuzzleStart                            rated puzzles
+   * @param {(theme: string|null) => void} deps.onPuzzleStart                            rated puzzles (the saved opening filter applies)
    * @param {(list: object[]) => void} deps.onOwnPuzzles                                  puzzles from your games
    * @param {(id: string) => void} deps.onPuzzleOpen                                      one rated puzzle again
    * @param {{refresh: () => Promise<void>, hide: () => void}} deps.puzzles               the full puzzle pages
@@ -294,6 +294,12 @@ export class TrainingView {
       label.appendChild(select);
       row.append(label, button('Start', 'tr-cta', () => this.onPuzzleStart(select.value || null)));
       rated.appendChild(row);
+      const openingName = store.get('puzzleOpening', '') ? store.get('puzzleOpeningName', '') : '';
+      const op = el('p', 'tr-muted tr-pz-opening', 'Opening: ');
+      op.appendChild(el('span', 'tr-strong', openingName || 'any'));
+      op.append(' · ');
+      op.appendChild(button('Change', 'tr-link', () => this.go({ view: 'puzzles', which: 'rated' }), 'Choose one of your openings or a Lichess opening'));
+      rated.appendChild(op);
       this._loadThemes(select);
       const weak = (pz?.themes ?? []).slice(0, 2);
       if (weak.length) {

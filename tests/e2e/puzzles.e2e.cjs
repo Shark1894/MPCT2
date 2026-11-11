@@ -96,7 +96,7 @@ const current = (p) => p.evaluate(() => ({ id: mpct.puzzles.run.puzzle.id, expec
   await settle(page, 400);
   const solved = await text(page, '#puzzle-result');
   check(/✓ Solved! Rating 1\d{3} \(\+\d+\)/.test(solved), 'solved with a rating gain: ' + solved);
-  check(/Puzzle rated 1500 · Checkmate, Mate in 2.* · Horwitz Defense Other variations · 800 plays/.test(await text(page, '#puzzle-info')), 'puzzle info: ' + (await text(page, '#puzzle-info')));
+  check(/Puzzle rated 1500 · Checkmate, Mate in 2.* · Horwitz Defense: other variations · 800 plays/.test(await text(page, '#puzzle-info')), 'puzzle info: ' + (await text(page, '#puzzle-info')));
   check((await page.getAttribute('#puzzle-game', 'href')) === 'https://lichess.org/71ygsFeE/black#38', 'link to the game');
   check(!(await page.isHidden('#engine-panel')) && !(await page.isDisabled('#nav-back')), 'after solving: engine and navigation free');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/puzzle-solved.png` });

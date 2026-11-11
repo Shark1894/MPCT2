@@ -4,7 +4,7 @@
 
 import { api } from './api.js';
 import { Chess } from '../vendor/chess.js/chess.js';
-import { PuzzleRun, historyPath } from './puzzle.js';
+import { PuzzleRun, findLichessOpening, historyPath, myOpeningNote, openingParams } from './puzzle.js';
 import { confirmDialog, daysFromToday, formDialog, plural, store, toast } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -118,9 +118,10 @@ export class PuzzleController {
   // ---- lifecycle ---------------------------------------------------------------------------
 
   /** Start solving puzzles near your rating (optionally one theme). */
-  async start(theme = null) {
+  async start(theme = null, opening = '') {
     this.mode = 'lichess';
     this.theme = theme;
+    this.opening = openingParams(opening);
     this.seen = [];
     this.session = { solved: 0, failed: 0 };
     await this.next();
@@ -165,7 +166,7 @@ export class PuzzleController {
     }
     let p;
     try {
-      p = await api.nextPuzzle(this.theme, this.seen.slice(-50));
+      p = await api.nextPuzzle(this.theme, this.seen.slice(-50), this.opening ?? {});
     } catch (err) {
       toast(err.message, 'error');
       if (!this.active) return;
@@ -439,7 +440,7 @@ export class PuzzleController {
 export class PuzzlesView {
   /**
    * @param {object} deps
-   * @param {(theme: string|null) => void} deps.onStart
+   * @param {(theme: string|null, opening: string) => void} deps.onStart   opening: '' | 'o:<id>' | 't:<Lichess tag>' 
    * @param {(puzzleId: string) => void} deps.onRetry
    * @param {(list: object[]) => void} deps.onStartOwn     practise puzzles from your games
    * @param {() => void} deps.onReviewGames               go and review the games not reviewed yet
@@ -452,6 +453,11 @@ export class PuzzlesView {
       rating: $('pz-rating'),
       ratingMeta: $('pz-rating-meta'),
       theme: $('pz-theme'),
+      opening: $('pz-opening'),
+      openingSearchLabel: $('pz-opening-search-label'),
+      openingSearch: $('pz-opening-search'),
+      openingNames: $('pz-opening-names'),
+      openingNote: $('pz-opening-note'),
       start: $('pz-start'),
       dbText: $('pz-db-text'),
       dbProgress: $('pz-db-progress'),
@@ -473,8 +479,13 @@ export class PuzzlesView {
     this.el.gpDue.addEventListener('click', () => this.practiseOwn(true));
     this.el.gpAll.addEventListener('click', () => this.practiseOwn(false));
 
-    this.el.start.addEventListener('click', () => this.onStart(this.el.theme.value || null));
+    this.el.start.addEventListener('click', () => this.start());
     this.el.theme.addEventListener('change', () => store.set('puzzleTheme', this.el.theme.value));
+    this.el.opening.addEventListener('change', () => this._openingChanged());
+    this.el.openingSearch.addEventListener('change', () => this._openingChanged());
+    this.el.openingSearch.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.start();
+    });
     this.el.import.addEventListener('click', () => this.startImport());
   }
 
@@ -489,7 +500,108 @@ export class PuzzlesView {
         /* offered next time */
       }
     }
-    await Promise.all([this.loadStatus(), this.loadSummary(), this.loadOwn()]);
+    await Promise.all([this.loadStatus(), this.loadSummary(), this.loadOwn(), this.loadOpenings()]);
+  }
+
+  // ---- the openings filter -------------------------------------------------------------
+
+  /** Your openings (reloaded each visit: lines change) and the Lichess openings (once). */
+  async loadOpenings() {
+    let data;
+    try {
+      data = await api.puzzleOpenings();
+    } catch {
+      return; /* the filter just stays at Any opening */
+    }
+    this.openings = data;
+    const sel = this.el.opening;
+    sel.replaceChildren(new Option('Any opening', ''));
+    const reps = new Set(data.mine.map((o) => o.repertoire));
+    for (const color of ['white', 'black']) {
+      const mine = data.mine.filter((o) => o.color === color);
+      if (!mine.length) continue;
+      const group = document.createElement('optgroup');
+      group.label = `Your openings · ${color === 'white' ? 'White' : 'Black'}`;
+      for (const o of mine) group.appendChild(new Option(reps.size > 1 ? `${o.name} (${o.repertoire})` : o.name, `o:${o.id}`));
+      sel.appendChild(group);
+    }
+    sel.appendChild(new Option('A Lichess opening…', 'lichess'));
+    if (!this.el.openingNames.childElementCount) {
+      this.el.openingNames.replaceChildren(...data.lichess.map((c) => new Option(c.name)));
+    }
+    // Restore the last choice (an opening since deleted falls back to Any opening)
+    const saved = store.get('puzzleOpening', '');
+    if (saved.startsWith('t:')) {
+      const c = data.lichess.find((x) => x.tag === saved.slice(2));
+      sel.value = c ? 'lichess' : '';
+      this.el.openingSearch.value = c ? c.name : '';
+    } else {
+      sel.value = saved;
+      if (sel.value !== saved) sel.value = '';
+    }
+    const now = this.openingValue() ?? '';
+    store.set('puzzleOpening', now);
+    store.set('puzzleOpeningName', now ? this._openingName(now) : '');
+    this._showOpeningNote();
+  }
+
+  /** The filter's value: '' | 'o:<id>' | 't:<tag>', or null when a typed name isn't known. */
+  openingValue() {
+    const v = this.el.opening.value;
+    if (v !== 'lichess') return v;
+    const c = findLichessOpening(this.openings?.lichess ?? [], this.el.openingSearch.value);
+    return c ? `t:${c.tag}` : null;
+  }
+
+  _openingChanged() {
+    const value = this.openingValue();
+    if (value !== null) {
+      store.set('puzzleOpening', value);
+      store.set('puzzleOpeningName', value ? this._openingName(value) : '');
+    }
+    this._showOpeningNote();
+    if (this.el.opening.value === 'lichess' && !this.el.openingSearch.value && document.activeElement === this.el.opening) {
+      this.el.openingSearch.focus();
+    }
+  }
+
+  _openingName(value) {
+    if (value.startsWith('o:')) return this.openings?.mine.find((x) => `o:${x.id}` === value)?.name ?? '';
+    return this.openings?.lichess.find((x) => `t:${x.tag}` === value)?.name ?? '';
+  }
+
+  _showOpeningNote() {
+    const v = this.el.opening.value;
+    const note = this.el.openingNote;
+    this.el.openingSearchLabel.hidden = v !== 'lichess';
+    note.hidden = true;
+    if (v.startsWith('o:')) {
+      const o = this.openings?.mine.find((x) => `o:${x.id}` === v);
+      if (o) {
+        note.textContent = myOpeningNote(o);
+        note.title = o.lichess.join('\n');
+        note.hidden = false;
+      }
+    } else if (v === 'lichess') {
+      const c = findLichessOpening(this.openings?.lichess ?? [], this.el.openingSearch.value);
+      note.textContent = c
+        ? c.family
+          ? `Puzzles from games in any ${c.name} line.`
+          : `Puzzles from games in the ${c.name}.`
+        : 'Type to search, then pick an opening or variation from the list.';
+      note.title = '';
+      note.hidden = false;
+    }
+  }
+
+  start() {
+    const opening = this.openingValue();
+    if (opening === null) {
+      toast('Pick a Lichess opening from the list (or choose Any opening).', 'error');
+      this.el.openingSearch.focus();
+      return;
+    }
+    this.onStart(this.el.theme.value || null, opening);
   }
 
   // ---- puzzles from your own games -------------------------------------------------
@@ -699,7 +811,7 @@ export class PuzzlesView {
       go.addEventListener('click', () => {
         this.el.theme.value = t.theme;
         store.set('puzzleTheme', t.theme);
-        this.onStart(t.theme);
+        this.onStart(t.theme, this.openingValue() ?? '');
       });
       li.appendChild(go);
       e.themes.appendChild(li);

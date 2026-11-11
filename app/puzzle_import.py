@@ -63,6 +63,7 @@ def import_puzzles(source: str = LICHESS_URL, engine=None, seed: int | None = No
                 cur.execute("SET LOCAL statement_timeout = 0")
                 cur.execute("DROP INDEX IF EXISTS ix_puzzles_rnd")
                 cur.execute("DROP INDEX IF EXISTS ix_puzzles_themes")
+                cur.execute("DROP INDEX IF EXISTS ix_puzzles_opening_tags")
                 cur.execute("TRUNCATE puzzles")
                 n = 0
                 with cur.copy(f"COPY puzzles ({', '.join(COLUMNS)}) FROM STDIN") as copy:
@@ -76,6 +77,7 @@ def import_puzzles(source: str = LICHESS_URL, engine=None, seed: int | None = No
                 state.update(step="Building indexes", loaded=n)
                 cur.execute("CREATE INDEX ix_puzzles_rnd ON puzzles (rnd)")
                 cur.execute("CREATE INDEX ix_puzzles_themes ON puzzles USING gin (themes)")
+                cur.execute("CREATE INDEX ix_puzzles_opening_tags ON puzzles USING gin (opening_tags)")
                 cur.execute("INSERT INTO puzzle_imports (puzzles, source) VALUES (%s, %s)", (n, source[:300]))
             conn.commit()
         except BaseException:

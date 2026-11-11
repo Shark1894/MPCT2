@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PuzzleRun, historyPath } from '../../web/js/puzzle.js';
+import { PuzzleRun, historyPath, openingParams, findLichessOpening, myOpeningNote } from '../../web/js/puzzle.js';
 
 // Black to move in the FEN: White... no: the FEN side moves first (the opponent), then the user.
 const P = { id: '00008', fen: 'r6k/pp2r2p/4Rp1Q/3p4/8/1N1P2R1/PqP2bPP/7K b - - 0 24', moves: ['f2g3', 'e6e7', 'b2b1', 'b3c1', 'b1c1', 'h6c1'], rating: 1500 };
@@ -81,4 +81,27 @@ test('history path', () => {
   const one = historyPath([{ date: '2026-11-03', rating: 1500 }], 200, 56);
   assert.equal(one.points[0].x, 100);
   assert.equal(one.min, 1475); // flat line gets a 50-point range
+});
+
+test('openings filter: values to query parameters', () => {
+  assert.deepEqual(openingParams(''), {});
+  assert.deepEqual(openingParams(null), {});
+  assert.deepEqual(openingParams('o:12'), { opening_id: 12 });
+  assert.deepEqual(openingParams('o:x'), {});
+  assert.deepEqual(openingParams('t:Caro-Kann_Defense'), { opening: 'Caro-Kann_Defense' });
+  assert.deepEqual(openingParams('t:'), {});
+  assert.deepEqual(openingParams('lichess'), {});
+});
+
+test('openings filter: typed Lichess names and the note for your openings', () => {
+  const list = [
+    { tag: 'Caro-Kann_Defense', name: 'Caro-Kann Defense', family: true },
+    { tag: 'Caro-Kann_Defense_Advance_Variation', name: 'Caro-Kann Defense: Advance Variation', family: false },
+  ];
+  assert.equal(findLichessOpening(list, '  caro-kann defense:  advance variation ')?.tag, 'Caro-Kann_Defense_Advance_Variation');
+  assert.equal(findLichessOpening(list, 'Caro'), null);
+  assert.equal(findLichessOpening(list, ''), null);
+  assert.match(myOpeningNote({ lichess: [] }), /None of its lines/);
+  assert.equal(myOpeningNote({ lichess: ['A', 'B'] }), 'Puzzles from games in: A; B.');
+  assert.equal(myOpeningNote({ lichess: ['A', 'B', 'C', 'D', 'E'] }), 'Puzzles from games in: A; B; C, +2 more.');
 });

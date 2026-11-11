@@ -446,6 +446,13 @@ API: `GET /api/repertoires/{id}/watches`, `GET /api/openings/{id}/watches`, `PUT
   at it. While solving the engine, repertoire panel and other tabs are hidden.
 - **Which puzzle:** a random one within 200 of your rating that you haven't tried (wider if none is left), skipping
   puzzles players voted down. Only the first go at a puzzle is rated.
+- **Opening:** next to the theme, pick one of your openings or **A Lichess opening…** (type to search the families and
+  variations; a family covers all its variations). Puzzles come from games Lichess tagged with that opening; about a
+  third of puzzles have no opening tag. One of your openings matches the Lichess openings (from
+  [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings), CC0, in `app/data/chess-openings`) of
+  the named positions its lines pass through, skipping those your own moves alone lead on from (1.e4 in a Black
+  Caro-Kann). The line under the picker lists what it matched. The choice is remembered and the Training hub's Start
+  uses it too (**Change** there opens this page). Works with a theme.
 - **Rating:** Glicko-2, starting at 1500 (shown with a ? while it settles, for your first few dozen puzzles); each
   attempt is a game against the puzzle's own rating, as on Lichess.
 - **Tab:** your rating and record (today too), rating history (last rating of each day), themes to work on (rated
@@ -479,7 +486,9 @@ The test-site refresh (`scripts/refresh_test_db.sh`) leaves the puzzle database 
 you want puzzles on the test site.
 
 API: `GET /api/puzzles/status`, `POST /api/puzzles/import`, `GET /api/puzzles/themes`, `GET /api/puzzles/summary`,
-`GET /api/puzzles/next?theme=&exclude=`, `GET /api/puzzles/{id}`, `POST /api/puzzles/{id}/attempts`
+`GET /api/puzzles/openings` (your openings with the Lichess openings they match, and every Lichess opening),
+`GET /api/puzzles/next?theme=&exclude=&opening_id=&opening=` (`opening` = a Lichess tag such as
+`Caro-Kann_Defense_Advance_Variation`), `GET /api/puzzles/{id}`, `POST /api/puzzles/{id}/attempts`
 (`{"solved", "seconds"}`).
 
 ## Games
@@ -814,6 +823,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/review.e2e.cjs       # empty data
 # empty database, server started with WILD_FETCH=false; loads games with the import tool:
 MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/wild.e2e.cjs
 MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/puzzles.e2e.cjs   # empty database
+MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/puzzleopenings.e2e.cjs   # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/gamepuzzles.e2e.cjs  # empty database, real engine (reviews + puzzles)
 # empty database; the server talks to the fake explorer (python tests/e2e/fake_explorer.py 8099 &) and is
 # started with LICHESS_TOKEN=lip_e2e LICHESS_EXPLORER_URL=http://127.0.0.1:8099:

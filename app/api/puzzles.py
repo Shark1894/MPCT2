@@ -137,6 +137,31 @@ def themes():
     return [{"theme": k, "name": v} for k, v in THEMES.items()]
 
 
+class MyOpeningOut(BaseModel):
+    id: int
+    name: str
+    repertoire: str
+    color: str
+    lichess: list[str]  # the Lichess openings its lines reach (what the puzzles are matched on)
+
+
+class LichessOpeningOut(BaseModel):
+    tag: str
+    name: str
+    family: bool  # a whole family (all its variations)
+
+
+class OpeningsOut(BaseModel):
+    mine: list[MyOpeningOut]
+    lichess: list[LichessOpeningOut]
+
+
+@router.get("/openings", response_model=OpeningsOut)
+def openings(s: Db):
+    """What puzzles can be filtered by: your openings and every Lichess opening."""
+    return repo.opening_choices(s)
+
+
 @router.get("/summary", response_model=SummaryOut)
 def summary(s: Db):
     return repo.summary(s)
@@ -147,11 +172,14 @@ def next_puzzle(
     s: Db,
     theme: str | None = None,
     exclude: Annotated[str | None, Query(pattern=r"^[A-Za-z0-9]{1,10}(,[A-Za-z0-9]{1,10})*$")] = None,
+    opening_id: int | None = None,
+    opening: Annotated[str | None, Query(max_length=200)] = None,
 ):
-    """A random untried puzzle near your rating (optionally with a theme)."""
+    """A random untried puzzle near your rating (optionally with a theme, and from games in one
+    of your openings or one Lichess opening)."""
     if puzzle_import.state["running"]:
         raise repo.PuzzlesUnavailable("The puzzle database is being imported: try again in a few minutes")
-    return repo.next_puzzle(s, theme, exclude.split(",") if exclude else None)
+    return repo.next_puzzle(s, theme, exclude.split(",") if exclude else None, opening_id=opening_id, opening_tag=opening)
 
 
 @router.get("/{puzzle_id}", response_model=PuzzleOut)

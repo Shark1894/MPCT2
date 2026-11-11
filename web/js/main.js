@@ -192,10 +192,10 @@ async function startDrill(scope) {
 const locked = () => trainer.active || drill.active || puzzles.locked || courseTrainer.locked || endgameTrainer.locked;
 
 const puzzlesView = new PuzzlesView({
-  onStart: async (theme) => {
+  onStart: async (theme, opening = '') => {
     if (!(await startBoardMode())) return;
     setView('board');
-    puzzles.start(theme);
+    puzzles.start(theme, opening);
   },
   onRetry: async (id) => {
     if (!(await startBoardMode())) return;
@@ -250,7 +250,7 @@ const endgameTrainer = new EndgameTrainer({
 
 const coursesView = new TrainingView({
   puzzles: puzzlesView, // the full Puzzles pages live in the Training tab
-  onPuzzleStart: (theme) => puzzlesView.onStart(theme),
+  onPuzzleStart: (theme) => puzzlesView.onStart(theme, store.get('puzzleOpening', '')),
   onOwnPuzzles: (list) => puzzlesView.onStartOwn(list),
   onPuzzleOpen: (id) => puzzlesView.onRetry(id),
   onEndgame: async (drillId, fen) => {

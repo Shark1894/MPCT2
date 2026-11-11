@@ -371,6 +371,7 @@ class Puzzle(Base):
     __table_args__ = (
         Index("ix_puzzles_rnd", "rnd"),
         Index("ix_puzzles_themes", "themes", postgresql_using="gin"),
+        Index("ix_puzzles_opening_tags", "opening_tags", postgresql_using="gin"),
     )
 
     id: Mapped[str] = mapped_column(String(10), primary_key=True)

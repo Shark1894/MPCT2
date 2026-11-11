@@ -16,10 +16,11 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from app.core import openings
 from app.core.glicko import Rating, update
 from app.core.puzzles import THEMES
-from app.db.models import Puzzle, PuzzleAttempt, PuzzleImport, PuzzleRating
-from app.repositories.repertoire import NotFound
+from app.db.models import Line, Move, Opening, Position, Puzzle, PuzzleAttempt, PuzzleImport, PuzzleRating, Repertoire
+from app.repositories.repertoire import NotFound, get_opening
 
 RATING_WINDOW = 200
 WIDER = (200, 400, 800, 5000)
@@ -63,7 +64,7 @@ def _puzzle_dict(s: Session, p: Puzzle) -> dict:
         "nb_plays": p.nb_plays,
         "themes": p.themes,
         "theme_names": [THEMES.get(t, t) for t in p.themes if t in THEMES],
-        "opening_tags": [t.replace("_", " ") for t in p.opening_tags],
+        "opening_tags": [openings.label(t) for t in p.opening_tags],
         "game_url": p.game_url,
         "tried": tries,
     }
@@ -75,6 +76,7 @@ WHERE p.rnd {cmp} :r
   AND p.rating BETWEEN :lo AND :hi
   AND p.popularity >= :pop AND p.nb_plays >= :plays
   {theme}
+  {opening}
   AND NOT EXISTS (SELECT 1 FROM puzzle_attempts a WHERE a.puzzle_id = p.id)
   AND NOT (p.id = ANY(:exclude))
 ORDER BY p.rnd {order}
@@ -82,24 +84,93 @@ LIMIT 1
 """
 
 
-def next_puzzle(s: Session, theme: str | None = None, exclude: list[str] | None = None, rng=random) -> dict:
+def opening_tags(s: Session, opening_id: int) -> dict[str, str]:
+    """The Lichess puzzle opening tags (-> readable name) of one of your openings.
+
+    Lichess names a game by the deepest named position it reached, so a game tagged with a
+    named position P on your line left it before the line's next named position Q (or the
+    line has none). If only your own moves lie between P and Q, such a game left by a move you
+    don't play (1.e4 in a Caro-Kann is "King's Pawn Game"), so P doesn't count."""
+    opening = get_opening(s, opening_id)
+    mine = 1 if opening.color == "white" else 0  # ply % 2 of your moves
+    named = openings.named_positions()
+    rows = s.execute(
+        select(Move.line_id, Move.ply, Position.key)
+        .join(Position, Position.id == Move.position_after_id)
+        .join(Line, Line.id == Move.line_id)
+        .where(Line.opening_id == opening_id)
+        .order_by(Move.line_id, Move.ply)
+    ).all()
+    keys: set[str] = set()
+    by_line: dict[int, list[tuple[int, str]]] = {}
+    for line_id, ply, key in rows:
+        by_line.setdefault(line_id, []).append((ply, key))
+    for moves in by_line.values():
+        hits = [i for i, (_, key) in enumerate(moves) if key in named]
+        for a, b in zip(hits, hits[1:] + [None]):
+            if b is None or any(moves[m][0] % 2 != mine for m in range(a + 1, b + 1)):
+                keys.add(moves[a][1])
+    return openings.tags_for_positions(keys)
+
+
+def opening_choices(s: Session) -> dict:
+    """What the puzzles can be filtered by: your openings (with the Lichess openings they
+    match) and every Lichess opening family and variation."""
+    mine = []
+    for o, rep in s.execute(
+        select(Opening, Repertoire.name).join(Repertoire, Repertoire.id == Opening.repertoire_id).order_by(Opening.color.desc(), Repertoire.name, Opening.name)
+    ).all():
+        tags = opening_tags(s, o.id)
+        mine.append({
+            "id": o.id,
+            "name": o.name,
+            "repertoire": rep,
+            "color": o.color,
+            "lichess": sorted(tags.values(), key=str.lower),
+        })
+    return {"mine": mine, "lichess": openings.choices()}
+
+
+def next_puzzle(
+    s: Session,
+    theme: str | None = None,
+    exclude: list[str] | None = None,
+    rng=random,
+    opening_id: int | None = None,
+    opening_tag: str | None = None,
+) -> dict:
     if not s.scalar(select(PuzzleImport.id).limit(1)):
         raise PuzzlesUnavailable("No puzzles yet: download the Lichess puzzle database first")
     if theme is not None and theme not in THEMES:
         raise InvalidPuzzle(f"Unknown theme '{theme}'")
+    if opening_id is not None and opening_tag is not None:
+        raise InvalidPuzzle("Choose one of your openings or a Lichess opening, not both")
+    tags, about = None, ""
+    if opening_id is not None:
+        tags = list(opening_tags(s, opening_id))
+        name = s.get(Opening, opening_id).name
+        if not tags:
+            raise InvalidPuzzle(f"None of {name}'s lines reach a named opening yet")
+        about = f" in your {name}"
+    elif opening_tag is not None:
+        if opening_tag not in {c["tag"] for c in openings.choices()}:
+            raise InvalidPuzzle(f"Unknown opening '{opening_tag}'")
+        tags = [opening_tag]
+        about = f" from the {openings.label(opening_tag)}"
     me = round(get_rating(s).rating)
     theme_sql = "AND p.themes @> ARRAY[CAST(:theme AS text)]" if theme else ""
-    params = {"pop": MIN_POPULARITY, "plays": MIN_PLAYS, "exclude": exclude or [], "theme": theme}
+    opening_sql = "AND p.opening_tags && CAST(:tags AS text[])" if tags else ""
+    params = {"pop": MIN_POPULARITY, "plays": MIN_PLAYS, "exclude": exclude or [], "theme": theme, "tags": tags}
     for window in WIDER:
         r = rng.randrange(2**31)
         for cmp, order in ((">=", "ASC"), ("<", "DESC")):  # wrap around the random start
             pid = s.scalar(
-                text(_PICK.format(cmp=cmp, order=order, theme=theme_sql)),
+                text(_PICK.format(cmp=cmp, order=order, theme=theme_sql, opening=opening_sql)),
                 params | {"r": r, "lo": me - window, "hi": me + window},
             )
             if pid:
                 return _puzzle_dict(s, s.get(Puzzle, pid)) | {"window": window}
-    raise NotFound("No untried puzzles left" + (f" with the theme {THEMES[theme]}" if theme else ""))
+    raise NotFound("No untried puzzles left" + (f" with the theme {THEMES[theme]}" if theme else "") + about)
 
 
 def get_puzzle(s: Session, puzzle_id: str) -> dict:

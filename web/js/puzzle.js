@@ -127,3 +127,32 @@ export function historyPath(history, width, height, pad = 6) {
   const path = points.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
   return { path, min: Math.round(min), max: Math.round(max), points };
 }
+
+// ---- the openings filter (pure) ------------------------------------------------------------
+
+/**
+ * Query parameters for an openings filter value: '' (any), 'o:<id>' (one of your openings)
+ * or 't:<Lichess tag>' (a Lichess opening family or variation).
+ */
+export function openingParams(value) {
+  if (typeof value !== 'string') return {};
+  if (/^o:\d+$/.test(value)) return { opening_id: Number(value.slice(2)) };
+  if (value.startsWith('t:') && value.length > 2) return { opening: value.slice(2) };
+  return {};
+}
+
+/** The Lichess opening whose name was typed (case and spacing ignored), or null. */
+export function findLichessOpening(choices, typed) {
+  const norm = (s) => String(s ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+  const want = norm(typed);
+  if (!want) return null;
+  return choices.find((c) => norm(c.name) === want) ?? null;
+}
+
+/** The line under the picker for one of your openings: what its puzzles are matched on. */
+export function myOpeningNote(opening, shown = 3) {
+  const names = opening?.lichess ?? [];
+  if (!names.length) return 'None of its lines reach a named Lichess opening yet, so it has no puzzles.';
+  const more = names.length > shown ? `, +${names.length - shown} more` : '';
+  return `Puzzles from games in: ${names.slice(0, shown).join('; ')}${more}.`;
+}

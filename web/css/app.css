@@ -2893,6 +2893,21 @@ body.puzzle-locked .engine {
   padding: 6px 22px;
 }
 
+.pz-opening-search input {
+  min-height: 40px;
+  min-width: 260px;
+}
+
+.pz-opening-note {
+  flex-basis: 100%;
+  margin: 0;
+  text-align: right;
+}
+
+.tr-pz-opening {
+  margin: 6px 0 0;
+}
+
 .pz-db p {
   margin: 0 0 8px;
 }
@@ -3096,6 +3111,7 @@ body.puzzle-locked .engine {
 @media (max-width: 600px) {
   .pz-start,
   .pz-theme select,
+  .pz-opening-search input,
   #pz-start {
     width: 100%;
   }
