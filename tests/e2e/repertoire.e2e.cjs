@@ -122,6 +122,35 @@ const settle = (page) => page.waitForTimeout(400);
   await settle(page);
   check((await page.inputValue('#comment-current')) === 'Edited quickly', 'comment flushed to the position it was typed in');
 
+  // Comments grow to show all of their text, but together never taller than the board
+  {
+    const sizes = () =>
+      page.evaluate(() => {
+        const cur = document.getElementById('comment-current'), prev = document.getElementById('comment-previous');
+        return { board: document.querySelector('cg-board').getBoundingClientRect().height, curH: cur.offsetHeight, curC: cur.clientHeight, curS: cur.scrollHeight, prevH: prev.offsetHeight, prevC: prev.clientHeight, prevS: prev.scrollHeight };
+      });
+    const para = 'A note about this position, the plans for both sides and the typical mistakes to avoid. ';
+    await page.fill('#comment-current', para.repeat(5));
+    await page.waitForTimeout(1200);
+    let m = await sizes();
+    check(m.curS <= m.curC + 1 && m.curH > 100, `medium comment shown in full on the normal board (${m.curH}px)`);
+    await play(page, 'e4e5');
+    await settle(page);
+    await page.fill('#comment-current', para.repeat(60));
+    await page.waitForTimeout(1200);
+    m = await sizes();
+    check(m.prevS <= m.prevC + 1 && m.prevH > 100, `previous comment shown in full (${m.prevH}px)`);
+    check(m.curS > m.curC && m.curH > 150, `very long comment takes the rest and scrolls (${m.curH}px)`);
+    check(m.curH + m.prevH <= m.board + 1, `comments together no taller than the board (${m.curH + m.prevH} ≤ ${Math.round(m.board)})`);
+    await page.fill('#comment-current', '');
+    await page.click('#nav-back');
+    await settle(page);
+    await page.fill('#comment-current', 'Edited quickly');
+    await page.waitForTimeout(1200);
+    m = await sizes();
+    check(m.curH < 100, `short comment back to a small box (${m.curH}px)`);
+  }
+
   // Delete lines through 3.e5 position, with confirmation
   await play(page, 'e4e5');
   await page.click('#line-delete');

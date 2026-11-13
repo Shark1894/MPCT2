@@ -484,6 +484,7 @@ function setView(next) {
   if (view === 'board') {
     myGames?.clear(); // games may have been added or moved meanwhile
     board.redraw();
+    repertoire.fitComments(); // fitted while hidden: measure again now they're visible
     review.update(); // a graph drawn while the board was hidden is resized to its panel
     analysis.resume('away');
   } else {

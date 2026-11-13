@@ -686,19 +686,19 @@ export class RepertoirePanel {
   }
 
   /**
-   * While training, the comment boxes grow to show all of their text, as long as the panel still
-   * ends by the bottom of the board beside it (or within 60% of the screen when it's below the
-   * board, on phones). If both don't fit, the shorter keeps its full height where it can and the
-   * longer scrolls. Outside training they go back to their normal size.
+   * The comment boxes grow to show all of their text, but together never get taller than the
+   * board. While training the panel also has to end by the bottom of the board beside it (or
+   * within 60% of the screen when it's below the board, on phones). If both don't fit, the shorter
+   * keeps its full height where it can and the longer scrolls.
    */
   fitComments() {
     const boxes = [this.el.commentCurrent, this.el.commentPrevious];
-    if (!this.training || this.el.comments.hidden) {
+    if (this.el.comments.hidden) {
       for (const b of boxes) b.style.height = '';
       return;
     }
     const shown = boxes.filter((b) => b.offsetParent !== null);
-    if (!shown.length) return;
+    if (!shown.length) return; // the board view is hidden: fitted again when it's shown
     const natural = shown.map((b) => {
       b.style.height = 'auto';
       return b.scrollHeight + b.offsetHeight - b.clientHeight; // content + borders
@@ -707,18 +707,23 @@ export class RepertoirePanel {
     shown.forEach((b, i) => (b.style.height = `${Math.max(natural[i], min)}px`));
 
     const board = document.querySelector('.board-area cg-board') ?? document.querySelector('.board-area');
-    const panel = this.el.comments.closest('.panel') ?? this.el.comments;
     const bRect = board?.getBoundingClientRect();
-    const pRect = panel.getBoundingClientRect();
-    const ps = getComputedStyle(panel);
-    // the panel's content may end above its grid cell: measure from the comments down
-    const bottom = this.el.comments.getBoundingClientRect().bottom + parseFloat(ps.paddingBottom) + parseFloat(ps.borderBottomWidth);
-    const beside = bRect && bRect.width > 0 && pRect.top < bRect.bottom;
-    const limit = beside ? bRect.bottom : pRect.top + window.innerHeight * 0.6;
-    const over = bottom - limit;
-    if (over <= 0) return;
     const heights = shown.map((b) => b.offsetHeight);
-    let room = Math.max(heights.reduce((a, h) => a + h, 0) - over, min * shown.length);
+    const total = heights.reduce((a, h) => a + h, 0);
+    let over = bRect && bRect.height > 0 ? total - bRect.height : 0;
+
+    if (this.training) {
+      const panel = this.el.comments.closest('.panel') ?? this.el.comments;
+      const pRect = panel.getBoundingClientRect();
+      const ps = getComputedStyle(panel);
+      // the panel's content may end above its grid cell: measure from the comments down
+      const bottom = this.el.comments.getBoundingClientRect().bottom + parseFloat(ps.paddingBottom) + parseFloat(ps.borderBottomWidth);
+      const beside = bRect && bRect.width > 0 && pRect.top < bRect.bottom;
+      const limit = beside ? bRect.bottom : pRect.top + window.innerHeight * 0.6;
+      over = Math.max(over, bottom - limit);
+    }
+    if (over <= 0) return;
+    let room = Math.max(total - over, min * shown.length);
     // Share the room: boxes smaller than an equal share keep their size, the rest split what's left.
     const order = heights.map((h, i) => i).sort((a, c) => heights[a] - heights[c]);
     order.forEach((i, k) => {
