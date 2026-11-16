@@ -1,38 +1,21 @@
-"""Practical tab: moves that put a human opponent under pressure, even at an engine cost.
+"""Practical tab: moves that take the opponent into sharp territory, even at an engine cost.
 
 The server's part is small: the positions in an opening (or one branch of it) where it's your
-move, how players rated 2000+ on Lichess play from a position (the Lichess opening explorer,
-looked up with LICHESS_TOKEN, one request at a time, cached), and a cache of the engine lines
-the browser works out. The engine and the scoring run in the browser (web/js/practical-core.js).
+move, and a cache of the engine lines the browser works out. The engine and the measures run in
+the browser (web/js/practical-core.js).
 """
-
-import threading
-import time
-import urllib.parse
-from datetime import datetime, timedelta, timezone
 
 import chess
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import explorer
-from app.config import settings
 from app.core.positions import key_from_fen
-from app.db.models import ExplorerCache, Line, Move, Opening, Position, PracticalEval
+from app.db.models import Line, Move, Opening, Position, PracticalEval
 from app.repositories.repertoire import NotFound
 from app.repositories.tags import tag_in_opening
 
-SOURCE = "lichess"  # explorer_cache.source for Lichess games at settings.practical_ratings
 POSITIONS_MAX = 400
-PAUSE_S = 1.0  # between explorer requests, as Lichess asks
-
-_lock = threading.Lock()
-_last = [0.0]
-
-
-class NoToken(explorer.ExplorerError):
-    pass
 
 
 # ---- positions -------------------------------------------------------------------------------
@@ -79,61 +62,7 @@ def positions(s: Session, opening_id: int, tag_id: int | None = None) -> dict:
             sans.append(board.san(move))
             board.push(move)
     ordered = sorted(found.values(), key=lambda p: p["ply"])  # stable: first reached first
-    return {"opening_id": opening.id, "opening": opening.name, "color": opening.color, "tag_id": tag_id,
-            "ratings": settings.practical_ratings, "positions": ordered}
-
-
-# ---- the Lichess explorer at 2000+ -------------------------------------------------------------
-
-
-def _fresh_since() -> datetime:
-    return datetime.now(timezone.utc) - timedelta(days=settings.explorer_cache_days)
-
-
-def _source() -> str:
-    """Cache source per rating bands, so changing PRACTICAL_RATINGS doesn't reuse other answers."""
-    return f"{SOURCE}{settings.practical_ratings.split(',')[0]}"[:10]
-
-
-def _url(key: str) -> str:
-    q = urllib.parse.urlencode({"variant": "standard", "fen": f"{key} 0 1", "ratings": settings.practical_ratings,
-                                "moves": 30, "topGames": 0, "recentGames": 0})
-    return f"{settings.lichess_explorer_url.rstrip('/')}/lichess?{q}"
-
-
-def _slim(data: dict) -> dict:
-    return {
-        "white": int(data.get("white", 0)),
-        "draws": int(data.get("draws", 0)),
-        "black": int(data.get("black", 0)),
-        "moves": [{k: m.get(k) for k in ("uci", "san", "white", "draws", "black")} for m in data.get("moves", [])],
-    }
-
-
-def lookup(s: Session, fen: str, get=None) -> dict:
-    """How players at the practical ratings continue from a position: totals and moves. Looked up
-    on Lichess the first time (one request a second), then cached. Raises NoToken, ExplorerError."""
-    key = key_from_fen(fen)
-    source = _source()
-    data = s.scalar(select(ExplorerCache.data).where(
-        ExplorerCache.key == key, ExplorerCache.source == source, ExplorerCache.fetched_at >= _fresh_since()))
-    if data is None:
-        if not explorer.token_set():
-            raise NoToken("The Practical tab needs a Lichess API token: add LICHESS_TOKEN to the server's .env and restart the app.")
-        with _lock:
-            wait = PAUSE_S - (time.monotonic() - _last[0])
-            if wait > 0:
-                time.sleep(wait)
-            try:
-                raw = (get or explorer.http_get)(_url(key), timeout=20, wait=False)
-            finally:
-                _last[0] = time.monotonic()
-        data = _slim(raw)
-        stmt = insert(ExplorerCache).values(key=key, source=source, data=data)
-        s.execute(stmt.on_conflict_do_update(index_elements=["key", "source"],
-                                             set_={"data": data, "fetched_at": stmt.excluded.fetched_at}))
-        s.flush()
-    return {"key": key, **data}
+    return {"opening_id": opening.id, "opening": opening.name, "color": opening.color, "tag_id": tag_id, "positions": ordered}
 
 
 # ---- engine lines --------------------------------------------------------------------------------

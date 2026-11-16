@@ -1,20 +1,19 @@
-// Practical tab: moves in your openings that take the opponent into difficult territory, even
-// at an engine cost. Pick an opening (or one branch of it, such as a branch tag) and Analyse:
-// for every position where it's your move, each candidate move is judged by the engine's view of
-// the opponent's replies (how many good ones, how far the next best falls behind, how often an
-// opponent of the chosen strength would slip), so it works in lines nobody has played. Lichess
-// games (2000+) can be used too where there are enough. See practical-core.js for the scoring.
+// Practical tab: moves in your openings that take the opponent into sharp territory, even at an
+// engine cost. Pick an opening (or one branch of it, such as a branch tag) and Analyse: for every
+// position where it's your move, each candidate move is judged from the engine's evaluations of
+// the opponent's best replies to it: how many are good, how far the second-best falls behind, and
+// how much worse the rest are on average. No model of the opponent, no game data: it works in
+// lines nobody has played. See practical-core.js for the measures.
 //
 // The engine runs here in the browser (Stockfish, like the reviews), never on the server; its
-// lines are saved so a second run is quick. With Lichess data on, the server looks positions up
-// in the explorer (one a second, with the app's LICHESS_TOKEN) and keeps the answers.
+// lines are saved so a second run is quick.
 
 import { Chess } from '../vendor/chess.js/chess.js';
 import { api } from './api.js';
 import { button, el, miniBoard } from './dom.js';
 import { Engine } from './engine.js';
 import {
-  DEFAULTS, STRENGTHS, candidateMoves, evalText, extraReplies, finalCandidate, finish, movetext, pct, scoreCandidate, winPct, worthALook,
+  DEFAULTS, candidateMoves, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
 } from './practical-core.js';
 import { plural, store, toast } from './ui.js';
 
@@ -29,23 +28,24 @@ const CAPS = [
   [15, 'Up to 15 points worse'],
   [25, 'Up to 25 points worse'],
 ];
-const DATA = [
-  [0, 'Engine only (any line)'],
-  [1, 'Also Lichess games, 2000+ (where 30+)'],
-];
 const SAVE_BATCH = 20;
 
-/** "+3", "−2", "0" (rounded). */
-const signed = (x) => {
-  const n = Math.round(x);
-  return n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0';
-};
+/** A move's sharpness, marked when it's only a capture they take back. */
+function sharpCell(c) {
+  if (c.final || !Number.isFinite(c.sharpness)) return el('td', 'num', '–');
+  const td = el('td', `num${c.sharpness >= 10 && !c.recapture ? ' pr-hot' : ''}`, String(Math.round(c.sharpness)));
+  if (c.recapture) {
+    td.appendChild(el('span', 'pr-model', 'recapture'));
+    td.title = 'They simply take back: the only move is obvious, so this isn’t sharp in practice';
+  }
+  return td;
+}
 
-/** The trap value gained (or lost) against your own move, coloured. */
+/** The sharpness gained (or lost) against your own move, coloured. */
 function diffCell(d) {
   const td = el('td', 'num pr-diff', d === null ? '–' : signed(d));
-  if (d !== null) td.classList.add(Math.round(d) > 0 ? 'up' : Math.round(d) < 0 ? 'down' : 'same');
-  td.title = 'Trap value of this move minus your own move’s';
+  if (d !== null) td.classList.add(d > 0 ? 'up' : d < 0 ? 'down' : 'same');
+  td.title = 'Sharpness of this move minus your own move’s';
   return td;
 }
 
@@ -66,19 +66,17 @@ function after(fen, uci) {
 }
 
 /**
- * The engine and explorer work for one analysis: each answer asked for once, saved engine
- * lines used when good enough, new ones saved in batches.
+ * The engine work for one analysis: each position asked for once, saved lines used when good
+ * enough, new ones saved in batches.
  */
 class Worker {
-  constructor({ movetime, onWait }) {
+  constructor({ movetime }) {
     this.movetime = movetime;
-    this.onWait = onWait;
     this.engine = null;
     this.evals = new Map(); // fen|multipv -> lines
-    this.explored = new Map(); // fen -> stats | null
     this.pending = [];
     this.cancelled = false;
-    this.counts = { engine: 0, saved: 0, lichess: 0 };
+    this.counts = { engine: 0, saved: 0 };
   }
 
   /** The engine's best `multipv` moves: [{uci, score}] (White-POV). */
@@ -111,27 +109,6 @@ class Worker {
     return lines;
   }
 
-  /** How players at 2000+ continue (null: Lichess couldn't say; throws if there's no token). */
-  async explore(fen) {
-    if (this.explored.has(fen)) return this.explored.get(fen);
-    let data = null;
-    for (let attempt = 0; attempt < 2 && !this.cancelled; attempt++) {
-      try {
-        this.onWait?.(true);
-        data = await api.practicalExplorer(fen);
-        this.counts.lichess += 1;
-        break;
-      } catch (err) {
-        if (err.status === 409) throw err; // no token: nothing will work
-        if (attempt === 0) await new Promise((r) => setTimeout(r, 3000));
-      } finally {
-        this.onWait?.(false);
-      }
-    }
-    this.explored.set(fen, data);
-    return data;
-  }
-
   flush() {
     const batch = this.pending.splice(0);
     if (batch.length) api.savePracticalEvals(batch).catch(() => {});
@@ -149,10 +126,8 @@ class Worker {
 async function analysePosition(w, position, me, opts) {
   const fen = position.fen;
   const mine = await w.lines(fen, opts.candidates);
-  const here = opts.useData ? await w.explore(fen) : null;
-  const hereStats = Object.fromEntries((here?.moves ?? []).map((m) => [m.uci, m]));
   const cands = [];
-  for (const uci of candidateMoves(mine, here, position.repertoire, opts)) {
+  for (const uci of candidateMoves(mine, position.repertoire, opts)) {
     if (w.cancelled) break;
     let next;
     try {
@@ -167,23 +142,8 @@ async function analysePosition(w, position, me, opts) {
       continue;
     }
     const theirLines = await w.lines(next.fen, opts.replies);
-    const data = opts.useData ? await w.explore(next.fen) : null;
-    const extra = {};
-    for (const u of extraReplies(theirLines, data, opts)) {
-      let r;
-      try {
-        r = after(next.fen, u);
-      } catch {
-        continue;
-      }
-      if (r.over) extra[u] = r.mate ? 0 : 50;
-      else {
-        const l = (await w.lines(r.fen, 1))[0];
-        if (l) extra[u] = winPct(l.score, me);
-      }
-    }
-    const sans = Object.fromEntries([...theirLines.map((l) => l.uci), ...Object.keys(extra)].map((u) => [u, sanOf(next.fen, u)]));
-    cands.push(scoreCandidate({ uci, san, me, theirLines, extra, data, sans, moveStats: hereStats[uci] ?? null, repertoire }, opts));
+    const sans = Object.fromEntries(theirLines.map((l) => [l.uci, sanOf(next.fen, l.uci)]));
+    cands.push(scoreCandidate({ uci, san, me, theirLines, sans, repertoire, capture: san.includes('x') }, opts));
   }
   return finish(cands, opts);
 }
@@ -193,7 +153,8 @@ export class PracticalView {
   constructor({ onShowLine }) {
     this.onShowLine = onShowLine;
     this.box = document.getElementById('practical-view');
-    this.settings = { openingId: null, tagId: null, movetime: 800, cap: 15, temperature: 8, data: 0, ...store.get('practical', {}) };
+    const saved = store.get('practical', {});
+    this.settings = { openingId: saved.openingId ?? null, tagId: saved.tagId ?? null, movetime: saved.movetime ?? 800, cap: saved.cap ?? 15 };
     this.results = [];
     this.run = null;
     this.info = null;
@@ -217,7 +178,7 @@ export class PracticalView {
     const head = el('section', 'dash-card pr-head');
     head.append(
       el('h1', 'dash-h', 'Practical choices'),
-      el('p', 'pr-lead', 'Moves in your openings that take your opponent into difficult territory: few good replies, the next best clearly worse, so they’re likely to slip, even if the engine says you give a little away. It works from the engine’s view of their replies, so niche and never-played lines are fine.'),
+      el('p', 'pr-lead', 'Moves in your openings that take your opponent into sharp territory, even if the engine says you give a little away: few good replies, the second-best clearly worse, most others losing. All from the engine’s evaluations, so niche and never-played lines are fine.'),
     );
     const controls = el('div', 'pr-controls');
     const field = (label, control) => {
@@ -257,8 +218,7 @@ export class PracticalView {
     };
     this.el.think = select('pr-think', THINK, this.settings.movetime, 'movetime');
     this.el.cap = select('pr-cap', CAPS, this.settings.cap, 'cap');
-    this.el.strength = select('pr-strength', STRENGTHS, this.settings.temperature, 'temperature');
-    this.el.data = select('pr-data', DATA, this.settings.data, 'data');
+
     this.el.go = button('Analyse', 'primary', () => (this.run ? this.stop() : this.start()));
     this.el.go.id = 'pr-go';
     controls.append(
@@ -266,8 +226,6 @@ export class PracticalView {
       field('Branch', this.el.tag),
       field('Engine time', this.el.think),
       field('Moves to consider', this.el.cap),
-      field('Opponent', this.el.strength),
-      field('Replies from', this.el.data),
       this.el.go,
     );
     this.el.progress = el('div', 'pr-progress');
@@ -286,15 +244,12 @@ export class PracticalView {
       this._helpList([
         ['Eval', 'the engine’s evaluation after the move and their best reply, in pawns from White’s side (+ good for White)'],
         ['Engine', 'the same as your winning chances (0–100)'],
-        ['Cost', 'how many points of winning chances the move gives away against the engine’s best move here. Points aren’t pawns: near equality a pawn is about 9 points (half a pawn about 5), and the same pawn is worth fewer points when one side is already well ahead'],
-        ['Good replies', 'how many of their replies stay within 7 points of their best: 1 means an only move'],
-        ['Gap', 'how many points worse their second-best reply is than their best: the bigger, the more they must find exactly one move'],
-        ['They go wrong', 'how often an opponent of the chosen strength would play a reply that isn’t good: a model that picks replies by how good they look to the engine, so slips are likelier when the alternatives are only a bit worse'],
-        ['Trap value', 'the winning chances you expect to gain from their mistakes (practical minus engine)'],
-        ['Practical', 'your expected winning chances over their replies, chosen that way'],
-        ['Actual', 'with Lichess games on: your colour’s real score with the move at 2000+'],
+        ['Cost', 'winning chances the move gives away against the engine’s best move here. Points aren’t pawns: near equality a pawn is about 9 points (half a pawn about 5), and the same pawn is worth fewer points when one side is already well ahead'],
+        ['Good replies', 'how many of their 8 best replies stay within 7 points of their best: 1 means an only move'],
+        ['Gap', 'how many points worse their second-best reply is than their best'],
+        ['Sharpness', 'how many points worse their other top replies are than their best, on average: high when nearly everything but the best move goes wrong for them. Marked “recapture” when your move takes something and their best is simply to take back: obvious, so not sharp in practice (left out of the sharpest alternatives)'],
       ]),
-      el('p', 'pr-note', 'Points are winning chances (0–100). The opponent model is a rough guide: it can’t know which wrong moves look natural to a human, only how much worse they are.'),
+      el('p', 'pr-note', 'Points are winning chances (0–100) from the engine’s evaluations. ✗ marks a reply that isn’t good for them.'),
     );
     this.box.replaceChildren(head, this.el.worth, this.el.positions, this.el.help);
   }
@@ -375,9 +330,9 @@ export class PracticalView {
     }
     this.info = info;
     this.results = [];
-    const opts = { ...DEFAULTS, cap: this.settings.cap, temperature: this.settings.temperature, useData: Boolean(this.settings.data) };
+    const opts = { ...DEFAULTS, cap: this.settings.cap };
     this.opts = opts;
-    const w = new Worker({ movetime: this.settings.movetime, onWait: (on) => this.el.progress.classList.toggle('waiting', on) });
+    const w = new Worker({ movetime: this.settings.movetime });
     this.run = { w, started: performance.now(), done: 0, total: info.positions.length };
     this.el.go.textContent = 'Stop';
     this.el.positions.replaceChildren();
@@ -410,7 +365,6 @@ export class PracticalView {
       this.run = null;
       this._releaseAwake();
       this.el.go.textContent = 'Analyse';
-      this.el.progress.classList.remove('waiting');
       const secs = Math.round((performance.now() - run.started) / 1000);
       this.el.progress.textContent = failed
         ? `Stopped: ${failed.message}`
@@ -434,7 +388,6 @@ export class PracticalView {
     this.el.progress.replaceChildren(
       bar,
       el('span', 'pr-progress-text', `Position ${done + 1} of ${total} · ${secs} s · ${movetext(position.sans)} …`),
-      el('span', 'pr-progress-wait', ' waiting for Lichess…'),
     );
   }
 
@@ -459,11 +412,11 @@ export class PracticalView {
     box.hidden = !picks.length && !final;
     box.replaceChildren(
       el('h2', 'dash-h2', 'Sharpest alternatives'),
-      el('p', 'pr-note', 'Moves you don’t play yet where they have at most two good replies and slip at least 30% of the time. Tap a heading to sort; tap a move to see it on the board.'),
+      el('p', 'pr-note', 'Moves you don’t play yet where they have at most two good replies and their second-best is at least 5 points worse, sharpest first. Tap a heading to sort; tap a move to see it on the board.'),
     );
     if (!picks.length) {
       box.appendChild(el('p', 'pr-note', final && this.results.length
-        ? 'No alternative here is that sharp: the tables below show every one with its trap value.'
+        ? 'No alternative here is that sharp: the tables below show every one with its sharpness.'
         : 'Nothing yet.'));
       return;
     }
@@ -478,25 +431,25 @@ export class PracticalView {
   }
 
   _worthTable(picks) {
+    const sharp = (c) => (Number.isFinite(c?.sharpness) ? Math.round(c.sharpness) : null);
     const COLS = [
-      // [heading, sort key (bigger first unless asc), value for sorting]
+      // [heading, sort key, value for sorting, ascending]
       ['After', null],
       ['Play', null],
-      ['Trap value', 'trap', (p) => p.cand.trap],
+      ['Sharpness', 'sharpness', (p) => p.cand.sharpness],
       ['Yours', null],
-      ['Difference', 'diff', (p) => (p.mine ? Math.round(p.cand.trap) - Math.round(p.mine.trap) : -Infinity)],
+      ['Difference', 'diff', (p) => (sharp(p.mine) === null ? -Infinity : sharp(p.cand) - sharp(p.mine))],
       ['Good replies', 'good', (p) => p.cand.good, true],
       ['Gap', 'gap', (p) => (Number.isFinite(p.cand.gap) ? p.cand.gap : -1)],
-      ['They go wrong', 'wrong', (p) => p.cand.wrong],
       ['Cost', 'cost', (p) => p.cand.cost, true],
       ['Eval', null],
       ['Yours (eval)', null],
-      ['Only move(s)', null],
-      ['Tempting slips → you', null],
+      ['Only move(s) → you', null],
+      ['Next best → you', null],
     ];
-    const sortKey = this.worthSort ?? 'trap';
+    const sortKey = this.worthSort ?? 'sharpness';
     const col = COLS.find((c) => c[1] === sortKey) ?? COLS[2];
-    const rows = [...picks].sort((a, b) => (col[3] ? col[2](a) - col[2](b) : col[2](b) - col[2](a)) || b.cand.trap - a.cand.trap);
+    const rows = [...picks].sort((a, b) => (col[3] ? col[2](a) - col[2](b) : col[2](b) - col[2](a)) || b.cand.sharpness - a.cand.sharpness);
 
     const wrap = el('div', 'pr-table-wrap');
     const table = el('table', 'pr-table pr-worth-table');
@@ -526,21 +479,20 @@ export class PracticalView {
       play.appendChild(button(c.san, 'pr-move-btn', () => this.onShowLine([...position.sans, c.san]), 'Show on board'));
       if (mine) play.appendChild(el('span', 'pr-instead', `not ${mine.san}`));
       const good = c.replies.filter((r) => r.good).slice(0, 2);
-      const slips = c.replies.filter((r) => !r.good && r.prob >= 0.05).slice(0, 2);
+      const next = c.replies.filter((r) => !r.good).slice(0, 2);
       const cells = [
         where,
         play,
-        el('td', 'num pr-hot', signed(c.trap)),
-        el('td', 'num', mine ? signed(mine.trap) : '–'),
-        diffCell(mine ? Math.round(c.trap) - Math.round(mine.trap) : null), // from the shown values, so they add up
+        el('td', 'num pr-hot', sharp(c) === null ? '–' : String(sharp(c))),
+        el('td', 'num', sharp(mine) === null ? '–' : `${sharp(mine)}${mine.recapture ? ' (recapture)' : ''}`),
+        diffCell(sharp(mine) === null || sharp(c) === null ? null : sharp(c) - sharp(mine)), // from the shown values, so they add up
         el('td', `num${c.good === 1 ? ' pr-hot' : ''}`, String(c.good)),
         el('td', 'num', Number.isFinite(c.gap) ? String(Math.round(c.gap)) : '–'),
-        el('td', 'num', `${Math.round(c.wrong * 100)}%`),
         el('td', 'num', String(Math.round(c.cost))),
         el('td', 'num pr-eval', evalText(c.score)),
         el('td', 'num pr-eval', mine ? `${evalText(mine.score)} (${mine.san})` : '–'),
-        el('td', 'pr-only', good.length ? `${good.map((r) => r.san).join(', ')} → you ${pct(c.engine)}` : '–'),
-        el('td', 'pr-replies', slips.map((r) => `${r.san} → ${pct(r.mine)}`).join(', ') || '–'),
+        el('td', 'pr-only', good.length ? good.map((r) => `${r.san} → ${pct(r.mine)}`).join(', ') : '–'),
+        el('td', 'pr-replies', next.map((r) => `${r.san} → ${pct(r.mine)}`).join(', ') || '–'),
       ];
       cells.forEach((td, i) => (td.dataset.label = COLS[i][0]));
       tr.append(...cells);
@@ -570,8 +522,7 @@ export class PracticalView {
     const table = el('table', 'pr-table');
     const thead = el('thead');
     const hr = el('tr');
-    const withData = Boolean(this.opts?.useData);
-    const HEADS = ['Move', 'Trap value', 'Good replies', 'Gap', 'They go wrong', 'Eval', 'Engine', 'Cost', 'Practical', ...(withData ? ['Actual'] : []), 'Their replies → you'];
+    const HEADS = ['Move', 'Eval', 'Engine', 'Cost', 'Good replies', 'Gap', 'Sharpness', 'Their replies → you'];
     for (const h of HEADS) hr.appendChild(el('th', '', h));
     thead.appendChild(hr);
     const tbody = el('tbody');
@@ -581,27 +532,20 @@ export class PracticalView {
       const b = button(c.san, 'pr-move-btn', () => this.onShowLine([...position.sans, c.san]), 'Show on board');
       move.appendChild(b);
       if (c.repertoire) move.appendChild(el('span', 'pr-yours', 'yours'));
-      const practical = el('td', 'num');
-      practical.append(pct(c.practical));
-      if (withData && c.source === 'model') practical.appendChild(el('span', 'pr-model', 'model'));
       const likely = el('td', 'pr-replies');
       likely.textContent = c.replies
-        .filter((r) => r.prob >= 0.03)
-        .slice(0, 4)
-        .map((r) => `${r.san} ${Math.round(r.prob * 100)}% → ${pct(r.mine)}${r.good ? '' : ' ✗'}`)
+        .slice(0, 5)
+        .map((r) => `${r.san} → ${pct(r.mine)}${r.good ? '' : ' ✗'}`)
         .join(', ');
-      const final = c.source === 'final';
+      const final = c.final;
       tr.append(
         move,
-        el('td', `num${c.trap >= 3 ? ' pr-hot' : ''}`, final ? '–' : `+${Math.round(c.trap)}`),
-        el('td', `num${c.good === 1 ? ' pr-hot' : ''}`, final ? '–' : String(c.good)),
-        el('td', 'num', final || !Number.isFinite(c.gap) ? '–' : String(Math.round(c.gap))),
-        el('td', 'num', final ? '–' : `${Math.round(c.wrong * 100)}%`),
-        el('td', 'num pr-eval', c.final ? '#' : evalText(c.score)),
+        el('td', 'num pr-eval', c.mate ? '#' : evalText(c.score)),
         el('td', 'num', pct(c.engine)),
         el('td', 'num', String(Math.round(c.cost))),
-        practical,
-        ...(withData ? [el('td', 'num', c.actualGames ? `${pct(c.actual)} (${c.actualGames.toLocaleString('en-GB')})` : '–')] : []),
+        el('td', `num${c.good === 1 ? ' pr-hot' : ''}`, final ? '–' : String(c.good)),
+        el('td', 'num', final || !Number.isFinite(c.gap) ? '–' : String(Math.round(c.gap))),
+        sharpCell(c),
         likely,
       );
       [...tr.children].forEach((td, i) => (td.dataset.label = HEADS[i]));

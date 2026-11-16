@@ -1,12 +1,11 @@
-"""Practical tab: your-move positions in an opening, Lichess replies at 2000+, engine lines."""
+"""Practical tab: your-move positions in an opening, and the engine lines the browser works out."""
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app import explorer
 from app.api.evals import EvalLine, Fen
 from app.db.session import get_session
 from app.repositories import practical as repo
@@ -28,24 +27,7 @@ class PositionsOut(BaseModel):
     opening: str
     color: str
     tag_id: int | None
-    ratings: str
     positions: list[PracticalPosition]
-
-
-class ExplorerMove(BaseModel):
-    uci: str
-    san: str
-    white: int
-    draws: int
-    black: int
-
-
-class ExplorerOut(BaseModel):
-    key: str
-    white: int
-    draws: int
-    black: int
-    moves: list[ExplorerMove]
 
 
 class EvalsLookupIn(BaseModel):
@@ -86,17 +68,6 @@ class SavedOut(BaseModel):
 def positions(opening_id: int, s: Db, tag_id: int | None = None):
     """Your-move positions in an opening (from a branch tag's position on, if given)."""
     return repo.positions(s, opening_id, tag_id)
-
-
-@router.get("/practical/explorer", response_model=ExplorerOut)
-def explorer_lookup(fen: Annotated[str, Query(min_length=10, max_length=120)], s: Db):
-    """How Lichess players at the practical ratings (2000+) continue from a position."""
-    try:
-        return repo.lookup(s, fen)
-    except repo.NoToken as exc:
-        raise HTTPException(409, str(exc)) from exc
-    except explorer.ExplorerError as exc:
-        raise HTTPException(502, str(exc)) from exc
 
 
 @router.post("/practical/evals/lookup", response_model=EvalsLookupOut)

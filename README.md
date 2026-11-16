@@ -47,7 +47,7 @@ The full plan, decisions and data model are in the project's
 | — | Named endgames: Lucena, Philidor, Vančura, Q v P, Q v R, R v B, wrong rook pawn, Réti (win and defend drills with guides) | Done |
 | — | Stats tab: time spent on openings, tactics, endgames, strategy, games and analysis | Done |
 | — | Endgame studies: your own database of composed studies from PGN files, by kind of ending, with favourites | Done |
-| — | Practical tab: moves in your openings that take the opponent into sharp, only-move territory, even at an engine cost (backlog item 7) | Done |
+| — | Practical tab: moves in your openings that take the opponent into sharp, only-move territory, even at an engine cost; engine-only measures (backlog item 7) | Done |
 
 ## Using the board
 
@@ -779,40 +779,31 @@ per local day, category, activity and detail).
 ## Practical choices
 
 The **Practical** tab looks through an opening (or one branch of it, by branch tag) for moves that take the
-opponent into difficult territory, even at an engine cost. It works from the engine's view of their replies, so
-niche and never-played lines are fine. For every position in your lines where it's your move, each candidate move
-(the engine's best 8 and your repertoire's) gets, from the engine's best 8 replies to it:
+opponent into sharp territory, even at an engine cost. Everything comes from the engine's evaluations (no model
+of the opponent, no game data), so niche and never-played lines are fine. For every position in your lines where
+it's your move, each candidate move (the engine's best 8 and your repertoire's) gets, from the engine's best 8
+replies to it, in winning chances (0-100):
 
-- **Good replies**: how many stay within 7 points (winning chances, 0-100) of their best; 1 = an only move.
-- **Gap**: how many points worse their second-best reply is than their best.
-- **They go wrong**: how often an opponent of the chosen strength would play a reply that isn't good. A rough model:
-  each reply is chosen with weight exp(-(points worse than their best) / T), T = 5 (2200+), 8 (club 2000, the
-  default) or 12 (club 1800), so slips are likelier when the alternatives are only a bit worse.
-- **Practical**: your expected winning chances over their replies chosen that way; **Trap value** = practical minus
-  engine, what you expect to gain from their mistakes.
 - **Eval**: the engine's evaluation after the move and their best reply, in pawns from White's side; **Engine**:
-  the same as your winning chances; **Cost**: winning chances given away against the engine's best (near
-  equality a pawn is about 9 points).
-  Moves costing more than the chosen limit (8, 15 or 25 points) aren't listed.
+  the same as your winning chances; **Cost**: winning chances given away against the engine's best move (near
+  equality a pawn is about 9 points). Moves costing more than the chosen limit (8, 15 or 25) aren't listed.
+- **Good replies**: how many of their replies stay within 7 points of their best (1 = an only move).
+- **Gap**: how many points worse their second-best reply is than their best.
+- **Sharpness**: how many points worse their other top replies are than their best, on average. Marked
+  *recapture* when your move takes something and their best is simply to take back (obvious, so not sharp in
+  practice, as in the old Sharpness scripts).
 
-**Sharpest alternatives** is a table of moves you don't play yet where they have at most two good replies and
-slip at least 30% of the time: where (from the start of the branch), the move and the one it replaces, trap value,
-yours, the difference (green when the suggestion sets more problems), the evals of the suggestion and of
-your move, good replies, gap, how often they go wrong, cost, the only move(s) and the tempting slips.
-Sorted by trap value; tap a heading to sort by another column (on phones each row is a card, by trap value). **Show on board** (or a
-move in a table) opens the position on the Board tab.
-
-**Replies from: Also Lichess games** uses how often players rated 2000+ (`PRACTICAL_RATINGS`, default
-`2000,2200,2500`, all time controls) actually chose each reply where a position has 30+ games, adds moves they
-often play to the candidates, and shows an **Actual** column (your colour's real score with the move). It asks the
-Lichess explorer through the server with `LICHESS_TOKEN`, one request a second, cached.
+**Sharpest alternatives** is a table of moves you don't play yet where they have at most two good replies and their
+second-best is at least 5 points worse (recaptures left out), sharpest first: where (from the start of the
+branch), the move and the one it replaces, sharpness, yours, the difference, good replies, gap, cost, the evals of
+the suggestion and of your move, their only move(s) and next best replies with your winning chances after each.
+Tap a heading to sort; tap a move (or **Show on board**) to open the position on the Board tab.
 
 The engine runs in the browser (Stockfish, Quick 0.3 s / Normal 0.8 s / Deep 2 s an analysis, about 9 analyses a
-position engine-only); its lines are saved on the server (`practical_evals`), so running the same branch again is
-quick.
+position); its lines are saved on the server (`practical_evals`), so running the same branch again is quick.
 
-API: `GET /api/practical/positions?opening_id=&tag_id=`, `GET /api/practical/explorer?fen=`,
-`POST /api/practical/evals/lookup` (`{"fens", "multipv", "movetime_ms"}`), `POST /api/practical/evals`.
+API: `GET /api/practical/positions?opening_id=&tag_id=`, `POST /api/practical/evals/lookup`
+(`{"fens", "multipv", "movetime_ms"}`), `POST /api/practical/evals`.
 
 ## Importing from the desktop app
 
@@ -909,7 +900,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/masters.e2e.cjs
 # (restart the fake between runs: some checks count its requests):
 MPCT_URL=http://localhost:8010/ node tests/e2e/lichess.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/studies.e2e.cjs      # empty database (endgame studies: import, filters, favourites, solving)
-MPCT_URL=http://localhost:8010/ node tests/e2e/practical.e2e.cjs    # empty database, LICHESS_EXPLORER_URL=fake_explorer, LICHESS_TOKEN=lip_e2e
+MPCT_URL=http://localhost:8010/ node tests/e2e/practical.e2e.cjs    # empty database (Practical tab, real engine)
 MPCT_URL=http://localhost:8010/ node tests/e2e/courseimport.e2e.cjs  # empty database (COURSE_FILE=export.json also imports a real one)
 MPCT_URL=http://localhost:8010/ node tests/e2e/courses.e2e.cjs      # empty database (Training tab)
 MPCT_URL=http://localhost:8010/ node tests/e2e/stats.e2e.cjs        # empty database (time tracking, Stats tab)

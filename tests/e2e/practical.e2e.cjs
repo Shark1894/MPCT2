@@ -1,12 +1,10 @@
 // Browser checks for the Practical tab: choose an opening and a branch, analyse (real Stockfish in
-// the browser, the fake Lichess explorer), read the results, show a line on the board, and a
-// second run that uses the saved engine lines. Needs a server with an EMPTY database, started
-// with LICHESS_EXPLORER_URL pointing at tests/e2e/fake_explorer.py and LICHESS_TOKEN=lip_e2e.
-// Usage: MPCT_URL=http://localhost:8010/ FAKE_URL=http://localhost:8097 node tests/e2e/practical.e2e.cjs
+// the browser), read the results, sort the sharpest alternatives, show a line on the board, and a
+// second run that uses the saved engine lines. Needs a server with an EMPTY database.
+// Usage: MPCT_URL=http://localhost:8010/ node tests/e2e/practical.e2e.cjs
 const { chromium } = require('playwright');
 
 const URL = process.env.MPCT_URL || 'http://localhost:8010/';
-const FAKE = process.env.FAKE_URL || 'http://localhost:8097';
 const SHOTS = process.env.MPCT_SHOTS;
 const errors = [];
 const check = (cond, msg) => {
@@ -58,7 +56,7 @@ async function api(page, method, path, body) {
   check(tags[0] === 'Whole opening' && tags.some((t) => t.startsWith('Wuss')), `branches listed (${tags.join(' | ')})`);
   await page.selectOption('#pr-tag', String(tag.id));
   await page.selectOption('#pr-think', '300');
-  check((await page.inputValue('#pr-data')) === '0' && (await page.inputValue('#pr-strength')) === '8', 'defaults: engine only, club 2000 opponent');
+  check(!(await page.$('#pr-data')) && !(await page.$('#pr-strength')), 'no opponent model or game-data settings');
 
   // ---- analyse ------------------------------------------------------------------------------------
   const t0 = Date.now();
@@ -74,34 +72,38 @@ async function api(page, method, path, body) {
   const firstRows = await page.$$eval('.pr-pos:first-of-type tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
   check(firstRows.length >= 3, `candidate rows (${firstRows.length})`);
   const heads = await page.$$eval('.pr-pos:first-of-type thead th', (ths) => ths.map((t) => t.textContent));
-  check(heads.join('|') === 'Move|Trap value|Good replies|Gap|They go wrong|Eval|Engine|Cost|Practical|Their replies → you', `columns (${heads.join('|')})`);
+  check(heads.join('|') === 'Move|Eval|Engine|Cost|Good replies|Gap|Sharpness|Their replies → you', `columns (${heads.join('|')})`);
   const yours = firstRows.find((r) => r[0].includes('yours'));
   check(yours && yours[0].startsWith('Bxe2'), 'your repertoire move is marked');
-  check(firstRows.every((r) => /^\+\d+$/.test(r[1]) && /^([+−]\d\.\d\d|0\.00|#.*)$/.test(r[5]) && /%/.test(r[6]) && /%/.test(r[8])), `trap, eval, engine and practical values (${firstRows[0].slice(1, 9).join(' ')})`);
+  const evalRe = /^([+−]\d+\.\d\d|0\.00|#.*)$/;
+  check(firstRows.every((r) => evalRe.test(r[1]) && /%/.test(r[2]) && /^\d+$/.test(r[3]) && /^(\d+(recapture)?|–)$/.test(r[6])), `eval, engine, cost and sharpness (${firstRows[0].slice(1, 7).join(' ')})`);
+  const costs = firstRows.map((r) => Number(r[3]));
+  check(costs.every((c, i) => i === 0 || c >= costs[i - 1]), `moves listed least cost first (${costs.join(' ')})`);
   const allRows = await page.$$eval('.pr-pos tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
-  check(allRows.some((r) => r[4] !== '0%'), 'the model has them slip somewhere (not all 0%)');
-  check(allRows.some((r) => r[2] === '1'), 'an only move somewhere');
-  check(firstRows.some((r) => /→/.test(r[9])), 'their replies');
+  check(allRows.some((r) => r[4] === '1'), 'an only move somewhere');
+  check(/recapture/.test(yours[6]), `your Bxe2 is marked as a recapture (${yours[6]})`);
+  check(firstRows.some((r) => /→ \d+%/.test(r[7])), 'their replies with your winning chances');
+  check(!(await page.textContent('#practical-view')).match(/go wrong|Trap value|Practical\b(?! choices)/), 'no opponent-model measures on the page');
   check(await page.isVisible('#pr-worth'), 'sharpest alternatives shown');
   const wHeads = await page.$$eval('#pr-worth-table thead th', (ths) => ths.map((t) => t.textContent.replace(/[↕▼▲]/g, '').trim()));
-  check(wHeads.join('|') === 'After|Play|Trap value|Yours|Difference|Good replies|Gap|They go wrong|Cost|Eval|Yours (eval)|Only move(s)|Tempting slips → you', `sharpest alternatives as a table (${wHeads.join('|')})`);
-  const traps = await page.$$eval('#pr-worth-table tbody tr td:nth-child(3)', (tds) => tds.map((td) => parseInt(td.textContent.slice(1), 10)));
-  check(traps.length > 0 && traps.every((t, i) => i === 0 || t <= traps[i - 1]), `sorted by trap value (${traps.join(' ')})`);
+  check(wHeads.join('|') === 'After|Play|Sharpness|Yours|Difference|Good replies|Gap|Cost|Eval|Yours (eval)|Only move(s) → you|Next best → you', `sharpest alternatives as a table (${wHeads.join('|')})`);
+  const sharps = await page.$$eval('#pr-worth-table tbody tr td:nth-child(3)', (tds) => tds.map((td) => Number(td.textContent)));
+  check(sharps.length > 0 && sharps.every((t, i) => i === 0 || t <= sharps[i - 1]), `sorted by sharpness (${sharps.join(' ')})`);
+  const num = (t) => Number(t.replace('−', '-'));
+  const diffs = await page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => [3, 4, 5].map((i) => tr.children[i - 1].textContent)));
+  check(diffs.every(([t, y, d]) => y === '–' || num(t) - num(y.split(' ')[0]) === num(d)), `difference = sharpness − yours (${diffs.map((r) => r.join('/')).join(' ')})`);
+  const goodGap = await page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => [Number(tr.children[5].textContent), Number(tr.children[6].textContent)]));
+  check(goodGap.every(([g, gap]) => g <= 2 && gap >= 5), `at most two good replies and a gap of 5+ (${goodGap.map((r) => r.join('/')).join(' ')})`);
   await page.click('#pr-worth-table .pr-sort[data-sort="good"]');
   const goods = await page.$$eval('#pr-worth-table tbody tr td:nth-child(6)', (tds) => tds.map((td) => Number(td.textContent)));
   check(goods.every((g, i) => i === 0 || g >= goods[i - 1]) && (await page.getAttribute('#pr-worth-table th:nth-child(6)', 'aria-sort')) === 'ascending', `sorted by good replies (${goods.join(' ')})`);
-  const num = (t) => Number(t.replace('−', '-'));
-  const diffs = await page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => [3, 4, 5].map((i) => tr.children[i - 1].textContent)));
-  check(diffs.every(([t, y, d]) => y === '–' || num(t) - num(y) === num(d)), `difference = trap value − yours (${diffs.map((r) => r.join('/')).join(' ')})`);
   await page.click('#pr-worth-table .pr-sort[data-sort="diff"]');
   const sortedDiffs = await page.$$eval('#pr-worth-table tbody tr td:nth-child(5)', (tds) => tds.map((td) => td.textContent));
   check(sortedDiffs.map(num).every((d, i, a) => i === 0 || d <= a[i - 1]), `sorted by difference (${sortedDiffs.join(' ')})`);
-  const evals = await page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => [tr.children[9].textContent, tr.children[10].textContent]));
-  check(evals.every(([e, y]) => /^([+−]\d\.\d\d|0\.00)$/.test(e) && /^([+−]\d\.\d\d|0\.00) \(\S+\)$/.test(y)), `evals for the suggestion and yours (${evals.map((r) => r.join(' vs ')).join('; ')})`);
+  const evals = await page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => [tr.children[8].textContent, tr.children[9].textContent]));
+  check(evals.every(([e, y]) => evalRe.test(e) && /^([+−]\d+\.\d\d|0\.00) \(\S+\)$/.test(y)), `evals for the suggestion and yours (${evals.map((r) => r.join(' vs ')).join('; ')})`);
   const firstWhere = await page.textContent('#pr-worth-table tbody tr:first-child td:first-child');
   check(!firstWhere.startsWith('1.e4'), `positions shown from the branch (${firstWhere})`);
-  let log = await (await fetch(`${FAKE}/log`)).json();
-  check(!log.some((x) => x.startsWith('lichess:')), 'engine only: Lichess not asked');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/practical.png`, fullPage: true });
 
   // ---- a second run uses the saved engine lines -------------------------------------------------------
@@ -112,19 +114,7 @@ async function api(page, method, path, body) {
   check(/engine: 0 new/.test(again), `second run from saved lines (${again})`);
   const againRows = await page.$$eval('.pr-pos:first-of-type tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
   check(JSON.stringify(againRows) === JSON.stringify(firstRows), 'saved lines give the same results');
-  check(new Set(againRows.map((r) => r[6])).size > 1, `engine values differ between moves (${againRows.map((r) => r[6]).join(' ')})`);
-
-  // ---- with Lichess games ---------------------------------------------------------------------------
-  await page.selectOption('#pr-data', '1');
-  await page.click('#pr-go');
-  await page.waitForFunction(() => document.querySelector('#pr-go').textContent === 'Stop', null, { timeout: 5000 });
-  await page.waitForFunction(() => document.querySelector('#pr-go').textContent === 'Analyse', null, { timeout: 300000 });
-  const dataHeads = await page.$$eval('.pr-pos:first-of-type thead th', (ths) => ths.map((t) => t.textContent));
-  check(dataHeads.includes('Actual'), 'with Lichess games: an Actual column');
-  const actuals = await page.$$eval('.pr-pos tbody tr td[data-label="Actual"]', (tds) => tds.map((td) => td.textContent));
-  check(actuals.some((a) => /% \(\d/.test(a)), 'actual scores from the explorer');
-  log = await (await fetch(`${FAKE}/log`)).json();
-  check(log.some((x) => x.startsWith('lichess:') && x.endsWith('|2000,2200,2500')), 'Lichess asked at 2000+');
+  check(new Set(againRows.map((r) => r[2])).size > 1, `engine values differ between moves (${againRows.map((r) => r[2]).join(' ')})`);
 
   // ---- show on board --------------------------------------------------------------------------------
   await page.click('.pr-pos:first-of-type .pr-pos-title button');

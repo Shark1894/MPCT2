@@ -1,15 +1,8 @@
-"""Practical tab: your-move positions (whole opening or a branch), the Lichess explorer at 2000+
-(fake, cached, needs the token), and the engine-lines cache."""
-
-import urllib.parse
+"""Practical tab: your-move positions (whole opening or a branch) and the engine-lines cache."""
 
 import chess
 import pytest
 
-from app import explorer
-from app.config import settings
-from app.repositories import practical as repo
-from tests.conftest import count
 
 
 def ucis(text):
@@ -50,7 +43,7 @@ def scandi(client):
 def test_positions_whole_opening_and_branch(client, scandi):
     o, t = scandi
     whole = client.get("/api/practical/positions", params={"opening_id": o["id"]}).json()
-    assert (whole["opening"], whole["color"], whole["ratings"]) == ("Scandinavian (Modern)", "black", "2000,2200,2500")
+    assert (whole["opening"], whole["color"]) == ("Scandinavian (Modern)", "black")
     first = whole["positions"][0]
     assert (first["sans"], first["repertoire"]) == (["e4"], ["d7d5"])
     after_c4 = next(p for p in whole["positions"] if p["sans"] == "e4 d5 exd5 Nf6 c4".split())
@@ -69,39 +62,6 @@ def test_positions_whole_opening_and_branch(client, scandi):
     ]
     assert wuss["positions"][1]["fen"] == fen_after(WUSS + " Qxe2")
     assert client.get("/api/practical/positions", params={"opening_id": 999999}).status_code == 404
-
-
-def test_explorer_cached_and_paced(client, db, monkeypatch):
-    monkeypatch.setattr(settings, "lichess_token", "lip_test")
-    monkeypatch.setattr(repo, "PAUSE_S", 0)
-    asked = []
-
-    def get(url, **kw):
-        asked.append(urllib.parse.parse_qs(urllib.parse.urlparse(url).query))
-        assert urllib.parse.urlparse(url).path.endswith("/lichess")
-        return {"white": 50, "draws": 20, "black": 30, "topGames": [],
-                "moves": [{"uci": "d7d5", "san": "d5", "white": 30, "draws": 10, "black": 20, "averageRating": 2150}]}
-
-    monkeypatch.setattr(explorer, "http_get", get)
-    fen = fen_after("e4")
-    r = client.get("/api/practical/explorer", params={"fen": fen})
-    assert r.status_code == 200, r.text
-    assert r.json()["moves"] == [{"uci": "d7d5", "san": "d5", "white": 30, "draws": 10, "black": 20}]
-    assert asked[0]["ratings"] == ["2000,2200,2500"] and asked[0]["fen"][0].endswith(" 0 1")
-    client.get("/api/practical/explorer", params={"fen": fen})
-    assert len(asked) == 1 and count(db, "explorer_cache") == 1  # cached
-
-    monkeypatch.setattr(settings, "lichess_token", None)
-    assert client.get("/api/practical/explorer", params={"fen": fen_after("d4")}).status_code == 409
-    assert client.get("/api/practical/explorer", params={"fen": fen}).status_code == 200  # cached needs no token
-
-    def broken(url, **kw):
-        raise explorer.ExplorerError("Lichess is limiting requests right now; try again in a minute")
-
-    monkeypatch.setattr(settings, "lichess_token", "lip_test")
-    monkeypatch.setattr(explorer, "http_get", broken)
-    r = client.get("/api/practical/explorer", params={"fen": fen_after("c4")})
-    assert r.status_code == 502 and "limiting" in r.json()["detail"]
 
 
 def line(uci, cp):

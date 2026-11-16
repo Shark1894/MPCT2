@@ -103,7 +103,6 @@ export const api = {
   importTrainingCourse: (body) => request('POST', '/courses/import', { body }),
   // Practical tab
   practicalPositions: (openingId, tagId) => request('GET', '/practical/positions', { params: { opening_id: openingId, ...(tagId ? { tag_id: tagId } : {}) } }),
-  practicalExplorer: (fen) => request('GET', '/practical/explorer', { params: { fen } }),
   practicalEvals: (fens, multipv, movetimeMs) => request('POST', '/practical/evals/lookup', { body: { fens, multipv, movetime_ms: movetimeMs } }),
   savePracticalEvals: (evals) => request('POST', '/practical/evals', { body: { evals } }),
   // endgame studies (Training tab)
