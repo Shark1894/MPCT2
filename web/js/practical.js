@@ -14,7 +14,7 @@ import { api } from './api.js';
 import { button, el, miniBoard } from './dom.js';
 import { Engine } from './engine.js';
 import {
-  DEFAULTS, STRENGTHS, candidateMoves, extraReplies, finalCandidate, finish, movetext, pct, scoreCandidate, winPct, worthALook,
+  DEFAULTS, STRENGTHS, candidateMoves, evalText, extraReplies, finalCandidate, finish, movetext, pct, scoreCandidate, winPct, worthALook,
 } from './practical-core.js';
 import { plural, store, toast } from './ui.js';
 
@@ -284,8 +284,9 @@ export class PracticalView {
     this.el.help.append(
       el('h2', 'dash-h2', 'How to read it'),
       this._helpList([
-        ['Engine', 'your winning chances if they always find the best reply'],
-        ['Cost', 'how many points of winning chances the move gives away against the engine’s best'],
+        ['Eval', 'the engine’s evaluation after the move and their best reply, in pawns from White’s side (+ good for White)'],
+        ['Engine', 'the same as your winning chances (0–100)'],
+        ['Cost', 'how many points of winning chances the move gives away against the engine’s best move here. Points aren’t pawns: near equality a pawn is about 9 points (half a pawn about 5), and the same pawn is worth fewer points when one side is already well ahead'],
         ['Good replies', 'how many of their replies stay within 7 points of their best: 1 means an only move'],
         ['Gap', 'how many points worse their second-best reply is than their best: the bigger, the more they must find exactly one move'],
         ['They go wrong', 'how often an opponent of the chosen strength would play a reply that isn’t good: a model that picks replies by how good they look to the engine, so slips are likelier when the alternatives are only a bit worse'],
@@ -488,6 +489,8 @@ export class PracticalView {
       ['Gap', 'gap', (p) => (Number.isFinite(p.cand.gap) ? p.cand.gap : -1)],
       ['They go wrong', 'wrong', (p) => p.cand.wrong],
       ['Cost', 'cost', (p) => p.cand.cost, true],
+      ['Eval', null],
+      ['Yours (eval)', null],
       ['Only move(s)', null],
       ['Tempting slips → you', null],
     ];
@@ -534,6 +537,8 @@ export class PracticalView {
         el('td', 'num', Number.isFinite(c.gap) ? String(Math.round(c.gap)) : '–'),
         el('td', 'num', `${Math.round(c.wrong * 100)}%`),
         el('td', 'num', String(Math.round(c.cost))),
+        el('td', 'num pr-eval', evalText(c.score)),
+        el('td', 'num pr-eval', mine ? `${evalText(mine.score)} (${mine.san})` : '–'),
         el('td', 'pr-only', good.length ? `${good.map((r) => r.san).join(', ')} → you ${pct(c.engine)}` : '–'),
         el('td', 'pr-replies', slips.map((r) => `${r.san} → ${pct(r.mine)}`).join(', ') || '–'),
       ];
@@ -566,7 +571,7 @@ export class PracticalView {
     const thead = el('thead');
     const hr = el('tr');
     const withData = Boolean(this.opts?.useData);
-    const HEADS = ['Move', 'Trap value', 'Good replies', 'Gap', 'They go wrong', 'Engine', 'Cost', 'Practical', ...(withData ? ['Actual'] : []), 'Their replies → you'];
+    const HEADS = ['Move', 'Trap value', 'Good replies', 'Gap', 'They go wrong', 'Eval', 'Engine', 'Cost', 'Practical', ...(withData ? ['Actual'] : []), 'Their replies → you'];
     for (const h of HEADS) hr.appendChild(el('th', '', h));
     thead.appendChild(hr);
     const tbody = el('tbody');
@@ -592,6 +597,7 @@ export class PracticalView {
         el('td', `num${c.good === 1 ? ' pr-hot' : ''}`, final ? '–' : String(c.good)),
         el('td', 'num', final || !Number.isFinite(c.gap) ? '–' : String(Math.round(c.gap))),
         el('td', 'num', final ? '–' : `${Math.round(c.wrong * 100)}%`),
+        el('td', 'num pr-eval', c.final ? '#' : evalText(c.score)),
         el('td', 'num', pct(c.engine)),
         el('td', 'num', String(Math.round(c.cost))),
         practical,

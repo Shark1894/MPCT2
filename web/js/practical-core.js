@@ -125,12 +125,14 @@ export function scoreCandidate({ uci, san, me, theirLines, extra = {}, data = nu
   const actualOk = moveStats && games(moveStats) >= opts.minMoveGames;
   const sorted = Object.values(theirs).sort((a, b) => b - a);
   const engine = 100 - best;
+  const top = theirLines.find((l) => winPct(l.score, them) === best) ?? theirLines[0];
   const practical = replies.reduce((a, r) => a + r.prob * r.mine, 0);
   return {
     uci,
     san,
     repertoire,
     engine,
+    score: top ? top.score : null, // the engine's eval after the move and their best reply (White's view)
     practical,
     trap: practical - engine,
     wrong: replies.filter((r) => !r.good).reduce((a, r) => a + r.prob, 0),
@@ -146,7 +148,7 @@ export function scoreCandidate({ uci, san, me, theirLines, extra = {}, data = nu
 
 /** A move that ends the game: its value straight from the result. */
 export function finalCandidate({ uci, san, value, repertoire = false }) {
-  return { uci, san, repertoire, engine: value, practical: value, trap: 0, wrong: 0, good: 0, gap: NaN, source: 'final', replies: [], actual: NaN, actualGames: 0, cost: 0 };
+  return { uci, san, repertoire, engine: value, score: value === 50 ? { cp: 0 } : null, final: value === 100, practical: value, trap: 0, wrong: 0, good: 0, gap: NaN, source: 'final', replies: [], actual: NaN, actualGames: 0, cost: 0 };
 }
 
 /** Costs against your best move; keep those within the cap (and yours); best practical first. */
@@ -183,6 +185,14 @@ export function movetext(sans, from = 0) {
       return i === 0 ? `${Math.floor(ply / 2) + 1}…${s}` : s;
     })
     .join(' ');
+}
+
+/** An eval as players write it, White's view: "+0.35", "−1.20", "#3", "#−2" ("–" when unknown). */
+export function evalText(score) {
+  if (!score) return '–';
+  if (score.mate != null) return score.mate === 0 ? '#' : `#${score.mate < 0 ? '−' : ''}${Math.abs(score.mate)}`;
+  const p = score.cp / 100;
+  return `${p > 0 ? '+' : p < 0 ? '−' : ''}${Math.abs(p).toFixed(2)}`;
 }
 
 /** "63%" (or "–" when unknown). */

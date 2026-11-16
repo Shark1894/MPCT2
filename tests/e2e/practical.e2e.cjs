@@ -74,17 +74,17 @@ async function api(page, method, path, body) {
   const firstRows = await page.$$eval('.pr-pos:first-of-type tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
   check(firstRows.length >= 3, `candidate rows (${firstRows.length})`);
   const heads = await page.$$eval('.pr-pos:first-of-type thead th', (ths) => ths.map((t) => t.textContent));
-  check(heads.join('|') === 'Move|Trap value|Good replies|Gap|They go wrong|Engine|Cost|Practical|Their replies → you', `columns (${heads.join('|')})`);
+  check(heads.join('|') === 'Move|Trap value|Good replies|Gap|They go wrong|Eval|Engine|Cost|Practical|Their replies → you', `columns (${heads.join('|')})`);
   const yours = firstRows.find((r) => r[0].includes('yours'));
   check(yours && yours[0].startsWith('Bxe2'), 'your repertoire move is marked');
-  check(firstRows.every((r) => /^\+\d+$/.test(r[1]) && /%/.test(r[5]) && /%/.test(r[7])), 'trap, engine and practical values');
+  check(firstRows.every((r) => /^\+\d+$/.test(r[1]) && /^([+−]\d\.\d\d|0\.00|#.*)$/.test(r[5]) && /%/.test(r[6]) && /%/.test(r[8])), `trap, eval, engine and practical values (${firstRows[0].slice(1, 9).join(' ')})`);
   const allRows = await page.$$eval('.pr-pos tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
   check(allRows.some((r) => r[4] !== '0%'), 'the model has them slip somewhere (not all 0%)');
   check(allRows.some((r) => r[2] === '1'), 'an only move somewhere');
-  check(firstRows.some((r) => /→/.test(r[8])), 'their replies');
+  check(firstRows.some((r) => /→/.test(r[9])), 'their replies');
   check(await page.isVisible('#pr-worth'), 'sharpest alternatives shown');
   const wHeads = await page.$$eval('#pr-worth-table thead th', (ths) => ths.map((t) => t.textContent.replace(/[↕▼▲]/g, '').trim()));
-  check(wHeads.join('|') === 'After|Play|Trap value|Yours|Difference|Good replies|Gap|They go wrong|Cost|Only move(s)|Tempting slips → you', `sharpest alternatives as a table (${wHeads.join('|')})`);
+  check(wHeads.join('|') === 'After|Play|Trap value|Yours|Difference|Good replies|Gap|They go wrong|Cost|Eval|Yours (eval)|Only move(s)|Tempting slips → you', `sharpest alternatives as a table (${wHeads.join('|')})`);
   const traps = await page.$$eval('#pr-worth-table tbody tr td:nth-child(3)', (tds) => tds.map((td) => parseInt(td.textContent.slice(1), 10)));
   check(traps.length > 0 && traps.every((t, i) => i === 0 || t <= traps[i - 1]), `sorted by trap value (${traps.join(' ')})`);
   await page.click('#pr-worth-table .pr-sort[data-sort="good"]');
@@ -96,6 +96,8 @@ async function api(page, method, path, body) {
   await page.click('#pr-worth-table .pr-sort[data-sort="diff"]');
   const sortedDiffs = await page.$$eval('#pr-worth-table tbody tr td:nth-child(5)', (tds) => tds.map((td) => td.textContent));
   check(sortedDiffs.map(num).every((d, i, a) => i === 0 || d <= a[i - 1]), `sorted by difference (${sortedDiffs.join(' ')})`);
+  const evals = await page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => [tr.children[9].textContent, tr.children[10].textContent]));
+  check(evals.every(([e, y]) => /^([+−]\d\.\d\d|0\.00)$/.test(e) && /^([+−]\d\.\d\d|0\.00) \(\S+\)$/.test(y)), `evals for the suggestion and yours (${evals.map((r) => r.join(' vs ')).join('; ')})`);
   const firstWhere = await page.textContent('#pr-worth-table tbody tr:first-child td:first-child');
   check(!firstWhere.startsWith('1.e4'), `positions shown from the branch (${firstWhere})`);
   let log = await (await fetch(`${FAKE}/log`)).json();
@@ -110,7 +112,7 @@ async function api(page, method, path, body) {
   check(/engine: 0 new/.test(again), `second run from saved lines (${again})`);
   const againRows = await page.$$eval('.pr-pos:first-of-type tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
   check(JSON.stringify(againRows) === JSON.stringify(firstRows), 'saved lines give the same results');
-  check(new Set(againRows.map((r) => r[5])).size > 1, `engine values differ between moves (${againRows.map((r) => r[5]).join(' ')})`);
+  check(new Set(againRows.map((r) => r[6])).size > 1, `engine values differ between moves (${againRows.map((r) => r[6]).join(' ')})`);
 
   // ---- with Lichess games ---------------------------------------------------------------------------
   await page.selectOption('#pr-data', '1');

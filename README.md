@@ -790,12 +790,15 @@ niche and never-played lines are fine. For every position in your lines where it
   default) or 12 (club 1800), so slips are likelier when the alternatives are only a bit worse.
 - **Practical**: your expected winning chances over their replies chosen that way; **Trap value** = practical minus
   engine, what you expect to gain from their mistakes.
-- **Engine**: your winning chances if they find the best reply; **Cost**: given away against the engine's best.
+- **Eval**: the engine's evaluation after the move and their best reply, in pawns from White's side; **Engine**:
+  the same as your winning chances; **Cost**: winning chances given away against the engine's best (near
+  equality a pawn is about 9 points).
   Moves costing more than the chosen limit (8, 15 or 25 points) aren't listed.
 
 **Sharpest alternatives** is a table of moves you don't play yet where they have at most two good replies and
 slip at least 30% of the time: where (from the start of the branch), the move and the one it replaces, trap value,
-yours, the difference (green when the suggestion sets more problems), good replies, gap, how often they go wrong, cost, the only move(s) and the tempting slips.
+yours, the difference (green when the suggestion sets more problems), the evals of the suggestion and of
+your move, good replies, gap, how often they go wrong, cost, the only move(s) and the tempting slips.
 Sorted by trap value; tap a heading to sort by another column (on phones each row is a card, by trap value). **Show on board** (or a
 move in a table) opens the position on the Board tab.
 

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  DEFAULTS, candidateMoves, extraReplies, finish, finalCandidate, modelProbs, movetext, pct, scoreCandidate, scoreFor, winPct, worthALook,
+  DEFAULTS, candidateMoves, evalText, extraReplies, finish, finalCandidate, modelProbs, movetext, pct, scoreCandidate, scoreFor, winPct, worthALook,
 } from '../../web/js/practical-core.js';
 
 const near = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
@@ -98,6 +98,17 @@ test('costs, the cap, ordering and worth a look', () => {
   assert.equal(worthALook([{ position: {}, cands }], { ...DATA, minWrong: 0.9 }).length, 0);
   assert.equal(worthALook([{ position: {}, cands }], { ...DATA, maxGood: 1 }).length, 0);
   assert.equal(finalCandidate({ uci: 'd8h4', san: 'Qh4#', value: 100 }).practical, 100);
+});
+
+test('evals as players write them, and the eval kept with each move', () => {
+  assert.equal(evalText({ cp: 35 }), '+0.35');
+  assert.equal(evalText({ cp: -120, mate: null }), '−1.20');
+  assert.equal(evalText({ cp: 0 }), '0.00');
+  assert.equal(evalText({ mate: 3 }), '#3');
+  assert.equal(evalText({ mate: -2 }), '#−2');
+  assert.equal(evalText(null), '–');
+  const c = scoreCandidate({ uci: 'd7d6', san: 'd6', me: 'black', theirLines });
+  assert.deepEqual(c.score, { cp: 40 }); // after their best reply, d4
 });
 
 test('movetext and pct', () => {
