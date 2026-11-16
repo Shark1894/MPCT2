@@ -775,6 +775,30 @@ puzzles and endgame drills: those are included up to the first tracked stretch (
 key updates the stretch and never lowers its time), `GET /api/time?tz=Europe/London` (seconds
 per local day, category, activity and detail).
 
+## Practical choices (prototype)
+
+`scripts/practical_choices.py` (backlog item 7, not part of the app yet) looks for moves that put a human
+opponent under pressure even at an engine cost. For every position in your lines where it's your move, each
+candidate move gets an **engine** value (your win% if they find the best reply), a **practical** value (your
+expected win% over the replies Lichess players at the chosen ratings actually play, each scored by Stockfish), how
+often they **go wrong**, how many **good replies** they have, and the **actual** score with the move in those
+games. Moves that beat your repertoire's move on practical value are listed first under "Worth a look".
+
+Run it on your desktop (Stockfish there is faster than the server):
+
+```bash
+# on the server: your lines, one per row
+docker compose exec mpct python -m app.tools.export_lines "Wuss" > wuss.txt
+# on the desktop (python-chess + Stockfish), with the app's Lichess token
+LICHESS_TOKEN=lip_... python scripts/practical_choices.py --lines wuss.txt \
+    --root "e4 d5 exd5 Nf6 d4 Bg4 Be2 Bxe2" --out wuss-practical.md
+```
+
+Defaults: ratings 2000+ (`--ratings 2000,2200,2500`), all time controls, depth 18, moves costing up to 15 win%
+(`--cap`), a reply is good within 7 win% of their best (`--good`). With fewer than 30 games in a position the
+replies are guessed from the engine evals (marked *model*). Answers are cached in `practical-cache.json`, so
+re-running with other thresholds is quick. `--help` lists every option.
+
 ## Importing from the desktop app
 
 `app/tools/import_legacy.py` copies the openings, lines and position comments from a PyQt MPCT repertoire file
