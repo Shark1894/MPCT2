@@ -420,6 +420,10 @@ body.engine-on {
   border-left: 3px solid var(--green);
 }
 
+.explorer-move.transposes {
+  border-left-color: var(--blue);
+}
+
 .explorer-move .san {
   font-weight: 600;
 }

@@ -70,7 +70,10 @@ The full plan, decisions and data model are in the project's
 - Pick a repertoire and opening at the top of the repertoire panel (**+** creates one; **Manage** renames or
   deletes). Choosing an opening turns the board to your side.
 - **Repertoire moves** lists the opening's moves from the current position with how many lines use each, and
-  draws them as green arrows. Tap one to play it.
+  draws them as green arrows. Tap one to play it. Below them, marked *transposes* with blue arrows: other moves that
+  reach a position somewhere in the opening's lines by another move order (e.g. with 1.d4 d5 2.c4 e6 3.Nf3 in your
+  lines, after 1.d4 d5 2.Nf3 e6 it lists c4), with how many lines pass through that position. This works from
+  positions that aren't in your lines too.
 - **Add line** saves the moves up to the current position. It reports whether that created a new line, extended
   an existing one, or was already covered.
 - **Delete line** deletes every line in the opening that passes through the current position, after confirming
@@ -94,7 +97,7 @@ en passant square that allows no capture are ignored, so transpositions match.
 | `GET/DELETE /api/openings/{id}/lines/through?fen=` | Count / delete the lines passing through a position |
 | `DELETE /api/lines/{id}` | Delete one line |
 | `PUT/DELETE /api/lines/{id}/bookmark` | Bookmark a line (optional note) / remove the bookmark |
-| `GET /api/openings/{id}/explorer?fen=` | Repertoire moves from a position, with line counts |
+| `GET /api/openings/{id}/explorer?fen=` | Repertoire moves from a position, with line counts, then moves that transpose into the lines (`transposes`) |
 | `GET/PUT /api/repertoires/{id}/comment` | Read / save a position comment (empty comment deletes it) |
 
 Lines always start from the initial position. Extending a line makes it due for review today,

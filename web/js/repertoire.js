@@ -755,14 +755,16 @@ export class RepertoirePanel {
     for (const m of moves) {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'explorer-move';
+      btn.className = `explorer-move${m.transposes ? ' transposes' : ''}`;
       btn.innerHTML = `<span class="san"></span><span class="count"></span>`;
       btn.querySelector('.san').textContent = m.san;
-      btn.querySelector('.count').textContent = `${m.lines} line${m.lines === 1 ? '' : 's'}`;
+      const lines = `${m.lines} line${m.lines === 1 ? '' : 's'}`;
+      btn.querySelector('.count').textContent = m.transposes ? `transposes · ${lines}` : lines;
+      if (m.transposes) btn.title = `${m.san} reaches a position in your lines by another move order (${lines} go through it)`;
       btn.addEventListener('click', () => this.onPlaySan(m.san));
       box.appendChild(btn);
     }
-    this.onShapes(moves.map((m) => ({ orig: m.uci.slice(0, 2), dest: m.uci.slice(2, 4), brush: 'green' })));
+    this.onShapes(moves.map((m) => ({ orig: m.uci.slice(0, 2), dest: m.uci.slice(2, 4), brush: m.transposes ? 'blue' : 'green' })));
   }
 
   // ---- comments -----------------------------------------------------------

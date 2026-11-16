@@ -70,6 +70,7 @@ class ExplorerMoveOut(BaseModel):
     uci: str
     san: str
     lines: int
+    transposes: bool = False  # reaches a position in the opening's lines by another move order
 
 
 class CommentIn(BaseModel):

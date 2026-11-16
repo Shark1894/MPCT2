@@ -7,11 +7,12 @@ Functions take a Session and never commit: the caller owns the transaction
 from dataclasses import dataclass
 from datetime import date
 
+import chess
 from sqlalchemy import delete, distinct, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.core.positions import key_from_fen, walk_line
+from app.core.positions import key_from_fen, position_key, walk_line
 from app.core.repertoire import plan_line
 from app.db.models import Line, Move, Opening, Position, PositionComment, Repertoire
 
@@ -287,20 +288,48 @@ def delete_line(s: Session, line_id: int) -> None:
 
 
 def explorer(s: Session, opening_id: int, fen: str) -> list[dict]:
-    """Repertoire moves from a position in this opening, with how many lines use each."""
+    """Repertoire moves from a position in this opening, with how many lines use each; then the
+    transpositions: other legal moves that reach a position somewhere in the opening's lines (by
+    another move order), with how many lines pass through it."""
     get_opening(s, opening_id)
+    out: list[dict] = []
     pos_id = _position_id(s, fen)
-    if pos_id is None:
+    if pos_id is not None:
+        n_lines = func.count(distinct(Move.line_id))
+        rows = s.execute(
+            select(Move.uci, Move.san, n_lines)
+            .join(Line)
+            .where(Line.opening_id == opening_id, Move.position_before_id == pos_id)
+            .group_by(Move.uci, Move.san)
+            .order_by(n_lines.desc(), Move.san)
+        ).all()
+        out = [{"uci": uci, "san": san, "lines": n, "transposes": False} for uci, san, n in rows]
+    return out + _transpositions(s, opening_id, fen, {m["uci"] for m in out})
+
+
+def _transpositions(s: Session, opening_id: int, fen: str, known: set[str]) -> list[dict]:
+    board = chess.Board(fen)
+    after: dict[str, tuple[str, str]] = {}  # position key -> (uci, san)
+    for move in board.legal_moves:
+        uci = move.uci()
+        if uci in known:
+            continue
+        san = board.san(move)
+        board.push(move)
+        after.setdefault(position_key(board), (uci, san))
+        board.pop()
+    if not after:
         return []
     n_lines = func.count(distinct(Move.line_id))
     rows = s.execute(
-        select(Move.uci, Move.san, n_lines)
-        .join(Line)
-        .where(Line.opening_id == opening_id, Move.position_before_id == pos_id)
-        .group_by(Move.uci, Move.san)
-        .order_by(n_lines.desc(), Move.san)
+        select(Position.key, n_lines)
+        .join(Move, Move.position_after_id == Position.id)
+        .join(Line, Line.id == Move.line_id)
+        .where(Line.opening_id == opening_id, Position.key.in_(list(after)))
+        .group_by(Position.key)
     ).all()
-    return [{"uci": uci, "san": san, "lines": n} for uci, san, n in rows]
+    found = [{"uci": after[k][0], "san": after[k][1], "lines": n, "transposes": True} for k, n in rows]
+    return sorted(found, key=lambda m: (-m["lines"], m["san"]))
 
 
 # ---- comments ---------------------------------------------------------------

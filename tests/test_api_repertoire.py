@@ -157,7 +157,7 @@ def test_explorer_counts_moves_from_position(client, opening):
     oid = opening["id"]
 
     start = client.get(f"/api/openings/{oid}/explorer", params={"fen": START}).json()
-    assert start == [{"uci": "e2e4", "san": "e4", "lines": 2}, {"uci": "d2d4", "san": "d4", "lines": 1}]
+    assert start == [{"uci": "e2e4", "san": "e4", "lines": 2, "transposes": False}, {"uci": "d2d4", "san": "d4", "lines": 1, "transposes": False}]
 
     pos = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"
     moves = client.get(f"/api/openings/{oid}/explorer", params={"fen": pos}).json()
@@ -172,7 +172,7 @@ def test_explorer_ignores_en_passant_field_and_counters(client, opening):
     add(client, opening, RUY)
     for fen in (AFTER_E4, AFTER_E4.replace(" e3 0 1", " - 5 40")):
         assert client.get(f"/api/openings/{opening['id']}/explorer", params={"fen": fen}).json() == [
-            {"uci": "e7e5", "san": "e5", "lines": 1}
+            {"uci": "e7e5", "san": "e5", "lines": 1, "transposes": False}
         ]
 
 
@@ -182,6 +182,22 @@ def test_explorer_finds_transpositions(client, opening):
     fen = "rnbqkb1r/pppp1ppp/4pn2/8/2PP4/8/PP2PPPP/RNBQKBNR w KQkq - 0 3"
     moves = client.get(f"/api/openings/{opening['id']}/explorer", params={"fen": fen}).json()
     assert {m["san"] for m in moves} == {"Nc3", "Nf3"}
+
+
+def test_explorer_moves_that_transpose_into_the_lines(client, opening):
+    """d4 d5 c4 e6 Nf3 in the lines: after d4 d5 Nf3 e6 (not in them), c4 reaches the same position."""
+    add(client, opening, ["d2d4", "d7d5", "c2c4", "e7e6", "g1f3", "g8f6"])
+    add(client, opening, ["d2d4", "d7d5", "c2c4", "e7e6", "g1f3", "c7c5"])
+    oid = opening["id"]
+    fen = "rnbqkbnr/ppp2ppp/4p3/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 0 3"  # d4 d5 Nf3 e6
+    assert client.get(f"/api/openings/{oid}/explorer", params={"fen": fen}).json() == [
+        {"uci": "c2c4", "san": "c4", "lines": 2, "transposes": True}
+    ]
+    # in the lines: their own moves first, then any move into another part of them
+    after_c4 = "rnbqkbnr/ppp1pppp/8/3p4/2PP4/8/PP2PPPP/RNBQKBNR b KQkq - 0 2"
+    moves = client.get(f"/api/openings/{oid}/explorer", params={"fen": after_c4}).json()
+    assert moves[0] == {"uci": "e7e6", "san": "e6", "lines": 2, "transposes": False}
+    assert all(m["transposes"] for m in moves[1:])
 
 
 def test_explorer_bad_fen(client, opening):

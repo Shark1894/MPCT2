@@ -108,7 +108,7 @@ def test_import(db, client, legacy_db):
     # Explorer works on imported data, including the transposed/shared positions
     start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
     assert client.get(f"/api/openings/{openings['Caro-Kann']['id']}/explorer", params={"fen": start}).json() == [
-        {"uci": "e2e4", "san": "e4", "lines": 2}
+        {"uci": "e2e4", "san": "e4", "lines": 2, "transposes": False}
     ]
 
 
