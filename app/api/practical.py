@@ -1,9 +1,10 @@
 """Practical tab: your-move positions in an opening, and the engine lines the browser works out."""
 
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Response
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy.orm import Session
 
 from app.api.evals import EvalLine, Fen
@@ -78,3 +79,39 @@ def evals_lookup(body: EvalsLookupIn, s: Db):
 @router.post("/practical/evals", response_model=SavedOut)
 def evals_save(body: EvalsSaveIn, s: Db):
     return {"saved": repo.evals_save(s, [e.model_dump() for e in body.evals])}
+
+
+Key = Annotated[str, StringConstraints(min_length=10, max_length=100)]
+Uci = Annotated[str, StringConstraints(pattern=r"^[a-h][1-8][a-h][1-8][qrbn]?$")]
+
+
+class SeenLookupIn(BaseModel):
+    keys: list[Key] = Field(max_length=1000)
+
+
+class SeenIn(BaseModel):
+    key: Key  # the position (as in /practical/positions)
+    uci: Uci  # the move played there
+
+
+class SeenOut(BaseModel):
+    key: str
+    uci: str
+    seen_at: datetime
+
+
+@router.post("/practical/seen/lookup", response_model=list[SeenOut])
+def seen(body: SeenLookupIn, s: Db):
+    """The moves you've looked at in these positions."""
+    return repo.seen(s, body.keys)
+
+
+@router.put("/practical/seen", response_model=SeenOut)
+def mark_seen(body: SeenIn, s: Db):
+    return repo.mark_seen(s, body.key, body.uci)
+
+
+@router.delete("/practical/seen", status_code=204)
+def unmark_seen(body: SeenIn, s: Db):
+    repo.unmark_seen(s, body.key, body.uci)
+    return Response(status_code=204)

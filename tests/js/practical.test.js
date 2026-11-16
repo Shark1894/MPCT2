@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  DEFAULTS, candidateMoves, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
+  DEFAULTS, breakEven, breakEvenText, candidateMoves, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
 } from '../../web/js/practical-core.js';
 
 const near = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
@@ -90,6 +90,30 @@ test('the change in eval against your move, and who it helps', () => {
   assert.deepEqual(evalChange({ score: { cp: 20 } }, { score: { cp: 20 } }, 'white'), { cp: 0, better: false, worse: false });
   assert.equal(evalChange({ score: { mate: 3 } }, { score: { cp: 0 } }, 'white'), null);
   assert.equal(evalChange({ score: { cp: 0 } }, null, 'white'), null);
+});
+
+test('break-even: how often they must miss for the switch to pay', () => {
+  // Jason's example, as Black: his move leaves -0.50 against all of their 3-4 replies; the
+  // suggestion leaves 0.00 against their only move and -3.00 against the next best.
+  const mine = scoreCandidate({ uci: 'a', san: 'a', me: 'black', theirLines: [{ uci: 'x1', score: cp(-50) }, { uci: 'x2', score: cp(-50) }, { uci: 'x3', score: cp(-55) }] });
+  const sugg = scoreCandidate({ uci: 'b', san: 'b', me: 'black', theirLines: [{ uci: 'y1', score: cp(0) }, { uci: 'y2', score: cp(-300) }] });
+  const A = 100 - W(-50);
+  const B = 50;
+  const B2 = 100 - W(-300);
+  const p = breakEven(sugg, mine);
+  near(p, (A - B) / ((A - B) + (B2 - A)));
+  assert.ok(p > 0.15 && p < 0.25, `about 1 in 5 (${p})`);
+  assert.equal(breakEvenText(p), '18%');
+  // At least as good even if they find the best reply: free.
+  const better = scoreCandidate({ uci: 'c', san: 'c', me: 'black', theirLines: [{ uci: 'y1', score: cp(-60) }, { uci: 'y2', score: cp(-300) }] });
+  assert.equal(breakEven(better, mine), 0);
+  assert.equal(breakEvenText(0), 'free');
+  // Worse, and their mistake gains no more than against yours: never.
+  const flat = scoreCandidate({ uci: 'd', san: 'd', me: 'black', theirLines: [{ uci: 'y1', score: cp(0) }, { uci: 'y2', score: cp(-40) }] });
+  assert.equal(breakEven(flat, mine), Infinity);
+  assert.equal(breakEvenText(Infinity), 'never');
+  assert.equal(breakEven(sugg, null), null);
+  assert.equal(breakEvenText(null), '–');
 });
 
 test('text helpers', () => {

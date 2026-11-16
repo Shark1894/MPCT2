@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.core.positions import key_from_fen
-from app.db.models import Line, Move, Opening, Position, PracticalEval
+from app.db.models import Line, Move, Opening, Position, PracticalEval, PracticalSeen
 from app.repositories.repertoire import NotFound
 from app.repositories.tags import tag_in_opening
 
@@ -93,3 +93,29 @@ def evals_save(s: Session, items: list[dict]) -> int:
         ).returning(PracticalEval.key)
         saved += len(s.execute(stmt).all())
     return saved
+
+
+# ---- moves looked at ---------------------------------------------------------------------------
+
+
+def seen(s: Session, keys: list[str]) -> list[dict]:
+    """The moves looked at in these positions."""
+    if not keys:
+        return []
+    rows = s.scalars(select(PracticalSeen).where(PracticalSeen.key.in_(set(keys))))
+    return [{"key": r.key, "uci": r.uci, "seen_at": r.seen_at} for r in rows]
+
+
+def mark_seen(s: Session, key: str, uci: str) -> dict:
+    stmt = insert(PracticalSeen).values(key=key, uci=uci).on_conflict_do_nothing()
+    s.execute(stmt)
+    s.flush()
+    row = s.get(PracticalSeen, (key, uci))
+    return {"key": row.key, "uci": row.uci, "seen_at": row.seen_at}
+
+
+def unmark_seen(s: Session, key: str, uci: str) -> None:
+    row = s.get(PracticalSeen, (key, uci))
+    if row is not None:
+        s.delete(row)
+        s.flush()

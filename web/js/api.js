@@ -105,6 +105,9 @@ export const api = {
   practicalPositions: (openingId, tagId) => request('GET', '/practical/positions', { params: { opening_id: openingId, ...(tagId ? { tag_id: tagId } : {}) } }),
   practicalEvals: (fens, multipv, movetimeMs) => request('POST', '/practical/evals/lookup', { body: { fens, multipv, movetime_ms: movetimeMs } }),
   savePracticalEvals: (evals) => request('POST', '/practical/evals', { body: { evals } }),
+  practicalSeen: (keys) => request('POST', '/practical/seen/lookup', { body: { keys } }),
+  markPracticalSeen: (key, uci) => request('PUT', '/practical/seen', { body: { key, uci } }),
+  unmarkPracticalSeen: (key, uci) => request('DELETE', '/practical/seen', { body: { key, uci } }),
   // endgame studies (Training tab)
   studiesSummary: () => request('GET', '/studies/summary'),
   studies: (filters = {}, offset = 0, limit = 50) => request('GET', '/studies', { params: { ...studyParams(filters), offset, limit } }),

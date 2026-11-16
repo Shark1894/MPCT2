@@ -13,7 +13,7 @@ import { api } from './api.js';
 import { button, el, miniBoard } from './dom.js';
 import { Engine } from './engine.js';
 import {
-  DEFAULTS, candidateMoves, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
+  DEFAULTS, breakEven, breakEvenText, candidateMoves, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
 } from './practical-core.js';
 import { plural, store, toast } from './ui.js';
 
@@ -167,10 +167,53 @@ export class PracticalView {
     this.run = null;
     this.info = null;
     this.built = false;
+    this.seen = new Set(); // `${position key}|${uci}` of moves you've opened on the board
+    this.hideSeen = Boolean(saved.hideSeen);
   }
 
   _save() {
-    store.set('practical', this.settings);
+    store.set('practical', { ...this.settings, hideSeen: this.hideSeen });
+  }
+
+  _isSeen(position, uci) {
+    return this.seen.has(`${position.key}|${uci}`);
+  }
+
+  /** Open a move on the board, and remember you've looked at it. */
+  _open(position, c) {
+    this._setSeen(position, c.uci, true);
+    this.onShowLine([...position.sans, c.san]);
+  }
+
+  async _setSeen(position, uci, on) {
+    const k = `${position.key}|${uci}`;
+    if (on === this.seen.has(k)) return;
+    if (on) this.seen.add(k);
+    else this.seen.delete(k);
+    this._redraw();
+    try {
+      if (on) await api.markPracticalSeen(position.key, uci);
+      else await api.unmarkPracticalSeen(position.key, uci);
+    } catch (err) {
+      toast(`Not saved: ${err.message}`, 'error');
+    }
+  }
+
+  async _loadSeen(positions) {
+    this.seen = new Set();
+    try {
+      for (const r of await api.practicalSeen(positions.map((p) => p.key))) this.seen.add(`${r.key}|${r.uci}`);
+    } catch {
+      // not knowing what you've seen only loses the ticks
+    }
+  }
+
+  /** Draw the results again (after a seen tick changes). */
+  _redraw() {
+    if (!this.info) return;
+    this._drawWorth(!this.run);
+    const cards = this.results.map((r) => this._positionCard(r));
+    this.el.positions.replaceChildren(...cards);
   }
 
   /** Shown: build once, then refresh the opening list. */
@@ -338,6 +381,7 @@ export class PracticalView {
     }
     this.info = info;
     this.results = [];
+    await this._loadSeen(info.positions);
     const opts = { ...DEFAULTS, cap: this.settings.cap };
     this.opts = opts;
     const w = new Worker({ movetime: this.settings.movetime });
@@ -420,7 +464,7 @@ export class PracticalView {
     box.hidden = !picks.length && !final;
     box.replaceChildren(
       el('h2', 'dash-h2', 'Sharpest alternatives'),
-      el('p', 'pr-note', 'Moves you don’t play yet, at least as sharp as yours, where they have at most two good replies and their second-best is at least 5 points worse, sharpest first. Eval change is in pawns from White’s side: green when it’s better for you. Tap a heading to sort; tap a move to see it on the board.'),
+      el('p', 'pr-note', 'Moves you don’t play yet, at least as sharp as yours, where they have at most two good replies and their second-best is at least 5 points worse. Break-even: how often they’d have to miss their best reply (playing their second-best) for the move to score better than yours; “free” when it’s no worse even if they find it. Eval change is in pawns from White’s side: green when it’s better for you. Tap a heading to sort; tap a move to see it on the board (it’s then ticked as seen).'),
     );
     if (!picks.length) {
       box.appendChild(el('p', 'pr-note', final && this.results.length
@@ -428,14 +472,27 @@ export class PracticalView {
         : 'Nothing yet.'));
       return;
     }
-    box.appendChild(this._worthTable(picks));
+    const seenCount = picks.filter((p) => this._isSeen(p.position, p.cand.uci)).length;
+    const toggle = el('label', 'pr-hide-seen');
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.id = 'pr-hide-seen';
+    cb.checked = this.hideSeen;
+    cb.addEventListener('change', () => {
+      this.hideSeen = cb.checked;
+      this._save();
+      this._drawWorth(!this.run);
+    });
+    toggle.append(cb, ` Hide the ones you’ve seen (${seenCount} of ${picks.length})`);
+    box.appendChild(toggle);
+    const shown = this.hideSeen ? picks.filter((p) => !this._isSeen(p.position, p.cand.uci)) : picks;
+    if (!shown.length) box.appendChild(el('p', 'pr-note', 'You’ve seen them all.'));
+    else box.appendChild(this._worthTable(shown));
   }
 
-  /** "5.Qxe2 Qxd5 6.Nf3": the moves since the start of the branch (at least the last one). */
-  _since(sans) {
-    const root = this.info.positions[0]?.ply ?? 0;
-    const from = Math.min(root, Math.max(0, sans.length - 1));
-    return movetext(sans.slice(from), from);
+  /** "5.Nxe2": the move that led to the position. */
+  _last(sans) {
+    return sans.length ? movetext(sans.slice(-1), sans.length - 1) : 'Start';
   }
 
   _worthTable(picks) {
@@ -444,6 +501,7 @@ export class PracticalView {
       // [heading, sort key, value for sorting, ascending]
       ['After', null],
       ['Play', null],
+      ['Break-even', 'breakeven', (p) => breakEven(p.cand, p.mine) ?? Infinity, true],
       ['Sharpness', 'sharpness', (p) => p.cand.sharpness],
       ['Yours', null],
       ['Difference', 'diff', (p) => (sharp(p.mine) === null ? -Infinity : sharp(p.cand) - sharp(p.mine))],
@@ -456,12 +514,19 @@ export class PracticalView {
         const d = evalChange(p.cand, p.mine, this.info.color);
         return d === null ? -Infinity : this.info.color === 'white' ? d.cp : -d.cp; // best for you first
       }],
-      ['Only move(s) → you', null],
-      ['Next best → you', null],
+      ['Seen', 'seen', (p) => (this._isSeen(p.position, p.cand.uci) ? 1 : 0), true],
     ];
-    const sortKey = this.worthSort ?? 'sharpness';
+    const sortKey = this.worthSort ?? 'breakeven';
     const col = COLS.find((c) => c[1] === sortKey) ?? COLS[2];
-    const rows = [...picks].sort((a, b) => (col[3] ? col[2](a) - col[2](b) : col[2](b) - col[2](a)) || b.cand.sharpness - a.cand.sharpness);
+    const order = (a, b) => {
+      const x = col[2](a);
+      const y = col[2](b);
+      if (x === y) return 0;
+      if (x === Infinity || y === -Infinity) return 1; // "never" / unknown last, whichever way
+      if (y === Infinity || x === -Infinity) return -1;
+      return col[3] ? x - y : y - x;
+    };
+    const rows = [...picks].sort((a, b) => order(a, b) || b.cand.sharpness - a.cand.sharpness);
 
     const wrap = el('div', 'pr-table-wrap');
     const table = el('table', 'pr-table pr-worth-table');
@@ -484,17 +549,27 @@ export class PracticalView {
     thead.appendChild(hr);
     const tbody = el('tbody');
     for (const { position, cand: c, mine } of rows) {
-      const tr = el('tr');
-      const where = el('td', 'pr-where', `${this._since(position.sans)} …`);
-      where.title = movetext(position.sans);
+      const seen = this._isSeen(position, c.uci);
+      const tr = el('tr', seen ? 'seen' : '');
+      const where = el('td', 'pr-where', this._last(position.sans));
+      where.title = `${movetext(position.sans)} …`;
       const play = el('td', 'pr-move');
-      play.appendChild(button(c.san, 'pr-move-btn', () => this.onShowLine([...position.sans, c.san]), 'Show on board'));
+      play.appendChild(button(c.san, 'pr-move-btn', () => this._open(position, c), 'Show on board'));
       if (mine) play.appendChild(el('span', 'pr-instead', `not ${mine.san}`));
-      const good = c.replies.filter((r) => r.good).slice(0, 2);
-      const next = c.replies.filter((r) => !r.good).slice(0, 2);
+      const be = breakEven(c, mine);
+      const beCell = el('td', `num pr-be${be === 0 ? ' free' : ''}`, breakEvenText(be));
+      beCell.title = be === null ? '' : be === 0 ? 'At least as good as yours even if they find their best reply'
+        : be === Infinity ? 'Their second-best gives you no more here than against your move: it never pays'
+        : `It scores better than yours if they miss their best reply more than ${breakEvenText(be)} of the time`;
+      const seenCell = el('td', 'pr-seen-cell');
+      const tick = button(seen ? '✓' : '', `pr-seen${seen ? ' on' : ''}`, () => this._setSeen(position, c.uci, !seen), seen ? 'Seen: tap to unmark' : 'Mark as seen');
+      tick.setAttribute('aria-pressed', String(seen));
+      tick.setAttribute('aria-label', seen ? 'Seen' : 'Not seen');
+      seenCell.appendChild(tick);
       const cells = [
         where,
         play,
+        beCell,
         el('td', 'num pr-hot', sharp(c) === null ? '–' : String(sharp(c))),
         el('td', 'num', sharp(mine) === null ? '–' : `${sharp(mine)}${mine.recapture ? ' (recapture)' : ''}`),
         diffCell(sharp(mine) === null || sharp(c) === null ? null : sharp(c) - sharp(mine)), // from the shown values, so they add up
@@ -504,8 +579,7 @@ export class PracticalView {
         el('td', 'num pr-eval', evalText(c.score)),
         el('td', 'num pr-eval', mine ? evalText(mine.score) : '–'),
         evalChangeCell(evalChange(c, mine, this.info.color)),
-        el('td', 'pr-only', good.length ? good.map((r) => `${r.san} → ${pct(r.mine)}`).join(', ') : '–'),
-        el('td', 'pr-replies', next.map((r) => `${r.san} → ${pct(r.mine)}`).join(', ') || '–'),
+        seenCell,
       ];
       cells.forEach((td, i) => (td.dataset.label = COLS[i][0]));
       tr.append(...cells);
@@ -542,8 +616,9 @@ export class PracticalView {
     for (const c of cands) {
       const tr = el('tr', c.repertoire ? 'mine' : '');
       const move = el('td', 'pr-move');
-      const b = button(c.san, 'pr-move-btn', () => this.onShowLine([...position.sans, c.san]), 'Show on board');
+      const b = button(c.san, 'pr-move-btn', () => this._open(position, c), 'Show on board');
       move.appendChild(b);
+      if (!c.repertoire && this._isSeen(position, c.uci)) move.appendChild(el('span', 'pr-seen-mark', '✓ seen'));
       if (c.repertoire) move.appendChild(el('span', 'pr-yours', 'yours'));
       const likely = el('td', 'pr-replies');
       likely.textContent = c.replies

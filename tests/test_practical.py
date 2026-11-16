@@ -84,3 +84,18 @@ def test_evals_cache(client):
     assert look(8, 800)[0]["lines"][0]["uci"] == "c7c5"
     r = client.post("/api/practical/evals", json={"evals": [{"fen": "nonsense", "multipv": 1, "movetime_ms": 100, "depth": 1, "engine": "x", "lines": []}]})
     assert r.status_code == 422
+
+
+def test_seen(client):
+    key = fen_after("e4")[: -len(" 0 1")]
+    look = lambda: client.post("/api/practical/seen/lookup", json={"keys": [key, "8/8/8/8/8/8/8/8 w - -"]}).json()
+    assert look() == []
+    r = client.put("/api/practical/seen", json={"key": key, "uci": "d7d5"})
+    assert r.status_code == 200 and r.json()["uci"] == "d7d5"
+    first = r.json()["seen_at"]
+    assert client.put("/api/practical/seen", json={"key": key, "uci": "d7d5"}).json()["seen_at"] == first  # once
+    client.put("/api/practical/seen", json={"key": key, "uci": "e7e5"})
+    assert sorted(x["uci"] for x in look()) == ["d7d5", "e7e5"]
+    assert client.request("DELETE", "/api/practical/seen", json={"key": key, "uci": "d7d5"}).status_code == 204
+    assert [x["uci"] for x in look()] == ["e7e5"]
+    assert client.put("/api/practical/seen", json={"key": key, "uci": "zz"}).status_code == 422

@@ -128,6 +128,36 @@ export function evalChange(cand, mine, me) {
   return { cp, better: forMe > 0, worse: forMe < 0 };
 }
 
+/**
+ * Break-even: how often they'd have to miss their best reply (playing their second-best instead)
+ * for `cand` to score better than `mine`, all in your winning chances from the engine:
+ *   A, A2 = your move after their best / second-best reply; B, B2 = the same for the suggestion
+ *   break-even = (A - B) / ((A - B) + (B2 - A2))
+ * 0 when the suggestion is at least as good even if they find their best (it costs nothing);
+ * Infinity when their mistake gains you no more than against your move (it never pays).
+ * null when there's nothing to compare with.
+ */
+export function breakEven(cand, mine) {
+  if (!cand || !mine || cand.final || mine.final) return null;
+  const A = mine.engine;
+  const A2 = mine.replies[1]?.mine ?? A;
+  const B = cand.engine;
+  const B2 = cand.replies[1]?.mine ?? B;
+  const cost = A - B;
+  if (cost <= 0) return 0;
+  const gain = B2 - A2;
+  if (gain <= 0) return Infinity;
+  return cost / (cost + gain);
+}
+
+/** "20%", "free" (0) or "never". */
+export function breakEvenText(p) {
+  if (p === null) return '–';
+  if (p === 0) return 'free';
+  if (p === Infinity) return 'never';
+  return `${Math.max(1, Math.round(p * 100))}%`;
+}
+
 /** An eval as players write it, White's view: "+0.35", "−1.20", "#3", "#−2" ("–" when unknown). */
 export function evalText(score) {
   if (!score) return '–';

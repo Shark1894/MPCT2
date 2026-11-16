@@ -795,17 +795,28 @@ replies to it, in winning chances (0-100):
 
 **Sharpest alternatives** is a table of moves you don't play yet, at least as sharp as yours (unless yours is a
 recapture), where they have at most two good replies and their second-best is at least 5 points worse (recaptures
-left out), sharpest first: where (from the start of the branch), the move and the one it replaces, sharpness,
-yours, the difference, good replies, gap, cost, the evals of the suggestion and of your move, the **eval change**
-(suggestion minus yours, pawns from White's side, green when better for you, red when worse), their only move(s)
-and next best replies with your winning chances after each.
-Tap a heading to sort; tap a move (or **Show on board**) to open the position on the Board tab.
+left out). Columns: after (the move that led there; hover for the whole line), the move and the one it replaces,
+**break-even**, sharpness, yours, the difference, good replies, gap, cost, the evals of the suggestion and of your
+move, the **eval change** (suggestion minus yours, pawns from White's side, green when better for you, red when
+worse) and **seen**.
+
+**Break-even** puts the trade-off in one number: how often they'd have to miss their best reply (playing their
+second-best instead) for the suggestion to score better than your move. With A, A2 your winning chances after
+your move and their best / second-best reply, and B, B2 the same for the suggestion:
+break-even = (A − B) / ((A − B) + (B2 − A2)). **free** = at least as good as yours even if they find their best;
+**never** = their second-best gives you no more than they'd allow against your move. The table is sorted by it,
+lowest first; tap a heading to sort by another column.
+
+**Seen**: opening a suggestion on the board (tapping it, here or in a position's table) ticks it as seen, kept on
+the server (`practical_seen`) so it shows on every device; tap the tick to undo. Seen rows are dimmed, and **Hide
+the ones you've seen** leaves them out.
 
 The engine runs in the browser (Stockfish, Quick 0.3 s / Normal 0.8 s / Deep 2 s an analysis, about 9 analyses a
 position); its lines are saved on the server (`practical_evals`), so running the same branch again is quick.
 
 API: `GET /api/practical/positions?opening_id=&tag_id=`, `POST /api/practical/evals/lookup`
-(`{"fens", "multipv", "movetime_ms"}`), `POST /api/practical/evals`.
+(`{"fens", "multipv", "movetime_ms"}`), `POST /api/practical/evals`, `POST /api/practical/seen/lookup` (`{"keys"}`),
+`PUT|DELETE /api/practical/seen` (`{"key", "uci"}`).
 
 ## Importing from the desktop app
 

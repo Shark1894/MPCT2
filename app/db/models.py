@@ -321,6 +321,18 @@ class PracticalEval(Base):
     )
 
 
+class PracticalSeen(Base):
+    """A move you've looked at in the Practical tab (opened on the board), so you can tell which
+    suggestions you've already been through. `key` is the position (like positions.key), `uci`
+    the move played there."""
+
+    __tablename__ = "practical_seen"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    uci: Mapped[str] = mapped_column(String(5), primary_key=True)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class WildWatch(Base):
     """A branch tag you want to see in tournament games ("in the wild"); its name is the tag's.
     opening_id and position_id copy the tag's; `hash` is the position's Polyglot hash
