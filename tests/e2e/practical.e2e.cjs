@@ -82,7 +82,16 @@ async function api(page, method, path, body) {
   check(allRows.some((r) => r[4] !== '0%'), 'the model has them slip somewhere (not all 0%)');
   check(allRows.some((r) => r[2] === '1'), 'an only move somewhere');
   check(firstRows.some((r) => /→/.test(r[8])), 'their replies');
-  check(await page.isVisible('#pr-worth'), 'worth-a-look section shown');
+  check(await page.isVisible('#pr-worth'), 'sharpest alternatives shown');
+  const wHeads = await page.$$eval('#pr-worth-table thead th', (ths) => ths.map((t) => t.textContent.replace(/[↕▼▲]/g, '').trim()));
+  check(wHeads.join('|') === 'After|Play|Trap value|Good replies|Gap|They go wrong|Cost|Only move(s)|Tempting slips → you', `sharpest alternatives as a table (${wHeads.join('|')})`);
+  const traps = await page.$$eval('#pr-worth-table tbody tr td:nth-child(3)', (tds) => tds.map((td) => parseInt(td.textContent.slice(1), 10)));
+  check(traps.length > 0 && traps.every((t, i) => i === 0 || t <= traps[i - 1]), `sorted by trap value (${traps.join(' ')})`);
+  await page.click('#pr-worth-table .pr-sort[data-sort="good"]');
+  const goods = await page.$$eval('#pr-worth-table tbody tr td:nth-child(4)', (tds) => tds.map((td) => Number(td.textContent)));
+  check(goods.every((g, i) => i === 0 || g >= goods[i - 1]) && (await page.getAttribute('#pr-worth-table th:nth-child(4)', 'aria-sort')) === 'ascending', `sorted by good replies (${goods.join(' ')})`);
+  const firstWhere = await page.textContent('#pr-worth-table tbody tr:first-child td:first-child');
+  check(!firstWhere.startsWith('1.e4'), `positions shown from the branch (${firstWhere})`);
   let log = await (await fetch(`${FAKE}/log`)).json();
   check(!log.some((x) => x.startsWith('lichess:')), 'engine only: Lichess not asked');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/practical.png`, fullPage: true });

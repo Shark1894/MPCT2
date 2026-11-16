@@ -442,61 +442,90 @@ export class PracticalView {
     const box = this.el.worth;
     const picks = worthALook(this.results, this.opts ?? DEFAULTS);
     box.hidden = !picks.length && !final;
-    box.replaceChildren(el('h2', 'dash-h2', 'Sharpest alternatives'), el('p', 'pr-note', 'Moves you don’t play yet where they have at most two good replies and slip at least 30% of the time, most trap value first.'));
+    box.replaceChildren(
+      el('h2', 'dash-h2', 'Sharpest alternatives'),
+      el('p', 'pr-note', 'Moves you don’t play yet where they have at most two good replies and slip at least 30% of the time. Tap a heading to sort; tap a move to see it on the board.'),
+    );
     if (!picks.length) {
       box.appendChild(el('p', 'pr-note', final && this.results.length
         ? 'No alternative here is that sharp: the tables below show every one with its trap value.'
         : 'Nothing yet.'));
       return;
     }
-    const list = el('ul', 'pr-worth-list');
-    for (const p of picks) list.appendChild(this._worthItem(p));
-    box.appendChild(list);
+    box.appendChild(this._worthTable(picks));
   }
 
-  _worthItem({ position, cand: c, mine }) {
-    const li = el('li', 'pr-worth-item');
-    const flipped = this.info.color === 'black';
-    let fenAfter = position.fen;
-    try {
-      fenAfter = after(position.fen, c.uci).fen;
-    } catch {
-      // keep the position before
+  /** "5.Qxe2 Qxd5 6.Nf3": the moves since the start of the branch (at least the last one). */
+  _since(sans) {
+    const root = this.info.positions[0]?.ply ?? 0;
+    const from = Math.min(root, Math.max(0, sans.length - 1));
+    return movetext(sans.slice(from), from);
+  }
+
+  _worthTable(picks) {
+    const COLS = [
+      // [heading, sort key (bigger first unless asc), value for sorting]
+      ['After', null],
+      ['Play', null],
+      ['Trap value', 'trap', (p) => p.cand.trap],
+      ['Good replies', 'good', (p) => p.cand.good, true],
+      ['Gap', 'gap', (p) => (Number.isFinite(p.cand.gap) ? p.cand.gap : -1)],
+      ['They go wrong', 'wrong', (p) => p.cand.wrong],
+      ['Cost', 'cost', (p) => p.cand.cost, true],
+      ['Only move(s)', null],
+      ['Tempting slips → you', null],
+    ];
+    const sortKey = this.worthSort ?? 'trap';
+    const col = COLS.find((c) => c[1] === sortKey) ?? COLS[2];
+    const rows = [...picks].sort((a, b) => (col[3] ? col[2](a) - col[2](b) : col[2](b) - col[2](a)) || b.cand.trap - a.cand.trap);
+
+    const wrap = el('div', 'pr-table-wrap');
+    const table = el('table', 'pr-table pr-worth-table');
+    table.id = 'pr-worth-table';
+    const hr = el('tr');
+    for (const [h, key] of COLS) {
+      const th = el('th', key ? 'sortable' : '');
+      if (key) {
+        const b = button(h, `pr-sort${key === sortKey ? ' on' : ''}`, () => {
+          this.worthSort = key;
+          this._drawWorth(!this.run);
+        });
+        b.dataset.sort = key;
+        th.setAttribute('aria-sort', key === sortKey ? (col[3] ? 'ascending' : 'descending') : 'none');
+        th.appendChild(b);
+      } else th.textContent = h;
+      hr.appendChild(th);
     }
-    li.appendChild(miniBoard(fenAfter, `After ${c.san}`, flipped));
-    const text = el('div', 'pr-worth-text');
-    const title = el('p', 'pr-worth-title');
-    title.append(`${movetext(position.sans)} … `, el('strong', '', c.san), mine ? ` instead of ${mine.san}` : '');
-    const facts = el('p', 'pr-facts');
-    const chip = (label, value, cls = '') => {
-      const s = el('span', `pr-chip ${cls}`);
-      s.append(el('span', 'pr-chip-label', label), el('span', 'pr-chip-value', value));
-      return s;
-    };
-    facts.append(
-      chip('Trap value', `+${Math.round(c.trap)} pts${mine ? ` (yours +${Math.round(mine.trap)})` : ''}`, 'good'),
-      chip('Good replies', String(c.good)),
-      chip('Gap', Number.isFinite(c.gap) ? `${Math.round(c.gap)} pts` : '–'),
-      chip('They go wrong', `${Math.round(c.wrong * 100)}%`),
-      chip('Engine cost', `${Math.round(c.cost)} pts`),
-    );
-    if (c.actualGames) facts.appendChild(chip('Actual', `${pct(c.actual)} in ${c.actualGames.toLocaleString('en-GB')}`));
-    const wrong = c.replies.filter((r) => !r.good && r.prob >= 0.05).slice(0, 2);
-    const good = c.replies.filter((r) => r.good).slice(0, 2);
-    const why = el('p', 'pr-why');
-    why.textContent = [
-      good.length ? `${good.length === 1 ? 'Only' : 'Just'} ${good.map((r) => r.san).join(' or ')} ${good.length === 1 ? 'holds' : 'hold'}, after which you’re at ${pct(c.engine)}.` : '',
-      wrong.length ? `Tempting slips: ${wrong.map((r) => `${r.san} (you’re then at ${pct(r.mine)})`).join(', ')}.` : '',
-      c.source === 'data' ? 'Reply shares from Lichess games.' : '',
-    ].filter(Boolean).join(' ');
-    const actions = el('div', 'pr-actions');
-    actions.append(
-      button('Show on board', 'small', () => this.onShowLine([...position.sans, c.san])),
-      button('Details', 'small ghost', () => document.getElementById(`pr-pos-${position.key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })),
-    );
-    text.append(title, facts, why, actions);
-    li.appendChild(text);
-    return li;
+    const thead = el('thead');
+    thead.appendChild(hr);
+    const tbody = el('tbody');
+    for (const { position, cand: c, mine } of rows) {
+      const tr = el('tr');
+      const where = el('td', 'pr-where', `${this._since(position.sans)} …`);
+      where.title = movetext(position.sans);
+      const play = el('td', 'pr-move');
+      play.appendChild(button(c.san, 'pr-move-btn', () => this.onShowLine([...position.sans, c.san]), 'Show on board'));
+      if (mine) play.appendChild(el('span', 'pr-instead', `not ${mine.san}`));
+      const good = c.replies.filter((r) => r.good).slice(0, 2);
+      const slips = c.replies.filter((r) => !r.good && r.prob >= 0.05).slice(0, 2);
+      const cells = [
+        where,
+        play,
+        el('td', 'num pr-hot', `+${Math.round(c.trap)}${mine ? ` (yours +${Math.round(mine.trap)})` : ''}`),
+        el('td', `num${c.good === 1 ? ' pr-hot' : ''}`, String(c.good)),
+        el('td', 'num', Number.isFinite(c.gap) ? String(Math.round(c.gap)) : '–'),
+        el('td', 'num', `${Math.round(c.wrong * 100)}%`),
+        el('td', 'num', String(Math.round(c.cost))),
+        el('td', 'pr-only', good.length ? `${good.map((r) => r.san).join(', ')} → you ${pct(c.engine)}` : '–'),
+        el('td', 'pr-replies', slips.map((r) => `${r.san} → ${pct(r.mine)}`).join(', ') || '–'),
+      ];
+      cells.forEach((td, i) => (td.dataset.label = COLS[i][0]));
+      tr.append(...cells);
+      tbody.appendChild(tr);
+    }
+    table.append(thead, tbody);
+    wrap.appendChild(table);
+    return wrap;
   }
 
   _positionCard({ position, cands }) {

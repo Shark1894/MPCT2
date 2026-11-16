@@ -5792,6 +5792,55 @@ button.wp-cell:hover {
   font-weight: 700;
 }
 
+.pr-sort {
+  padding: 0;
+  min-height: 0;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pr-sort::after {
+  content: ' ↕';
+  opacity: 0.4;
+}
+
+.pr-sort.on {
+  color: var(--text);
+}
+
+.pr-sort.on::after {
+  content: ' ▼';
+  opacity: 1;
+}
+
+th[aria-sort='ascending'] .pr-sort.on::after {
+  content: ' ▲';
+}
+
+.pr-where {
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.pr-instead {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.pr-only {
+  min-width: 120px;
+}
+
+.pr-worth-table .pr-replies {
+  min-width: 160px;
+}
+
 .pr-replies {
   min-width: 220px;
   color: var(--text-dim);
@@ -5890,7 +5939,8 @@ button.wp-cell:hover {
     color: var(--text-dim);
   }
 
-  .pr-table td.pr-move {
+  .pr-table td.pr-move,
+  .pr-table td.pr-where {
     grid-column: 1 / -1;
     flex-direction: row;
     align-items: center;
@@ -5898,13 +5948,19 @@ button.wp-cell:hover {
   }
 
   .pr-table td.pr-move::before,
-  .pr-table td.pr-replies::before {
+  .pr-table td.pr-where::before {
     display: none;
   }
 
-  .pr-table td.pr-replies {
+  .pr-table td.pr-replies,
+  .pr-table td.pr-only {
     grid-column: 1 / -1;
     min-width: 0;
+  }
+
+  .pr-table td.pr-where {
+    white-space: normal;
+    font-size: 12px;
   }
 
   .pr-table tr.mine {

@@ -793,8 +793,10 @@ niche and never-played lines are fine. For every position in your lines where it
 - **Engine**: your winning chances if they find the best reply; **Cost**: given away against the engine's best.
   Moves costing more than the chosen limit (8, 15 or 25 points) aren't listed.
 
-**Sharpest alternatives** lists moves you don't play yet where they have at most two good replies and slip at
-least 30% of the time, most trap value first, with your own move's trap value to compare. **Show on board** (or a
+**Sharpest alternatives** is a table of moves you don't play yet where they have at most two good replies and
+slip at least 30% of the time: where (from the start of the branch), the move and the one it replaces, trap value
+(yours alongside), good replies, gap, how often they go wrong, cost, the only move(s) and the tempting slips.
+Sorted by trap value; tap a heading to sort by another column (on phones each row is a card, by trap value). **Show on board** (or a
 move in a table) opens the position on the Board tab.
 
 **Replies from: Also Lichess games** uses how often players rated 2000+ (`PRACTICAL_RATINGS`, default
