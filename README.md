@@ -47,6 +47,7 @@ The full plan, decisions and data model are in the project's
 | — | Named endgames: Lucena, Philidor, Vančura, Q v P, Q v R, R v B, wrong rook pawn, Réti (win and defend drills with guides) | Done |
 | — | Stats tab: time spent on openings, tactics, endgames, strategy, games and analysis | Done |
 | — | Endgame studies: your own database of composed studies from PGN files, by kind of ending, with favourites | Done |
+| — | Practical tab: moves in your openings that set 2000+ opponents problems, even at an engine cost (backlog item 7) | Done |
 
 ## Using the board
 
@@ -775,29 +776,32 @@ puzzles and endgame drills: those are included up to the first tracked stretch (
 key updates the stretch and never lowers its time), `GET /api/time?tz=Europe/London` (seconds
 per local day, category, activity and detail).
 
-## Practical choices (prototype)
+## Practical choices
 
-`scripts/practical_choices.py` (backlog item 7, not part of the app yet) looks for moves that put a human
-opponent under pressure even at an engine cost. For every position in your lines where it's your move, each
-candidate move gets an **engine** value (your win% if they find the best reply), a **practical** value (your
-expected win% over the replies Lichess players at the chosen ratings actually play, each scored by Stockfish), how
-often they **go wrong**, how many **good replies** they have, and the **actual** score with the move in those
-games. Moves that beat your repertoire's move on practical value are listed first under "Worth a look".
+The **Practical** tab looks through an opening (or one branch of it, by branch tag) for moves that set a human
+opponent problems even at an engine cost. For every position in your lines where it's your move, each candidate
+move (the engine's best 8, moves 2000+ players often play there, and your repertoire's) gets:
 
-Run it on your desktop (Stockfish there is faster than the server):
+- **Engine**: your winning chances if they always find the best reply.
+- **Practical**: your expected winning chances over the replies Lichess players rated 2000+ actually choose, each
+  reply weighted by how often it's played and scored by the engine after it.
+- **They go wrong**: how often they don't play a good reply (within 7 points of their best); **Good replies**: how
+  many there are (1 = an only move).
+- **Actual**: your colour's real score with the move at 2000+; **Cost**: winning chances given away against the
+  engine's best. Moves costing more than the chosen limit (8, 15 or 25 points) aren't listed.
 
-```bash
-# on the server: your lines, one per row
-docker compose exec mpct python -m app.tools.export_lines "Wuss" > wuss.txt
-# on the desktop (python-chess + Stockfish), with the app's Lichess token
-LICHESS_TOKEN=lip_... python scripts/practical_choices.py --lines wuss.txt \
-    --root "e4 d5 exd5 Nf6 d4 Bg4 Be2 Bxe2" --out wuss-practical.md
-```
+**Worth a look** lists moves whose practical value beats your repertoire move's by 3 points or more where they go
+wrong at least 30% of the time, with what they have to find and where you stand if they do. **Show on board** (or
+a move in a table) opens the position on the Board tab. With fewer than 30 games in a position, how often each
+reply is played is guessed from the engine (marked *model*).
 
-Defaults: ratings 2000+ (`--ratings 2000,2200,2500`), all time controls, depth 18, moves costing up to 15 win%
-(`--cap`), a reply is good within 7 win% of their best (`--good`). With fewer than 30 games in a position the
-replies are guessed from the engine evals (marked *model*). Answers are cached in `practical-cache.json`, so
-re-running with other thresholds is quick. `--help` lists every option.
+The engine runs in the browser (Stockfish, Quick 0.3 s / Normal 0.8 s / Deep 2 s a position); its lines are saved
+on the server (`practical_evals`), so running the same opening again is quick. Lichess answers come from the
+opening explorer (Lichess games, ratings `PRACTICAL_RATINGS`, default `2000,2200,2500`, all time controls) through
+the server with `LICHESS_TOKEN`, one request a second, cached like the masters explorer.
+
+API: `GET /api/practical/positions?opening_id=&tag_id=`, `GET /api/practical/explorer?fen=`,
+`POST /api/practical/evals/lookup` (`{"fens", "multipv", "movetime_ms"}`), `POST /api/practical/evals`.
 
 ## Importing from the desktop app
 
@@ -894,6 +898,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/masters.e2e.cjs
 # (restart the fake between runs: some checks count its requests):
 MPCT_URL=http://localhost:8010/ node tests/e2e/lichess.e2e.cjs
 MPCT_URL=http://localhost:8010/ node tests/e2e/studies.e2e.cjs      # empty database (endgame studies: import, filters, favourites, solving)
+MPCT_URL=http://localhost:8010/ node tests/e2e/practical.e2e.cjs    # empty database, LICHESS_EXPLORER_URL=fake_explorer, LICHESS_TOKEN=lip_e2e
 MPCT_URL=http://localhost:8010/ node tests/e2e/courseimport.e2e.cjs  # empty database (COURSE_FILE=export.json also imports a real one)
 MPCT_URL=http://localhost:8010/ node tests/e2e/courses.e2e.cjs      # empty database (Training tab)
 MPCT_URL=http://localhost:8010/ node tests/e2e/stats.e2e.cjs        # empty database (time tracking, Stats tab)
@@ -1088,6 +1093,7 @@ web/              frontend served as-is
   js/endgame-core.js  endgame drills: random mates, reading the tablebase (pure logic, unit tested)
   js/endgames.js  endgame drills on the board + their page in the Training tab
   js/studies.js  endgame studies: their page in the Training tab (filters, favourites, import)
+  js/practical.js  the Practical tab (engine in the browser); js/practical-core.js its scoring
   js/training-hub.js  the Training tab: hub, course pages, puzzle pages
   js/training-core.js  mini boards, drill levels, rating trend (pure logic, unit tested)
   js/dom.js       small DOM builders (mini boards, rings, breadcrumbs)

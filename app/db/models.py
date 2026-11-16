@@ -302,6 +302,25 @@ class PositionEval(Base):
     )
 
 
+class PracticalEval(Base):
+    """Engine analysis for the Practical tab (several best moves per position), kept apart from
+    position_evals (the reviews' two-line evals). Keyed like positions.key. `lines`: best first,
+    [{"uci", "score": {"cp"|"mate"}, "pv": [uci...]}], scores from White's point of view. A saved
+    eval serves any request for at most as many lines and as much thinking time."""
+
+    __tablename__ = "practical_evals"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    multipv: Mapped[int]
+    movetime_ms: Mapped[int]
+    depth: Mapped[int]
+    lines: Mapped[list] = mapped_column(JSONB)
+    engine: Mapped[str] = mapped_column(String(60))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class WildWatch(Base):
     """A branch tag you want to see in tournament games ("in the wild"); its name is the tag's.
     opening_id and position_id copy the tag's; `hash` is the position's Polyglot hash

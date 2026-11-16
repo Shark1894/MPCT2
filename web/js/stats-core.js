@@ -17,6 +17,7 @@ export const ACTIVITIES = {
   repertoire: 'Repertoire & board',
   dashboard: 'Dashboard',
   wild: 'Wild',
+  practical: 'Practical choices',
   'puzzles-rated': 'Rated puzzles',
   'puzzles-mine': 'Puzzles from your games',
   woodpecker: 'Woodpecker',

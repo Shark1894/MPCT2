@@ -82,6 +82,16 @@ class H(BaseHTTPRequestHandler):
             k = " ".join(fen.split()[:4]); LOG.append(k)
             moves = DATA.get(k, [])
             body = json.dumps({"white": sum(m["white"] for m in moves), "draws": sum(m["draws"] for m in moves), "black": 0, "moves": moves, "topGames": TOP.get(k, [])}).encode()
+        elif u.path == "/lichess":  # Practical tab: Lichess games at 2000+, made up from the legal moves
+            if self.headers.get("Authorization") != "Bearer lip_e2e":
+                self.send_response(401); self.end_headers(); return
+            q = urllib.parse.parse_qs(u.query)
+            fen = q["fen"][0]; LOG.append("lichess:" + " ".join(fen.split()[:4]) + "|" + q.get("ratings", [""])[0])
+            b = chess.Board(fen)
+            moves = []
+            for n, m in zip((400, 250, 100, 50), sorted(b.legal_moves, key=lambda m: m.uci())):
+                moves.append({"uci": m.uci(), "san": b.san(m), "white": n * 45 // 100, "draws": n // 10, "black": n - n * 45 // 100 - n // 10, "averageRating": 2150})
+            body = json.dumps({"white": sum(m["white"] for m in moves), "draws": sum(m["draws"] for m in moves), "black": sum(m["black"] for m in moves), "moves": moves}).encode()
         elif u.path.startswith("/masters/pgn/"):
             if self.headers.get("Authorization") != "Bearer lip_e2e":
                 self.send_response(401); self.end_headers(); return

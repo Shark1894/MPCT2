@@ -24,6 +24,7 @@ import { CourseTrainer } from './courses.js';
 import { TrainingView } from './training-hub.js';
 import { startTimeTracking } from './activity.js';
 import { StatsView } from './stats.js';
+import { PracticalView } from './practical.js';
 import { EndgameTrainer } from './endgames.js';
 import { isModalOpen, plural, store, toast } from './ui.js';
 import { reviewComplete, reviewPayload } from './gamereview.js';
@@ -115,7 +116,7 @@ function trainingMode(active, badge, bodyClass = 'training') {
   document.body.classList.toggle(bodyClass, active);
   $('mode-badge').textContent = badge;
   $('mode-badge').hidden = !active;
-  for (const v of ['dashboard', 'games', 'wild', 'courses', 'stats']) $(`view-${v}`).disabled = active;
+  for (const v of ['dashboard', 'games', 'wild', 'courses', 'stats', 'practical']) $(`view-${v}`).disabled = active;
   repertoire.setTraining(active);
 }
 
@@ -276,6 +277,7 @@ function currentActivity() {
   if (view === 'dashboard') return a('openings', 'dashboard', openingName());
   if (view === 'games') return a('games', 'games-list');
   if (view === 'wild') return a('openings', 'wild');
+  if (view === 'practical') return a('openings', 'practical');
   if (view !== 'board') return null; // the Training hub and Stats are for choosing and looking, not training
   if (trainer.active) return a('openings', 'opening-training', openingName());
   if (drill.active) return a('openings', 'position-drill', openingName());
@@ -295,6 +297,13 @@ function currentActivity() {
 
 const timeTracking = startTimeTracking(currentActivity);
 const statsView = new StatsView({ flush: () => timeTracking.flush() });
+const practicalView = new PracticalView({
+  onShowLine: async (sans) => {
+    if (!(await showMoves({ sans }))) return;
+    setView('board');
+    render();
+  },
+});
 
 // ---- games -------------------------------------------------------------------
 
@@ -465,7 +474,7 @@ async function startTraining(opening, mode, lineId, tag, label) {
 
 // ---- views: Board | Dashboard | Games -----------------------------------------------
 
-const VIEWS = { board: 'main.layout', dashboard: '#dashboard', games: '#games-view', wild: '#wild-view', courses: '#courses-view', stats: '#stats-view' };
+const VIEWS = { board: 'main.layout', dashboard: '#dashboard', games: '#games-view', wild: '#wild-view', courses: '#courses-view', stats: '#stats-view', practical: '#practical-view' };
 let view = 'board';
 
 function setView(next) {
@@ -500,6 +509,7 @@ function setView(next) {
   if (view === 'courses') coursesView.refresh();
   else coursesView.hide();
   if (view === 'stats') statsView.refresh();
+  if (view === 'practical') practicalView.refresh();
   window.scrollTo(0, 0);
 }
 
@@ -763,4 +773,4 @@ repertoire.init().then(async () => {
 });
 
 // Expose for debugging in the browser console.
-window.mpct = { statsView, timeTracking, currentActivity, game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, courseTrainer, coursesView, endgameTrainer, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval, masters, myGames, lichessGames, handsFree: trainer.voice };
+window.mpct = { practicalView, statsView, timeTracking, currentActivity, game, board, sounds, repertoire, trainer, drill, puzzles, puzzlesView, courseTrainer, coursesView, endgameTrainer, dashboard, wildView, setView, render, analysis, gamePanel, gamesView, play, review, savedEval, masters, myGames, lichessGames, handsFree: trainer.voice };

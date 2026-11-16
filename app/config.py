@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Endgame drills: perfect defence and move feedback from the Lichess tablebase (Syzygy,
     # up to 7 pieces; no token needed). If it can't be reached the drills fall back to Stockfish.
     lichess_tablebase_url: str = "https://tablebase.lichess.ovh"
+    # Practical tab: how real players reply, from Lichess games in these rating bands (the
+    # explorer's lower bounds: 0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500), all time controls.
+    practical_ratings: str = "2000,2200,2500"
     # Cached explorer answers older than this are asked for again.
     explorer_cache_days: int = 180
 
