@@ -5822,6 +5822,19 @@ th[aria-sort='ascending'] .pr-sort.on::after {
   content: ' ▲';
 }
 
+.pr-diff.up {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.pr-diff.down {
+  color: var(--error);
+}
+
+.pr-diff.same {
+  color: var(--text-dim);
+}
+
 .pr-where {
   white-space: nowrap;
   color: var(--text-dim);

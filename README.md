@@ -794,8 +794,8 @@ niche and never-played lines are fine. For every position in your lines where it
   Moves costing more than the chosen limit (8, 15 or 25 points) aren't listed.
 
 **Sharpest alternatives** is a table of moves you don't play yet where they have at most two good replies and
-slip at least 30% of the time: where (from the start of the branch), the move and the one it replaces, trap value
-(yours alongside), good replies, gap, how often they go wrong, cost, the only move(s) and the tempting slips.
+slip at least 30% of the time: where (from the start of the branch), the move and the one it replaces, trap value,
+yours, the difference (green when the suggestion sets more problems), good replies, gap, how often they go wrong, cost, the only move(s) and the tempting slips.
 Sorted by trap value; tap a heading to sort by another column (on phones each row is a card, by trap value). **Show on board** (or a
 move in a table) opens the position on the Board tab.
 

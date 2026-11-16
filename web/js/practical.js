@@ -35,6 +35,20 @@ const DATA = [
 ];
 const SAVE_BATCH = 20;
 
+/** "+3", "−2", "0" (rounded). */
+const signed = (x) => {
+  const n = Math.round(x);
+  return n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0';
+};
+
+/** The trap value gained (or lost) against your own move, coloured. */
+function diffCell(d) {
+  const td = el('td', 'num pr-diff', d === null ? '–' : signed(d));
+  if (d !== null) td.classList.add(Math.round(d) > 0 ? 'up' : Math.round(d) < 0 ? 'down' : 'same');
+  td.title = 'Trap value of this move minus your own move’s';
+  return td;
+}
+
 /** The SAN of a UCI move in a position (or the UCI if it isn't legal). */
 function sanOf(fen, uci) {
   try {
@@ -468,6 +482,8 @@ export class PracticalView {
       ['After', null],
       ['Play', null],
       ['Trap value', 'trap', (p) => p.cand.trap],
+      ['Yours', null],
+      ['Difference', 'diff', (p) => (p.mine ? Math.round(p.cand.trap) - Math.round(p.mine.trap) : -Infinity)],
       ['Good replies', 'good', (p) => p.cand.good, true],
       ['Gap', 'gap', (p) => (Number.isFinite(p.cand.gap) ? p.cand.gap : -1)],
       ['They go wrong', 'wrong', (p) => p.cand.wrong],
@@ -511,7 +527,9 @@ export class PracticalView {
       const cells = [
         where,
         play,
-        el('td', 'num pr-hot', `+${Math.round(c.trap)}${mine ? ` (yours +${Math.round(mine.trap)})` : ''}`),
+        el('td', 'num pr-hot', signed(c.trap)),
+        el('td', 'num', mine ? signed(mine.trap) : '–'),
+        diffCell(mine ? Math.round(c.trap) - Math.round(mine.trap) : null), // from the shown values, so they add up
         el('td', `num${c.good === 1 ? ' pr-hot' : ''}`, String(c.good)),
         el('td', 'num', Number.isFinite(c.gap) ? String(Math.round(c.gap)) : '–'),
         el('td', 'num', `${Math.round(c.wrong * 100)}%`),
