@@ -58,6 +58,7 @@ async function api(page, method, path, body) {
   check(tags[0] === 'Whole opening' && tags.some((t) => t.startsWith('Wuss')), `branches listed (${tags.join(' | ')})`);
   await page.selectOption('#pr-tag', String(tag.id));
   await page.selectOption('#pr-think', '300');
+  check((await page.inputValue('#pr-data')) === '0' && (await page.inputValue('#pr-strength')) === '8', 'defaults: engine only, club 2000 opponent');
 
   // ---- analyse ------------------------------------------------------------------------------------
   const t0 = Date.now();
@@ -72,15 +73,18 @@ async function api(page, method, path, body) {
   check(cards.length === 5 && cards[0] === '1.e4 d5 2.exd5 Nf6 3.d4 Bg4 4.Be2 …', `a card per position, the branch's first (${cards[0]})`);
   const firstRows = await page.$$eval('.pr-pos:first-of-type tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
   check(firstRows.length >= 3, `candidate rows (${firstRows.length})`);
+  const heads = await page.$$eval('.pr-pos:first-of-type thead th', (ths) => ths.map((t) => t.textContent));
+  check(heads.join('|') === 'Move|Trap value|Good replies|Gap|They go wrong|Engine|Cost|Practical|Their replies → you', `columns (${heads.join('|')})`);
   const yours = firstRows.find((r) => r[0].includes('yours'));
   check(yours && yours[0].startsWith('Bxe2'), 'your repertoire move is marked');
-  check(firstRows.every((r) => /%/.test(r[1]) && /%/.test(r[2])), 'practical and engine values');
-  const actuals = await page.$$eval('.pr-pos tbody tr td:nth-child(7)', (tds) => tds.map((td) => td.textContent));
-  check(actuals.some((a) => /% \(\d/.test(a)), 'actual scores from the explorer');
-  check(firstRows.some((r) => /→/.test(r[7])), 'their likely replies');
+  check(firstRows.every((r) => /^\+\d+$/.test(r[1]) && /%/.test(r[5]) && /%/.test(r[7])), 'trap, engine and practical values');
+  const allRows = await page.$$eval('.pr-pos tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
+  check(allRows.some((r) => r[4] !== '0%'), 'the model has them slip somewhere (not all 0%)');
+  check(allRows.some((r) => r[2] === '1'), 'an only move somewhere');
+  check(firstRows.some((r) => /→/.test(r[8])), 'their replies');
   check(await page.isVisible('#pr-worth'), 'worth-a-look section shown');
-  const log = await (await fetch(`${FAKE}/log`)).json();
-  check(log.some((x) => x.startsWith('lichess:') && x.endsWith('|2000,2200,2500')), 'Lichess asked at 2000+');
+  let log = await (await fetch(`${FAKE}/log`)).json();
+  check(!log.some((x) => x.startsWith('lichess:')), 'engine only: Lichess not asked');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/practical.png`, fullPage: true });
 
   // ---- a second run uses the saved engine lines -------------------------------------------------------
@@ -91,7 +95,19 @@ async function api(page, method, path, body) {
   check(/engine: 0 new/.test(again), `second run from saved lines (${again})`);
   const againRows = await page.$$eval('.pr-pos:first-of-type tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
   check(JSON.stringify(againRows) === JSON.stringify(firstRows), 'saved lines give the same results');
-  check(new Set(againRows.map((r) => r[2])).size > 1, `engine values differ between moves (${againRows.map((r) => r[2]).join(' ')})`);
+  check(new Set(againRows.map((r) => r[5])).size > 1, `engine values differ between moves (${againRows.map((r) => r[5]).join(' ')})`);
+
+  // ---- with Lichess games ---------------------------------------------------------------------------
+  await page.selectOption('#pr-data', '1');
+  await page.click('#pr-go');
+  await page.waitForFunction(() => document.querySelector('#pr-go').textContent === 'Stop', null, { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelector('#pr-go').textContent === 'Analyse', null, { timeout: 300000 });
+  const dataHeads = await page.$$eval('.pr-pos:first-of-type thead th', (ths) => ths.map((t) => t.textContent));
+  check(dataHeads.includes('Actual'), 'with Lichess games: an Actual column');
+  const actuals = await page.$$eval('.pr-pos tbody tr td[data-label="Actual"]', (tds) => tds.map((td) => td.textContent));
+  check(actuals.some((a) => /% \(\d/.test(a)), 'actual scores from the explorer');
+  log = await (await fetch(`${FAKE}/log`)).json();
+  check(log.some((x) => x.startsWith('lichess:') && x.endsWith('|2000,2200,2500')), 'Lichess asked at 2000+');
 
   // ---- show on board --------------------------------------------------------------------------------
   await page.click('.pr-pos:first-of-type .pr-pos-title button');

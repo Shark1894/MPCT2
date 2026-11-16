@@ -47,7 +47,7 @@ The full plan, decisions and data model are in the project's
 | — | Named endgames: Lucena, Philidor, Vančura, Q v P, Q v R, R v B, wrong rook pawn, Réti (win and defend drills with guides) | Done |
 | — | Stats tab: time spent on openings, tactics, endgames, strategy, games and analysis | Done |
 | — | Endgame studies: your own database of composed studies from PGN files, by kind of ending, with favourites | Done |
-| — | Practical tab: moves in your openings that set 2000+ opponents problems, even at an engine cost (backlog item 7) | Done |
+| — | Practical tab: moves in your openings that take the opponent into sharp, only-move territory, even at an engine cost (backlog item 7) | Done |
 
 ## Using the board
 
@@ -778,27 +778,33 @@ per local day, category, activity and detail).
 
 ## Practical choices
 
-The **Practical** tab looks through an opening (or one branch of it, by branch tag) for moves that set a human
-opponent problems even at an engine cost. For every position in your lines where it's your move, each candidate
-move (the engine's best 8, moves 2000+ players often play there, and your repertoire's) gets:
+The **Practical** tab looks through an opening (or one branch of it, by branch tag) for moves that take the
+opponent into difficult territory, even at an engine cost. It works from the engine's view of their replies, so
+niche and never-played lines are fine. For every position in your lines where it's your move, each candidate move
+(the engine's best 8 and your repertoire's) gets, from the engine's best 8 replies to it:
 
-- **Engine**: your winning chances if they always find the best reply.
-- **Practical**: your expected winning chances over the replies Lichess players rated 2000+ actually choose, each
-  reply weighted by how often it's played and scored by the engine after it.
-- **They go wrong**: how often they don't play a good reply (within 7 points of their best); **Good replies**: how
-  many there are (1 = an only move).
-- **Actual**: your colour's real score with the move at 2000+; **Cost**: winning chances given away against the
-  engine's best. Moves costing more than the chosen limit (8, 15 or 25 points) aren't listed.
+- **Good replies**: how many stay within 7 points (winning chances, 0-100) of their best; 1 = an only move.
+- **Gap**: how many points worse their second-best reply is than their best.
+- **They go wrong**: how often an opponent of the chosen strength would play a reply that isn't good. A rough model:
+  each reply is chosen with weight exp(-(points worse than their best) / T), T = 5 (2200+), 8 (club 2000, the
+  default) or 12 (club 1800), so slips are likelier when the alternatives are only a bit worse.
+- **Practical**: your expected winning chances over their replies chosen that way; **Trap value** = practical minus
+  engine, what you expect to gain from their mistakes.
+- **Engine**: your winning chances if they find the best reply; **Cost**: given away against the engine's best.
+  Moves costing more than the chosen limit (8, 15 or 25 points) aren't listed.
 
-**Worth a look** lists moves whose practical value beats your repertoire move's by 3 points or more where they go
-wrong at least 30% of the time, with what they have to find and where you stand if they do. **Show on board** (or
-a move in a table) opens the position on the Board tab. With fewer than 30 games in a position, how often each
-reply is played is guessed from the engine (marked *model*).
+**Sharpest alternatives** lists moves you don't play yet where they have at most two good replies and slip at
+least 30% of the time, most trap value first, with your own move's trap value to compare. **Show on board** (or a
+move in a table) opens the position on the Board tab.
 
-The engine runs in the browser (Stockfish, Quick 0.3 s / Normal 0.8 s / Deep 2 s a position); its lines are saved
-on the server (`practical_evals`), so running the same opening again is quick. Lichess answers come from the
-opening explorer (Lichess games, ratings `PRACTICAL_RATINGS`, default `2000,2200,2500`, all time controls) through
-the server with `LICHESS_TOKEN`, one request a second, cached like the masters explorer.
+**Replies from: Also Lichess games** uses how often players rated 2000+ (`PRACTICAL_RATINGS`, default
+`2000,2200,2500`, all time controls) actually chose each reply where a position has 30+ games, adds moves they
+often play to the candidates, and shows an **Actual** column (your colour's real score with the move). It asks the
+Lichess explorer through the server with `LICHESS_TOKEN`, one request a second, cached.
+
+The engine runs in the browser (Stockfish, Quick 0.3 s / Normal 0.8 s / Deep 2 s an analysis, about 9 analyses a
+position engine-only); its lines are saved on the server (`practical_evals`), so running the same branch again is
+quick.
 
 API: `GET /api/practical/positions?opening_id=&tag_id=`, `GET /api/practical/explorer?fen=`,
 `POST /api/practical/evals/lookup` (`{"fens", "multipv", "movetime_ms"}`), `POST /api/practical/evals`.

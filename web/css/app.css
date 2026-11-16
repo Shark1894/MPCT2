@@ -5787,6 +5787,11 @@ button.wp-cell:hover {
   background: color-mix(in srgb, var(--green) 8%, transparent);
 }
 
+.pr-table td.pr-hot {
+  color: var(--green);
+  font-weight: 700;
+}
+
 .pr-replies {
   min-width: 220px;
   color: var(--text-dim);

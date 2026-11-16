@@ -1,18 +1,20 @@
-// Practical tab: moves in your openings that put a human opponent under pressure, even at an
-// engine cost. Pick an opening (or one branch of it, such as a branch tag) and Analyse: for every
-// position where it's your move, each candidate move is weighed on the engine's scale and on
-// what players rated 2000+ on Lichess actually reply (see practical-core.js for the scoring).
+// Practical tab: moves in your openings that take the opponent into difficult territory, even
+// at an engine cost. Pick an opening (or one branch of it, such as a branch tag) and Analyse:
+// for every position where it's your move, each candidate move is judged by the engine's view of
+// the opponent's replies (how many good ones, how far the next best falls behind, how often an
+// opponent of the chosen strength would slip), so it works in lines nobody has played. Lichess
+// games (2000+) can be used too where there are enough. See practical-core.js for the scoring.
 //
 // The engine runs here in the browser (Stockfish, like the reviews), never on the server; its
-// lines are saved so a second run is quick. The server looks positions up in the Lichess
-// explorer (one a second, with the app's LICHESS_TOKEN) and keeps the answers.
+// lines are saved so a second run is quick. With Lichess data on, the server looks positions up
+// in the explorer (one a second, with the app's LICHESS_TOKEN) and keeps the answers.
 
 import { Chess } from '../vendor/chess.js/chess.js';
 import { api } from './api.js';
 import { button, el, miniBoard } from './dom.js';
 import { Engine } from './engine.js';
 import {
-  DEFAULTS, candidateMoves, extraReplies, finalCandidate, finish, movetext, pct, scoreCandidate, winPct, worthALook,
+  DEFAULTS, STRENGTHS, candidateMoves, extraReplies, finalCandidate, finish, movetext, pct, scoreCandidate, winPct, worthALook,
 } from './practical-core.js';
 import { plural, store, toast } from './ui.js';
 
@@ -26,6 +28,10 @@ const CAPS = [
   [8, 'Up to 8 points worse'],
   [15, 'Up to 15 points worse'],
   [25, 'Up to 25 points worse'],
+];
+const DATA = [
+  [0, 'Engine only (any line)'],
+  [1, 'Also Lichess games, 2000+ (where 30+)'],
 ];
 const SAVE_BATCH = 20;
 
@@ -128,7 +134,8 @@ class Worker {
 /** Your candidate moves in one position, scored. */
 async function analysePosition(w, position, me, opts) {
   const fen = position.fen;
-  const [mine, here] = [await w.lines(fen, opts.candidates), await w.explore(fen)];
+  const mine = await w.lines(fen, opts.candidates);
+  const here = opts.useData ? await w.explore(fen) : null;
   const hereStats = Object.fromEntries((here?.moves ?? []).map((m) => [m.uci, m]));
   const cands = [];
   for (const uci of candidateMoves(mine, here, position.repertoire, opts)) {
@@ -146,7 +153,7 @@ async function analysePosition(w, position, me, opts) {
       continue;
     }
     const theirLines = await w.lines(next.fen, opts.replies);
-    const data = await w.explore(next.fen);
+    const data = opts.useData ? await w.explore(next.fen) : null;
     const extra = {};
     for (const u of extraReplies(theirLines, data, opts)) {
       let r;
@@ -172,7 +179,7 @@ export class PracticalView {
   constructor({ onShowLine }) {
     this.onShowLine = onShowLine;
     this.box = document.getElementById('practical-view');
-    this.settings = { openingId: null, tagId: null, movetime: 800, cap: 15, ...store.get('practical', {}) };
+    this.settings = { openingId: null, tagId: null, movetime: 800, cap: 15, temperature: 8, data: 0, ...store.get('practical', {}) };
     this.results = [];
     this.run = null;
     this.info = null;
@@ -196,7 +203,7 @@ export class PracticalView {
     const head = el('section', 'dash-card pr-head');
     head.append(
       el('h1', 'dash-h', 'Practical choices'),
-      el('p', 'pr-lead', 'Moves in your openings that set your opponent problems: they have few good replies and the natural ones go wrong, even if the engine says you give a little away. Replies come from Lichess games between players rated 2000+.'),
+      el('p', 'pr-lead', 'Moves in your openings that take your opponent into difficult territory: few good replies, the next best clearly worse, so they’re likely to slip, even if the engine says you give a little away. It works from the engine’s view of their replies, so niche and never-played lines are fine.'),
     );
     const controls = el('div', 'pr-controls');
     const field = (label, control) => {
@@ -236,6 +243,8 @@ export class PracticalView {
     };
     this.el.think = select('pr-think', THINK, this.settings.movetime, 'movetime');
     this.el.cap = select('pr-cap', CAPS, this.settings.cap, 'cap');
+    this.el.strength = select('pr-strength', STRENGTHS, this.settings.temperature, 'temperature');
+    this.el.data = select('pr-data', DATA, this.settings.data, 'data');
     this.el.go = button('Analyse', 'primary', () => (this.run ? this.stop() : this.start()));
     this.el.go.id = 'pr-go';
     controls.append(
@@ -243,6 +252,8 @@ export class PracticalView {
       field('Branch', this.el.tag),
       field('Engine time', this.el.think),
       field('Moves to consider', this.el.cap),
+      field('Opponent', this.el.strength),
+      field('Replies from', this.el.data),
       this.el.go,
     );
     this.el.progress = el('div', 'pr-progress');
@@ -260,13 +271,15 @@ export class PracticalView {
       el('h2', 'dash-h2', 'How to read it'),
       this._helpList([
         ['Engine', 'your winning chances if they always find the best reply'],
-        ['Practical', 'your expected winning chances over the replies 2000+ players actually choose'],
-        ['They go wrong', 'how often they don’t find a good reply (one within 7 points of their best)'],
-        ['Good replies', 'how many replies keep them OK: 1 means an only move'],
-        ['Actual', 'your colour’s real score with the move in those games'],
         ['Cost', 'how many points of winning chances the move gives away against the engine’s best'],
+        ['Good replies', 'how many of their replies stay within 7 points of their best: 1 means an only move'],
+        ['Gap', 'how many points worse their second-best reply is than their best: the bigger, the more they must find exactly one move'],
+        ['They go wrong', 'how often an opponent of the chosen strength would play a reply that isn’t good: a model that picks replies by how good they look to the engine, so slips are likelier when the alternatives are only a bit worse'],
+        ['Trap value', 'the winning chances you expect to gain from their mistakes (practical minus engine)'],
+        ['Practical', 'your expected winning chances over their replies, chosen that way'],
+        ['Actual', 'with Lichess games on: your colour’s real score with the move at 2000+'],
       ]),
-      el('p', 'pr-note', 'With fewer than 30 games in a position, how often each reply is played is guessed from the engine (marked “model”): a weaker guide, as it can’t know which mistakes look natural.'),
+      el('p', 'pr-note', 'Points are winning chances (0–100). The opponent model is a rough guide: it can’t know which wrong moves look natural to a human, only how much worse they are.'),
     );
     this.box.replaceChildren(head, this.el.worth, this.el.positions, this.el.help);
   }
@@ -347,7 +360,8 @@ export class PracticalView {
     }
     this.info = info;
     this.results = [];
-    const opts = { ...DEFAULTS, cap: this.settings.cap };
+    const opts = { ...DEFAULTS, cap: this.settings.cap, temperature: this.settings.temperature, useData: Boolean(this.settings.data) };
+    this.opts = opts;
     const w = new Worker({ movetime: this.settings.movetime, onWait: (on) => this.el.progress.classList.toggle('waiting', on) });
     this.run = { w, started: performance.now(), done: 0, total: info.positions.length };
     this.el.go.textContent = 'Stop';
@@ -426,12 +440,12 @@ export class PracticalView {
 
   _drawWorth(final = false) {
     const box = this.el.worth;
-    const picks = worthALook(this.results, { ...DEFAULTS, cap: this.settings.cap });
+    const picks = worthALook(this.results, this.opts ?? DEFAULTS);
     box.hidden = !picks.length && !final;
-    box.replaceChildren(el('h2', 'dash-h2', 'Worth a look'));
+    box.replaceChildren(el('h2', 'dash-h2', 'Sharpest alternatives'), el('p', 'pr-note', 'Moves you don’t play yet where they have at most two good replies and slip at least 30% of the time, most trap value first.'));
     if (!picks.length) {
       box.appendChild(el('p', 'pr-note', final && this.results.length
-        ? 'Nothing beats your repertoire’s moves here: your lines already score at least as well against real players. The tables below show the alternatives.'
+        ? 'No alternative here is that sharp: the tables below show every one with its trap value.'
         : 'Nothing yet.'));
       return;
     }
@@ -460,18 +474,20 @@ export class PracticalView {
       return s;
     };
     facts.append(
-      chip('Practical', `${pct(c.practical)}${mine ? ` (yours ${pct(mine.practical)})` : ''}`, 'good'),
+      chip('Trap value', `+${Math.round(c.trap)} pts${mine ? ` (yours +${Math.round(mine.trap)})` : ''}`, 'good'),
+      chip('Good replies', String(c.good)),
+      chip('Gap', Number.isFinite(c.gap) ? `${Math.round(c.gap)} pts` : '–'),
       chip('They go wrong', `${Math.round(c.wrong * 100)}%`),
       chip('Engine cost', `${Math.round(c.cost)} pts`),
-      chip('Actual', c.actualGames ? `${pct(c.actual)} in ${c.actualGames.toLocaleString('en-GB')}` : 'too few games'),
     );
+    if (c.actualGames) facts.appendChild(chip('Actual', `${pct(c.actual)} in ${c.actualGames.toLocaleString('en-GB')}`));
     const wrong = c.replies.filter((r) => !r.good && r.prob >= 0.05).slice(0, 2);
     const good = c.replies.filter((r) => r.good).slice(0, 2);
     const why = el('p', 'pr-why');
     why.textContent = [
-      wrong.length ? `Most often they go wrong with ${wrong.map((r) => `${r.san} (${Math.round(r.prob * 100)}%, you’re then at ${pct(r.mine)})`).join(' or ')}.` : '',
-      good.length ? `Only ${good.map((r) => r.san).join(' or ')} holds, after which you’re at ${pct(c.engine)}.` : '',
-      c.source === 'model' ? 'Few games here: replies are modelled.' : '',
+      good.length ? `${good.length === 1 ? 'Only' : 'Just'} ${good.map((r) => r.san).join(' or ')} ${good.length === 1 ? 'holds' : 'hold'}, after which you’re at ${pct(c.engine)}.` : '',
+      wrong.length ? `Tempting slips: ${wrong.map((r) => `${r.san} (you’re then at ${pct(r.mine)})`).join(', ')}.` : '',
+      c.source === 'data' ? 'Reply shares from Lichess games.' : '',
     ].filter(Boolean).join(' ');
     const actions = el('div', 'pr-actions');
     actions.append(
@@ -502,7 +518,8 @@ export class PracticalView {
     const table = el('table', 'pr-table');
     const thead = el('thead');
     const hr = el('tr');
-    const HEADS = ['Move', 'Practical', 'Engine', 'Cost', 'They go wrong', 'Good replies', 'Actual', 'Their likely replies → you'];
+    const withData = Boolean(this.opts?.useData);
+    const HEADS = ['Move', 'Trap value', 'Good replies', 'Gap', 'They go wrong', 'Engine', 'Cost', 'Practical', ...(withData ? ['Actual'] : []), 'Their replies → you'];
     for (const h of HEADS) hr.appendChild(el('th', '', h));
     thead.appendChild(hr);
     const tbody = el('tbody');
@@ -514,21 +531,24 @@ export class PracticalView {
       if (c.repertoire) move.appendChild(el('span', 'pr-yours', 'yours'));
       const practical = el('td', 'num');
       practical.append(pct(c.practical));
-      if (c.source === 'model') practical.appendChild(el('span', 'pr-model', 'model'));
+      if (withData && c.source === 'model') practical.appendChild(el('span', 'pr-model', 'model'));
       const likely = el('td', 'pr-replies');
       likely.textContent = c.replies
         .filter((r) => r.prob >= 0.03)
         .slice(0, 4)
         .map((r) => `${r.san} ${Math.round(r.prob * 100)}% → ${pct(r.mine)}${r.good ? '' : ' ✗'}`)
         .join(', ');
+      const final = c.source === 'final';
       tr.append(
         move,
-        practical,
+        el('td', `num${c.trap >= 3 ? ' pr-hot' : ''}`, final ? '–' : `+${Math.round(c.trap)}`),
+        el('td', `num${c.good === 1 ? ' pr-hot' : ''}`, final ? '–' : String(c.good)),
+        el('td', 'num', final || !Number.isFinite(c.gap) ? '–' : String(Math.round(c.gap))),
+        el('td', 'num', final ? '–' : `${Math.round(c.wrong * 100)}%`),
         el('td', 'num', pct(c.engine)),
         el('td', 'num', String(Math.round(c.cost))),
-        el('td', 'num', c.source === 'final' ? '–' : `${Math.round(c.wrong * 100)}%`),
-        el('td', 'num', c.source === 'final' ? '–' : String(c.good)),
-        el('td', 'num', c.actualGames ? `${pct(c.actual)} (${c.actualGames.toLocaleString('en-GB')})` : '–'),
+        practical,
+        ...(withData ? [el('td', 'num', c.actualGames ? `${pct(c.actual)} (${c.actualGames.toLocaleString('en-GB')})` : '–')] : []),
         likely,
       );
       [...tr.children].forEach((td, i) => (td.dataset.label = HEADS[i]));
