@@ -787,25 +787,34 @@ replies to it, in winning chances (0-100):
 - **Eval**: the engine's evaluation after the move and their best reply, in pawns from White's side; **Engine**:
   the same as your winning chances; **Cost**: winning chances given away against the engine's best move (near
   equality a pawn is about 9 points). Moves costing more than the chosen limit (8, 15 or 25) aren't listed.
-- **Good replies**: how many of their replies stay within 7 points of their best (1 = an only move).
-- **Gap**: how many points worse their second-best reply is than their best.
-- **Sharpness**: how many points worse their other top replies are than their best, on average. Marked
-  *recapture* when your move takes something and their best is simply to take back (obvious, so not sharp in
-  practice, as in the old Sharpness scripts).
+- **Good replies**, **gap** and **sharpness** are measured at each of their decisions along the engine's main line
+  (their best reply, your best answer, their next decision, ...), following 1, 2 or 3 of their decisions (the
+  **Follow** setting, 3 by default):
+  - **Good replies**: how many of their replies stay within 7 points of their best at each decision, shown as a
+    chain, e.g. "3 → 1 → 1" (1 = an only move, r = a recapture). Tap it to see the main line on the board.
+  - **In a row**: how many only moves they face one after another from the start (recaptures skipped).
+  - **Gap**: how many points worse their second-best reply is than their best, at the sharpest decision.
+  - **Sharpness**: how many points worse their other top replies are than their best, on average, at the sharpest
+    decision. Recaptures (your move takes something and their best is simply to take back) are obvious, so they're
+    never the sharpest point; a move that only leads to recaptures is marked *recapture*.
 
-**Sharpest alternatives** is a table of moves you don't play yet, at least as sharp as yours (unless yours is a
-recapture), where they have at most two good replies and their second-best is at least 5 points worse (recaptures
-left out). Columns: after (the move that led there; hover for the whole line), the move and the one it replaces,
-**break-even**, sharpness, yours, the difference, good replies, gap, cost, the evals of the suggestion and of your
-move, the **eval change** (suggestion minus yours, pawns from White's side, green when better for you, red when
-worse), the **depth** searched and **seen**.
+**Sharpest alternatives** is a table of moves you don't play yet, at least as sharp as yours (unless yours only
+leads to recaptures), where at one of their decisions along the line they have at most two good replies and their
+second-best is at least 5 points worse. Columns: after (the move that led there; hover for the whole line), the
+move and the one it replaces, **break-even**, sharpness, yours, the difference, good replies, in a row, gap, cost,
+the evals of the suggestion and of your move, the **eval change** (suggestion minus yours, pawns from White's side,
+green when better for you, red when worse), the **depth** searched and **seen**.
 
 **Break-even** puts the trade-off in one number: how often they'd have to miss their best reply (playing their
-second-best instead) for the suggestion to score better than your move. With A, A2 your winning chances after
-your move and their best / second-best reply, and B, B2 the same for the suggestion:
-break-even = (A − B) / ((A − B) + (B2 − A2)). **free** = at least as good as yours even if they find their best;
-**never** = their second-best gives you no more than they'd allow against your move. The table is sorted by it,
-lowest first; tap a heading to sort by another column.
+second-best instead), at each of their decisions along the line, for the suggestion to score better than your
+move. A line's value at miss rate p adds up, decision by decision, the chance of reaching it times p times your
+winning chances after their second-best there, plus the chance of getting through every decision times your
+winning chances at the end (recaptures are never missed). Break-even is the smallest p where the suggestion's value
+is at least yours (found by scanning, then bisection). With one decision this is
+(A − B) / ((A − B) + (B2 − A2)), A and A2 your winning chances after your move and their best / second-best reply,
+B and B2 the same for the suggestion. **free** = at least as good as yours even if they find every best move;
+**never** = no miss rate makes it better. The table is sorted by it, lowest first; tap a heading to sort by
+another column.
 
 **Seen**: opening a suggestion on the board (tapping it, here or in a position's table) ticks it as seen, kept on
 the server (`practical_seen`) so it shows on every device; tap the tick to undo. Seen rows are dimmed, and **Hide

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  DEFAULTS, breakEven, breakEvenText, candidateMoves, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
+  DEFAULTS, addDecision, breakEven, breakEvenText, candidateMoves, decision, lineValue, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
 } from '../../web/js/practical-core.js';
 
 const near = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
@@ -73,11 +73,11 @@ test('costs, the cap, ordering and the sharpest alternatives', () => {
 });
 
 test('never less sharp than your move (unless yours is a recapture)', () => {
-  const mk = (san, sharpness, extra = {}) => ({ san, sharpness, good: 1, gap: 10, cost: 2, repertoire: false, final: false, recapture: false, ...extra });
+  const mk = (san, sharpness, extra = {}) => ({ san, sharpness, good: 1, gap: 10, cost: 2, repertoire: false, final: false, recapture: false, allRecapture: false, chain: [{ good: 1, gap: 10, recapture: false }], ...extra });
   const mine = mk('Qxd5', 8.4, { repertoire: true });
   const cands = [mine, mk('c6', 12), mk('Qd6', 7.6), mk('g6', 6.2)]; // Qd6 shows as 8, the same as yours
   assert.deepEqual(worthALook([{ position: {}, cands }]).map((p) => p.cand.san), ['c6', 'Qd6']);
-  const recap = mk('Bxe2', 36, { repertoire: true, recapture: true });
+  const recap = mk('Bxe2', 36, { repertoire: true, recapture: true, allRecapture: true });
   assert.deepEqual(worthALook([{ position: {}, cands: [recap, mk('h5', 7)] }]).map((p) => p.cand.san), ['h5']);
 });
 
@@ -114,6 +114,54 @@ test('break-even: how often they must miss for the switch to pay', () => {
   assert.equal(breakEvenText(Infinity), 'never');
   assert.equal(breakEven(sugg, null), null);
   assert.equal(breakEvenText(null), '–');
+});
+
+test('following their decisions: the chain, only moves in a row, the sharpest point', () => {
+  // Decision 1: three fine replies. Decision 2: only one. Decision 3: only one again.
+  const easy = [{ uci: 'a2a3', score: cp(20) }, { uci: 'b2b3', score: cp(15) }, { uci: 'c2c3', score: cp(10) }];
+  const sharp2 = [{ uci: 'd2d4', score: cp(30) }, { uci: 'e2e4', score: cp(-150) }, { uci: 'f2f4', score: cp(-250) }];
+  const sharp3 = [{ uci: 'g2g3', score: cp(40) }, { uci: 'h2h3', score: cp(-60) }];
+  const c = scoreCandidate({ uci: 'x', san: 'Qd6', me: 'black', theirLines: easy });
+  assert.deepEqual([c.goodChain, c.inRow], [[3], 0]);
+  addDecision(c, decision(sharp2, 'black'), 'a3', 'Nc6');
+  addDecision(c, decision(sharp3, 'black'), 'd4', 'e5');
+  assert.deepEqual(c.goodChain, [3, 1, 1]);
+  assert.equal(c.inRow, 0); // the first decision isn't an only move
+  assert.equal(c.onlyMoves, 2);
+  assert.equal(c.peakAt, 2); // the sharpest point: decision 2
+  near(c.sharpness, decision(sharp2, 'black').sharpness);
+  near(c.gap, W(30) - W(-150));
+  near(c.firstSharpness, decision(easy, 'black').sharpness); // the first decision is kept too
+  assert.deepEqual(c.line, ['Qd6', 'a3', 'Nc6', 'd4', 'e5']);
+  const d = scoreCandidate({ uci: 'y', san: 'c6', me: 'black', theirLines: sharp2 });
+  addDecision(d, decision(sharp3, 'black'), 'd4', 'e5');
+  assert.equal(d.inRow, 2);
+  // A recapture in the middle neither counts as an only move nor breaks the run.
+  const e = scoreCandidate({ uci: 'z', san: 'c6', me: 'black', theirLines: sharp2 });
+  addDecision(e, decision([{ uci: 'e1e2', score: cp(30) }, { uci: 'a2a4', score: cp(-500) }], 'black', { capture: true, myUci: 'b4e2' }), 'd4', 'Bxe2');
+  addDecision(e, decision(sharp3, 'black'), 'Kxe2', 'e5');
+  assert.deepEqual(e.goodChain, [1, 'r', 1]);
+  assert.equal(e.inRow, 2);
+  assert.equal(e.peakAt, 1); // the recapture's big "sharpness" is ignored
+});
+
+test('break-even over several decisions', () => {
+  // Yours: easy all the way (-0.50 for White against everything). Suggestion: 0.00, but at
+  // each of three decisions only one reply holds and the next best is -3.00 for White.
+  const flat = [{ uci: 'a', score: cp(-50) }, { uci: 'b', score: cp(-50) }];
+  const trap = [{ uci: 'a', score: cp(0) }, { uci: 'b', score: cp(-300) }];
+  const mine = scoreCandidate({ uci: 'm', san: 'm', me: 'black', theirLines: flat });
+  const one = scoreCandidate({ uci: 's', san: 's', me: 'black', theirLines: trap });
+  const three = scoreCandidate({ uci: 's', san: 's', me: 'black', theirLines: trap });
+  addDecision(three, decision(trap, 'black'), 'a', 'x');
+  addDecision(three, decision(trap, 'black'), 'a', 'x');
+  near(lineValue(one, 0), 50);
+  near(lineValue(one, 1), 100 - W(-300));
+  const p1 = breakEven(one, mine);
+  const p3 = breakEven(three, mine);
+  near(p1, (100 - W(-50) - 50) / ((100 - W(-50) - 50) + (100 - W(-300) - (100 - W(-50)))), 1e-6); // the one-decision formula
+  assert.ok(p3 < p1, `three chances to slip lower the break-even (${p3} < ${p1})`);
+  near(lineValue(three, p3), lineValue(mine, p3), 1e-6);
 });
 
 test('text helpers', () => {

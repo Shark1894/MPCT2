@@ -13,7 +13,7 @@ import { api } from './api.js';
 import { button, el, miniBoard } from './dom.js';
 import { Engine } from './engine.js';
 import {
-  DEFAULTS, breakEven, breakEvenText, candidateMoves, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
+  DEFAULTS, addDecision, breakEven, breakEvenText, candidateMoves, decision, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
 } from './practical-core.js';
 import { plural, store, toast } from './ui.js';
 
@@ -25,6 +25,11 @@ const DEPTHS = [
   [24, 'Very deep (depth 24, slow)'],
 ];
 const LIMIT_MS = 30000; // most time one analysis may take, so a hard position can't stall the run
+const DECISIONS = [
+  [1, 'Their reply only'],
+  [2, '2 of their decisions'],
+  [3, '3 of their decisions'],
+];
 const CAPS = [
   [8, 'Up to 8 points worse'],
   [15, 'Up to 15 points worse'],
@@ -43,11 +48,31 @@ function depthCell(depth, wanted) {
 /** A move's sharpness, marked when it's only a capture they take back. */
 function sharpCell(c) {
   if (c.final || !Number.isFinite(c.sharpness)) return el('td', 'num', '–');
-  const td = el('td', `num${c.sharpness >= 10 && !c.recapture ? ' pr-hot' : ''}`, String(Math.round(c.sharpness)));
-  if (c.recapture) {
+  const td = el('td', `num${c.sharpness >= 10 && !c.allRecapture ? ' pr-hot' : ''}`, String(Math.round(c.sharpness)));
+  if (c.allRecapture) {
     td.appendChild(el('span', 'pr-model', 'recapture'));
     td.title = 'They simply take back: the only move is obvious, so this isn’t sharp in practice';
+  } else {
+    td.title = `Sharpest at their decision ${c.peakAt}. Decision by decision: ${c.chain.map((d) => (d.recapture ? 'recapture' : Number.isFinite(d.sharpness) ? Math.round(d.sharpness) : '–')).join(' → ')}`;
   }
+  return td;
+}
+
+/** Their good replies decision by decision ("3 → 1 → 1"); tap to see the line on the board. */
+function chainCell(c, onShow) {
+  const td = el('td', 'num pr-chain');
+  if (c.final || !c.chain.length) {
+    td.textContent = '–';
+    return td;
+  }
+  const b = button('', 'pr-chain-btn', onShow);
+  c.chain.forEach((d, i) => {
+    if (i) b.append(' → ');
+    const v = d.recapture ? 'r' : String(d.good);
+    b.appendChild(el('span', d.recapture ? 'pr-chain-r' : d.good === 1 ? 'pr-chain-1' : '', v));
+  });
+  b.title = `Main line: ${c.line.join(' ')}. Good replies at each of their decisions (r = they just take back). Tap to see the line on the board.`;
+  td.appendChild(b);
   return td;
 }
 
@@ -56,6 +81,13 @@ function evalChangeCell(d) {
   const td = el('td', 'num pr-diff', d === null ? '–' : d.cp === 0 ? '0.00' : evalText({ cp: d.cp }));
   if (d !== null) td.classList.add(d.better ? 'up' : d.worse ? 'down' : 'same');
   td.title = 'Eval of this move minus your move’s (pawns, White’s view): green when it’s better for you, red when worse';
+  return td;
+}
+
+/** The gap at their sharpest decision. */
+function gapCell(c) {
+  const td = el('td', 'num', c.final || !Number.isFinite(c.gap) ? '–' : String(Math.round(c.gap)));
+  if (!c.final && c.chain.length > 1) td.title = `At their decision ${c.peakAt} (the sharpest)`;
   return td;
 }
 
@@ -153,6 +185,54 @@ class Worker {
   }
 }
 
+/**
+ * Follow the engine's main line after one of your moves: their best reply, your best answer, and
+ * score their next decision; up to opts.decisions of them. Stops at the end of the game.
+ */
+async function followLine(w, c, fen, theirLines, me, opts) {
+  let pos = fen;
+  let lines = theirLines;
+  for (let k = 2; k <= opts.decisions && !w.cancelled; k++) {
+    const best = c.chain[c.chain.length - 1].replies[0];
+    if (!best) return;
+    let r;
+    try {
+      r = after(pos, best.uci);
+    } catch {
+      return;
+    }
+    if (r.over) return;
+    // your best answer: from the engine's line for their reply, else ask the engine
+    let mine = lines.find((l) => l.uci === best.uci)?.pv?.[1];
+    let m = null;
+    if (mine) {
+      try {
+        m = after(r.fen, mine);
+      } catch {
+        m = null;
+      }
+    }
+    if (!m) {
+      mine = (await w.lines(r.fen, 1))[0]?.uci;
+      if (!mine) return;
+      try {
+        m = after(r.fen, mine);
+      } catch {
+        return;
+      }
+    }
+    if (m.over) return;
+    const mySan = sanOf(r.fen, mine);
+    lines = await w.lines(m.fen, opts.replies);
+    if (!lines.length) return;
+    const sans = Object.fromEntries(lines.map((l) => [l.uci, sanOf(m.fen, l.uci)]));
+    addDecision(c, decision(lines, me, { sans, capture: mySan.includes('x'), myUci: mine }, opts), best.san, mySan);
+    const d = w.depthOf(m.fen, opts.replies);
+    if (d != null && (c.depth == null || d < c.depth)) c.depth = d;
+    pos = m.fen;
+  }
+}
+
 /** Your candidate moves in one position, scored. */
 async function analysePosition(w, position, me, opts) {
   const fen = position.fen;
@@ -175,7 +255,8 @@ async function analysePosition(w, position, me, opts) {
     const theirLines = await w.lines(next.fen, opts.replies);
     const sans = Object.fromEntries(theirLines.map((l) => [l.uci, sanOf(next.fen, l.uci)]));
     const c = scoreCandidate({ uci, san, me, theirLines, sans, repertoire, capture: san.includes('x') }, opts);
-    c.depth = w.depthOf(next.fen, opts.replies); // how deep their replies were searched
+    c.depth = w.depthOf(next.fen, opts.replies); // how deep their replies were searched (the shallowest decision)
+    await followLine(w, c, next.fen, theirLines, me, opts);
     cands.push(c);
   }
   position.depth = w.depthOf(fen, opts.candidates); // how deep your candidate moves were searched
@@ -188,7 +269,7 @@ export class PracticalView {
     this.onShowLine = onShowLine;
     this.box = document.getElementById('practical-view');
     const saved = store.get('practical', {});
-    this.settings = { openingId: saved.openingId ?? null, tagId: saved.tagId ?? null, depth: saved.depth ?? 16, cap: saved.cap ?? 15 };
+    this.settings = { openingId: saved.openingId ?? null, tagId: saved.tagId ?? null, depth: saved.depth ?? 16, cap: saved.cap ?? 15, decisions: saved.decisions ?? 3 };
     this.results = [];
     this.run = null;
     this.info = null;
@@ -209,6 +290,12 @@ export class PracticalView {
   _open(position, c) {
     this._setSeen(position, c.uci, true);
     this.onShowLine([...position.sans, c.san]);
+  }
+
+  /** Open a move's main line on the board (and count the move as seen). */
+  _openLine(position, c) {
+    this._setSeen(position, c.uci, true);
+    this.onShowLine([...position.sans, ...c.line]);
   }
 
   async _setSeen(position, uci, on) {
@@ -295,6 +382,7 @@ export class PracticalView {
     };
     this.el.depth = select('pr-depth', DEPTHS, this.settings.depth, 'depth');
     this.el.cap = select('pr-cap', CAPS, this.settings.cap, 'cap');
+    this.el.decisions = select('pr-decisions', DECISIONS, this.settings.decisions, 'decisions');
 
     this.el.go = button('Analyse', 'primary', () => (this.run ? this.stop() : this.start()));
     this.el.go.id = 'pr-go';
@@ -303,6 +391,7 @@ export class PracticalView {
       field('Branch', this.el.tag),
       field('Engine depth', this.el.depth),
       field('Moves to consider', this.el.cap),
+      field('Follow', this.el.decisions),
       this.el.go,
     );
     this.el.progress = el('div', 'pr-progress');
@@ -322,10 +411,11 @@ export class PracticalView {
         ['Eval', 'the engine’s evaluation after the move and their best reply, in pawns from White’s side (+ good for White)'],
         ['Engine', 'the same as your winning chances (0–100)'],
         ['Cost', 'winning chances the move gives away against the engine’s best move here. Points aren’t pawns: near equality a pawn is about 9 points (half a pawn about 5), and the same pawn is worth fewer points when one side is already well ahead'],
-        ['Good replies', 'how many of their 8 best replies stay within 7 points of their best: 1 means an only move'],
-        ['Gap', 'how many points worse their second-best reply is than their best'],
-        ['Depth', 'how deep the engine searched their replies to the move (in half-moves). It’s the depth you chose unless the 30-second limit for one analysis stopped it first (shown in amber)'],
-        ['Sharpness', 'how many points worse their other top replies are than their best, on average: high when nearly everything but the best move goes wrong for them. Marked “recapture” when your move takes something and their best is simply to take back: obvious, so not sharp in practice (left out of the sharpest alternatives)'],
+        ['Good replies', 'how many of their 8 best replies stay within 7 points of their best, at each of their decisions along the engine’s main line (their best reply, your best answer, …): “3 → 1 → 1”. 1 is an only move; r is a recapture (obvious). Tap it to see the line on the board'],
+        ['In a row', 'how many only moves they have to find one after another, from their first decision'],
+        ['Gap', 'how many points worse their second-best reply is than their best, at their sharpest decision'],
+        ['Depth', 'how deep the engine searched their replies (in half-moves; the shallowest of their decisions). It’s the depth you chose unless the 30-second limit for one analysis stopped it first (shown in amber)'],
+        ['Sharpness', 'how many points worse their other top replies are than their best, on average, at their sharpest decision along the line: high when nearly everything but the best move goes wrong for them. Recaptures (your move takes something and their best is simply to take back) are obvious, so they’re never the sharpest point; a move that only leads to recaptures is marked “recapture”'],
       ]),
       el('p', 'pr-note', 'Points are winning chances (0–100) from the engine’s evaluations. ✗ marks a reply that isn’t good for them.'),
     );
@@ -409,7 +499,7 @@ export class PracticalView {
     this.info = info;
     this.results = [];
     await this._loadSeen(info.positions);
-    const opts = { ...DEFAULTS, cap: this.settings.cap, depth: this.settings.depth };
+    const opts = { ...DEFAULTS, cap: this.settings.cap, depth: this.settings.depth, decisions: this.settings.decisions };
     this.opts = opts;
     const w = new Worker({ depth: this.settings.depth });
     this.run = { w, started: performance.now(), done: 0, total: info.positions.length };
@@ -491,7 +581,7 @@ export class PracticalView {
     box.hidden = !picks.length && !final;
     box.replaceChildren(
       el('h2', 'dash-h2', 'Sharpest alternatives'),
-      el('p', 'pr-note', 'Moves you don’t play yet, at least as sharp as yours, where they have at most two good replies and their second-best is at least 5 points worse. Break-even: how often they’d have to miss their best reply (playing their second-best) for the move to score better than yours; “free” when it’s no worse even if they find it. Eval change is in pawns from White’s side: green when it’s better for you. Tap a heading to sort; tap a move to see it on the board (it’s then ticked as seen).'),
+      el('p', 'pr-note', 'Moves you don’t play yet, at least as sharp as yours, where at one of their decisions along the main line they have at most two good replies and their second-best is at least 5 points worse. Break-even: how often they’d have to miss (playing their second-best, at any of their decisions on the line) for the move to score better than yours; “free” when it’s no worse even if they always find the best. Eval change is in pawns from White’s side: green when it’s better for you. Tap a heading to sort; tap a move to see it on the board (it’s then ticked as seen).'),
     );
     if (!picks.length) {
       box.appendChild(el('p', 'pr-note', final && this.results.length
@@ -531,8 +621,9 @@ export class PracticalView {
       ['Break-even', 'breakeven', (p) => breakEven(p.cand, p.mine) ?? Infinity, true],
       ['Sharpness', 'sharpness', (p) => p.cand.sharpness],
       ['Yours', null],
-      ['Difference', 'diff', (p) => (sharp(p.mine) === null || p.mine.recapture ? -Infinity : sharp(p.cand) - sharp(p.mine))],
-      ['Good replies', 'good', (p) => p.cand.good, true],
+      ['Difference', 'diff', (p) => (sharp(p.mine) === null || p.mine.allRecapture ? -Infinity : sharp(p.cand) - sharp(p.mine))],
+      ['Good replies', 'good', (p) => p.cand.onlyMoves],
+      ['In a row', 'inrow', (p) => p.cand.inRow],
       ['Gap', 'gap', (p) => (Number.isFinite(p.cand.gap) ? p.cand.gap : -1)],
       ['Cost', 'cost', (p) => p.cand.cost, true],
       ['Eval', null],
@@ -582,7 +673,7 @@ export class PracticalView {
       const where = el('td', 'pr-where', this._last(position.sans));
       where.title = `${movetext(position.sans)} …`;
       const play = el('td', 'pr-move');
-      play.appendChild(button(c.san, 'pr-move-btn', () => this._open(position, c), 'Show on board'));
+      play.appendChild(button(c.san, 'pr-move-btn', () => this._open(position, c), `Show on board. Main line: ${c.line.join(' ')}`));
       if (mine) play.appendChild(el('span', 'pr-instead', `not ${mine.san}`));
       const be = breakEven(c, mine);
       const beCell = el('td', `num pr-be${be === 0 ? ' free' : ''}`, breakEvenText(be));
@@ -599,11 +690,12 @@ export class PracticalView {
         play,
         beCell,
         el('td', 'num pr-hot', sharp(c) === null ? '–' : String(sharp(c))),
-        el('td', 'num', sharp(mine) === null ? '–' : `${sharp(mine)}${mine.recapture ? ' (recapture)' : ''}`),
+        el('td', 'num', sharp(mine) === null ? '–' : `${sharp(mine)}${mine.allRecapture ? ' (recapture)' : ''}`),
         // from the shown values, so they add up; none against a recapture (its sharpness isn't real)
-        diffCell(sharp(mine) === null || sharp(c) === null || mine.recapture ? null : sharp(c) - sharp(mine)),
-        el('td', `num${c.good === 1 ? ' pr-hot' : ''}`, String(c.good)),
-        el('td', 'num', Number.isFinite(c.gap) ? String(Math.round(c.gap)) : '–'),
+        diffCell(sharp(mine) === null || sharp(c) === null || mine.allRecapture ? null : sharp(c) - sharp(mine)),
+        chainCell(c, () => this._openLine(position, c)),
+        el('td', `num${c.inRow ? ' pr-hot' : ''}`, String(c.inRow)),
+        gapCell(c),
         el('td', 'num', String(Math.round(c.cost))),
         el('td', 'num pr-eval', evalText(c.score)),
         el('td', 'num pr-eval', mine ? evalText(mine.score) : '–'),
@@ -639,7 +731,7 @@ export class PracticalView {
     const table = el('table', 'pr-table');
     const thead = el('thead');
     const hr = el('tr');
-    const HEADS = ['Move', 'Eval', 'Engine', 'Cost', 'Good replies', 'Gap', 'Sharpness', 'Depth', 'Their replies → you'];
+    const HEADS = ['Move', 'Eval', 'Engine', 'Cost', 'Good replies', 'In a row', 'Gap', 'Sharpness', 'Depth', 'Their replies → you'];
     for (const h of HEADS) hr.appendChild(el('th', '', h));
     thead.appendChild(hr);
     const tbody = el('tbody');
@@ -661,8 +753,9 @@ export class PracticalView {
         el('td', 'num pr-eval', c.mate ? '#' : evalText(c.score)),
         el('td', 'num', pct(c.engine)),
         el('td', 'num', String(Math.round(c.cost))),
-        el('td', `num${c.good === 1 ? ' pr-hot' : ''}`, final ? '–' : String(c.good)),
-        el('td', 'num', final || !Number.isFinite(c.gap) ? '–' : String(Math.round(c.gap))),
+        chainCell(c, () => this._openLine(position, c)),
+        el('td', `num${c.inRow ? ' pr-hot' : ''}`, final ? '–' : String(c.inRow)),
+        gapCell(c),
         sharpCell(c),
         depthCell(c.final ? null : c.depth, this.opts.depth),
         likely,
