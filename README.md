@@ -791,7 +791,9 @@ replies to it, in winning chances (0-100):
   (their best reply, your best answer, their next decision, ...), following 1, 2 or 3 of their decisions (the
   **Follow** setting, 3 by default):
   - **Good replies**: how many of their replies stay within 7 points of their best at each decision, shown as a
-    chain, e.g. "3 → 1 → 1" (1 = an only move, r = a recapture). Tap it to see the main line on the board.
+    chain, e.g. "3 → 1 → 1" (1 = an only move, r = a recapture). Tap it to see the main line on the board. To save
+    engine time, a move other than yours stops being followed as soon as it has more than two good replies at a
+    decision, or costs more than the chosen limit (shown as "8 → …"); your own move is always followed to the end.
   - **In a row**: how many only moves they face one after another from the start (recaptures skipped).
   - **Gap**: how many points worse their second-best reply is than their best, at the sharpest decision.
   - **Sharpness**: how many points worse their other top replies are than their best, on average, at the sharpest

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  DEFAULTS, addDecision, breakEven, breakEvenText, candidateMoves, decision, lineValue, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
+  DEFAULTS, addDecision, stillSharp, worthFollowing, breakEven, breakEvenText, candidateMoves, decision, lineValue, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
 } from '../../web/js/practical-core.js';
 
 const near = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
@@ -194,4 +194,17 @@ test('alternatives: the whole line followed, at most two good replies at every d
   ];
   assert.deepEqual(worthALook([{ position: {}, cands }]).map((p) => p.cand.san), ['a', 'd']);
   assert.deepEqual(worthALook([{ position: {}, cands }], { ...DEFAULTS, decisions: 2 }).map((p) => p.cand.san), ['a', 'c', 'd']);
+});
+
+test('which lines are worth following further', () => {
+  const dec = (good, recapture = false) => ({ good, gap: 10, recapture });
+  const mk = (extra) => ({ engine: 40, repertoire: false, final: false, chain: [dec(2)], ...extra });
+  assert.equal(stillSharp(dec(2)), true);
+  assert.equal(stillSharp(dec(3)), false);
+  assert.equal(stillSharp(dec(6, true)), true); // a recapture is obvious
+  assert.equal(worthFollowing(mk(), 50), true);
+  assert.equal(worthFollowing(mk({ chain: [dec(7)] }), 50), false); // too many good replies already
+  assert.equal(worthFollowing(mk({ engine: 30 }), 50), false); // over the cost cap (15)
+  assert.equal(worthFollowing(mk({ chain: [dec(7)], engine: 10, repertoire: true }), 50), true); // yours always
+  assert.equal(worthFollowing(mk({ final: true, repertoire: true }), 50), false);
 });

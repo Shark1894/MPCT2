@@ -141,6 +141,25 @@ export function finalCandidate({ uci, san, value, repertoire = false }) {
   return { uci, san, repertoire, engine: value, score: value === 50 ? { cp: 0 } : null, cost: 0, good: 0, gap: NaN, sharpness: NaN, firstGap: NaN, firstSharpness: NaN, replies: [], chain: [], line: [san], goodChain: [], inRow: 0, onlyMoves: 0, allRecapture: true, final: true, mate: value === 100 };
 }
 
+/**
+ * Whether a decision still leaves the move in the running for the sharpest alternatives: a
+ * recapture (obvious) or at most `maxGood` good replies. Used to stop following lines early.
+ */
+export function stillSharp(d, opts = DEFAULTS) {
+  return d.recapture || d.good <= opts.maxGood;
+}
+
+/**
+ * Whether to follow a scored move past their first decision: always your repertoire's move (it's
+ * what the alternatives are compared with); otherwise only within the cost cap (`best` = the best
+ * engine value in the position) and while their first decision is still sharp.
+ */
+export function worthFollowing(c, best, opts = DEFAULTS) {
+  if (c.final) return false;
+  if (c.repertoire) return true;
+  return best - c.engine <= opts.cap && c.chain.length > 0 && stillSharp(c.chain[c.chain.length - 1], opts);
+}
+
 /** Costs against your best move; keep those within the cap (and yours); least cost first. */
 export function finish(cands, opts = DEFAULTS) {
   if (!cands.length) return [];
@@ -165,7 +184,7 @@ export function worthALook(results, opts = DEFAULTS) {
       // the whole line followed (all of their decisions), at most two good replies at every one of them,
       // and a clear gap at one that isn't a recapture
       if (c.chain.length < (opts.decisions ?? 1)) continue;
-      if (!c.chain.every((d) => d.recapture || d.good <= opts.maxGood)) continue; // a recapture is obvious
+      if (!c.chain.every((d) => stillSharp(d, opts))) continue; // a recapture is obvious
       if (!c.chain.some((d) => !d.recapture && d.gap >= opts.minGap)) continue;
       if (mine && !mine.allRecapture && Number.isFinite(mine.sharpness) && Math.round(c.sharpness) < Math.round(mine.sharpness)) continue;
       out.push({ position: r.position, cand: c, mine });

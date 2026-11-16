@@ -13,7 +13,7 @@ import { api } from './api.js';
 import { button, el, miniBoard } from './dom.js';
 import { Engine } from './engine.js';
 import {
-  DEFAULTS, addDecision, breakEven, breakEvenText, candidateMoves, decision, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
+  DEFAULTS, addDecision, breakEven, stillSharp, worthFollowing, breakEvenText, candidateMoves, decision, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
 } from './practical-core.js';
 import { plural, store, toast } from './ui.js';
 
@@ -71,7 +71,11 @@ function chainCell(c, onShow) {
     const v = d.recapture ? 'r' : String(d.good);
     b.appendChild(el('span', d.recapture ? 'pr-chain-r' : d.good === 1 ? 'pr-chain-1' : '', v));
   });
-  b.title = `Main line: ${c.line.join(' ')}. Good replies at each of their decisions (r = they just take back). Tap to see the line on the board.`;
+  if (c.stopped) {
+    b.append(' → ');
+    b.appendChild(el('span', 'pr-chain-r', '…'));
+  }
+  b.title = `Main line: ${c.line.join(' ')}. Good replies at each of their decisions (r = they just take back).${c.stopped ? ' Not followed further: too many good replies (or too costly) for it to be a sharp alternative.' : ''} Tap to see the line on the board.`;
   td.appendChild(b);
   return td;
 }
@@ -226,10 +230,17 @@ async function followLine(w, c, fen, theirLines, me, opts) {
     lines = await w.lines(m.fen, opts.replies);
     if (!lines.length) return;
     const sans = Object.fromEntries(lines.map((l) => [l.uci, sanOf(m.fen, l.uci)]));
-    addDecision(c, decision(lines, me, { sans, capture: mySan.includes('x'), myUci: mine }, opts), best.san, mySan);
+    const dec = decision(lines, me, { sans, capture: mySan.includes('x'), myUci: mine }, opts);
+    addDecision(c, dec, best.san, mySan);
     const d = w.depthOf(m.fen, opts.replies);
     if (d != null && (c.depth == null || d < c.depth)) c.depth = d;
     pos = m.fen;
+    // too many good replies here: it can't be a sharpest alternative, so save the engine the rest
+    // (your own move is always followed to the end, as the alternatives are compared with it)
+    if (!c.repertoire && !stillSharp(dec, opts) && k < opts.decisions) {
+      c.stopped = true;
+      return;
+    }
   }
 }
 
@@ -256,8 +267,17 @@ async function analysePosition(w, position, me, opts) {
     const sans = Object.fromEntries(theirLines.map((l) => [l.uci, sanOf(next.fen, l.uci)]));
     const c = scoreCandidate({ uci, san, me, theirLines, sans, repertoire, capture: san.includes('x') }, opts);
     c.depth = w.depthOf(next.fen, opts.replies); // how deep their replies were searched (the shallowest decision)
-    await followLine(w, c, next.fen, theirLines, me, opts);
+    c.start = { fen: next.fen, theirLines };
     cands.push(c);
+  }
+  // then follow the main line, but only for moves that can still be sharp alternatives (and yours)
+  const best = cands.length ? Math.max(...cands.map((c) => c.engine)) : 0;
+  for (const c of cands) {
+    if (w.cancelled) break;
+    if (c.final) continue;
+    if (worthFollowing(c, best, opts)) await followLine(w, c, c.start.fen, c.start.theirLines, me, opts);
+    else if (opts.decisions > 1) c.stopped = true;
+    delete c.start;
   }
   position.depth = w.depthOf(fen, opts.candidates); // how deep your candidate moves were searched
   return finish(cands, opts);
@@ -411,7 +431,7 @@ export class PracticalView {
         ['Eval', 'the engine’s evaluation after the move and their best reply, in pawns from White’s side (+ good for White)'],
         ['Engine', 'the same as your winning chances (0–100)'],
         ['Cost', 'winning chances the move gives away against the engine’s best move here. Points aren’t pawns: near equality a pawn is about 9 points (half a pawn about 5), and the same pawn is worth fewer points when one side is already well ahead'],
-        ['Good replies', 'how many of their 8 best replies stay within 7 points of their best, at each of their decisions along the engine’s main line (their best reply, your best answer, …): “3 → 1 → 1”. 1 is an only move; r is a recapture (obvious). Tap it to see the line on the board'],
+        ['Good replies', 'how many of their 8 best replies stay within 7 points of their best, at each of their decisions along the engine’s main line (their best reply, your best answer, …): “3 → 1 → 1”. 1 is an only move; r is a recapture (obvious); … means the line wasn’t followed further, as it already had too many good replies (or cost too much) to be a sharp alternative. Tap it to see the line on the board'],
         ['In a row', 'how many only moves they have to find one after another, from their first decision'],
         ['Gap', 'how many points worse their second-best reply is than their best, at their sharpest decision'],
         ['Depth', 'how deep the engine searched their replies (in half-moves; the shallowest of their decisions). It’s the depth you chose unless the 30-second limit for one analysis stopped it first (shown in amber)'],

@@ -80,9 +80,14 @@ async function api(page, method, path, body) {
   check(yours && yours[0].startsWith('Bxe2'), 'your repertoire move is marked');
   const evalRe = /^([+−]\d+\.\d\d|0\.00|#.*)$/;
   check(firstRows.every((r) => evalRe.test(r[1]) && /%/.test(r[2]) && /^\d+$/.test(r[3]) && /^(\d+(recapture)?|–)$/.test(r[7])), `eval, engine, cost and sharpness (${firstRows[0].slice(1, 8).join(' ')})`);
-  const chainRe = /^((\d+|r)( → (\d+|r)){0,2}|–)$/;
+  const chainRe = /^((\d+|r)( → (\d+|r)){0,2}( → …)?|–)$/;
   check(firstRows.every((r) => chainRe.test(r[4]) && /^(\d|–)$/.test(r[5])), `good replies decision by decision, and in a row (${firstRows.map((r) => `${r[4]}/${r[5]}`).join('  ')})`);
-  check(firstRows.some((r) => r[4].split(' → ').length === 3), 'three decisions followed');
+  check(firstRows.some((r) => r[4].split(' → ').length === 3 && !r[4].includes('…')), 'three decisions followed');
+  // lines that can't be sharp alternatives aren't followed further: stopped right after the first busy decision
+  const stopped = allRows0 => allRows0.filter((r) => r[4].endsWith('…'));
+  const allRows1 = await page.$$eval('.pr-pos tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
+  check(stopped(allRows1).length > 0 && stopped(allRows1).every((r) => { const g = r[4].replace(' → …', '').split(' → '); const last = g[g.length - 1]; return !r[0].includes('yours') && (Number(r[3]) > 15 || (last !== 'r' && Number(last) > 2)) && g.slice(0, -1).every((x) => x === 'r' || Number(x) <= 2); }), `busy lines stopped early, yours never (${stopped(allRows1).map((r) => r[4]).join(' | ')})`);
+  check(allRows1.filter((r) => r[0].includes('yours')).every((r) => !r[4].includes('…') && r[4].split(' → ').length === 3), 'your moves followed to the end');
   const costs = firstRows.map((r) => Number(r[3]));
   check(costs.every((c, i) => i === 0 || c >= costs[i - 1]), `moves listed least cost first (${costs.join(' ')})`);
   const allRows = await page.$$eval('.pr-pos tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
@@ -94,6 +99,17 @@ async function api(page, method, path, body) {
   check(allRows.filter((r) => r[8] !== '–').some((r) => r[8] === '12'), 'searched to the chosen depth');
   check(/searched to depth 12/.test(await page.textContent('.pr-pos:first-of-type .pr-pos-title')), 'each position says how deep your moves were searched');
   check(!(await page.textContent('#practical-view')).match(/go wrong|Trap value|Practical\b(?! choices)/), 'no opponent-model measures on the page');
+  // The engine at depth 12 may leave no move sharp enough over three decisions: follow fewer then
+  // (from saved lines, so it's quick) to exercise the alternatives table.
+  let follow = 3;
+  while (follow > 1 && !(await page.$('#pr-worth-table tbody tr'))) {
+    follow -= 1;
+    console.log(`  no alternatives over ${follow + 1} decisions at depth 12; following ${follow}`);
+    await page.selectOption('#pr-decisions', String(follow));
+    await page.click('#pr-go');
+    await page.waitForFunction(() => /^(Done|Stopped)/.test(document.querySelector('#pr-progress').textContent) && document.querySelector('#pr-go').textContent !== 'Stop', null, { timeout: 240000 });
+    await settle(page, 400);
+  }
   check(await page.isVisible('#pr-worth'), 'sharpest alternatives shown');
   const wHeads = await page.$$eval('#pr-worth-table thead th', (ths) => ths.map((t) => t.textContent.replace(/[↕▼▲]/g, '').trim()));
   check(wHeads.join('|') === 'After|Play|Break-even|Sharpness|Yours|Difference|Good replies|In a row|Gap|Cost|Eval|Yours (eval)|Eval change|Depth|Seen', `sharpest alternatives as a table (${wHeads.join('|')})`);
@@ -105,7 +121,7 @@ async function api(page, method, path, body) {
   const num = (t) => Number(t.replace('−', '-'));
   check(wrows.every((r) => r[4].includes('recapture') || num(r[5]) >= 0), `never less sharp than yours (${wrows.map((r) => r[5]).join(' ')})`);
   check(wrows.every((r) => r[4] === '–' || (r[4].includes('recapture') ? r[5] === '–' : num(r[3]) - num(r[4].split(' ')[0]) === num(r[5]))), `difference = sharpness − yours, none against a recapture (${wrows.map((r) => `${r[4]}/${r[5]}`).join(' ')})`);
-  check(wrows.every((r) => r[6].split(' → ').length === 3 && r[6].split(' → ').every((g) => g === 'r' || Number(g) <= 2) && Number(r[8]) >= 1), `three decisions, at most two good replies at each (${wrows.map((r) => r[6]).join(' | ')})`);
+  check(wrows.every((r) => r[6].split(' → ').length === follow && r[6].split(' → ').every((g) => g === 'r' || Number(g) <= 2) && Number(r[8]) >= 1), `${follow} decision(s), at most two good replies at each (${wrows.map((r) => r[6]).join(' | ')})`);
   const pawns = (t) => Number(t.replace('−', '-'));
   check(wrows.every((r) => evalRe.test(r[10]) && evalRe.test(r[11]) && Math.abs(pawns(r[10]) - pawns(r[11]) - pawns(r[12])) < 0.011), `eval change = eval − yours (${wrows.map((r) => r[12]).join(' ')})`);
   await page.click('#pr-worth-table .pr-sort[data-sort="sharpness"]');
@@ -115,11 +131,12 @@ async function api(page, method, path, body) {
   // ---- the line behind the chain -------------------------------------------------------------------
   const line = await page.getAttribute('#pr-worth-table tbody tr:first-child .pr-chain-btn', 'title');
   const lineMoves = line.match(/Main line: ([^.]+)\./)[1].split(' ');
-  check(lineMoves.length === 5, `the main line: your move and two more of each (${lineMoves.join(' ')})`);
+  const n = 2 * follow - 1;
+  check(lineMoves.length === n, `the main line: your move, then their reply and your answer per decision (${lineMoves.join(' ')})`);
   await page.click('#pr-worth-table tbody tr:first-child .pr-chain-btn');
   await settle(page, 800);
   const shownLine = await page.evaluate(() => mpct.game.moves.map((m) => m.san));
-  check(shownLine.slice(-5).join(' ') === lineMoves.join(' '), `tapping the chain shows the line on the board (${shownLine.slice(-5).join(' ')})`);
+  check(shownLine.slice(-n).join(' ') === lineMoves.join(' '), `tapping the chain shows the line on the board (${shownLine.slice(-n).join(' ')})`);
   await page.click('#view-practical');
   await settle(page, 600);
   check((await page.$$('#pr-worth-table tbody tr.seen')).length === 1, 'opening the line ticks the move as seen');
@@ -155,6 +172,7 @@ async function api(page, method, path, body) {
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/practical.png`, fullPage: true });
 
   // ---- a second run uses the saved engine lines -------------------------------------------------------
+  await page.selectOption('#pr-decisions', '3');
   await page.click('#pr-go');
   await page.waitForFunction(() => document.querySelector('#pr-go').textContent === 'Stop', null, { timeout: 5000 });
   await page.waitForFunction(() => document.querySelector('#pr-go').textContent === 'Analyse', null, { timeout: 60000 });
