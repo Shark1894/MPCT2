@@ -54,6 +54,7 @@ class PracticalEvalIn(BaseModel):
     multipv: int = Field(ge=1, le=10)
     movetime_ms: int = Field(ge=10, le=60000)
     depth: int = Field(ge=0, le=245)
+    asked_depth: int = Field(default=0, ge=0, le=245)  # when the time limit stopped it short of that
     engine: str = Field(max_length=60)
     lines: list[EvalLine] = Field(max_length=10)  # empty = no legal moves
 

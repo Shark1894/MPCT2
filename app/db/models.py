@@ -313,7 +313,10 @@ class PracticalEval(Base):
     key: Mapped[str] = mapped_column(Text, primary_key=True)
     multipv: Mapped[int]
     movetime_ms: Mapped[int]
-    depth: Mapped[int]
+    depth: Mapped[int]  # the depth the search reached
+    # the depth it was asked for: a search the time limit stopped short of it still serves it
+    # (searching again would stop at the same limit)
+    asked_depth: Mapped[int] = mapped_column(server_default="0")
     lines: Mapped[list] = mapped_column(JSONB)
     engine: Mapped[str] = mapped_column(String(60))
     updated_at: Mapped[datetime] = mapped_column(

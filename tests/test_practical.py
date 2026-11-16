@@ -86,6 +86,13 @@ def test_evals_cache(client):
     assert shallower == 0  # more lines but a shallower search: the saved one stays
     assert save(8, 800, [line("c7c5", -25)]) == 1
     assert look(8, 800)[0]["lines"][0]["uci"] == "c7c5"
+    # a search the time limit stopped at depth 15 when 20 was asked for still serves depth 20
+    fen2 = fen_after("c4")
+    client.post("/api/practical/evals", json={"evals": [{"fen": fen2, "multipv": 8, "movetime_ms": 30000, "depth": 15, "asked_depth": 20, "engine": "sf", "lines": [line("e7e5", 20)]}]})
+    lim = lambda d: client.post("/api/practical/evals/lookup", json={"fens": [fen2], "multipv": 8, "depth": d}).json()["evals"][0]
+    assert lim(20)["depth"] == 15 and lim(24) is None
+    deeper = client.post("/api/practical/evals", json={"evals": [{"fen": fen2, "multipv": 8, "movetime_ms": 30000, "depth": 18, "asked_depth": 24, "engine": "sf", "lines": [line("c7c5", 20)]}]}).json()["saved"]
+    assert deeper == 1 and lim(24)["depth"] == 18
     r = client.post("/api/practical/evals", json={"evals": [{"fen": "nonsense", "multipv": 1, "movetime_ms": 100, "depth": 1, "engine": "x", "lines": []}]})
     assert r.status_code == 422
 

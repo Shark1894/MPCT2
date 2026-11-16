@@ -6,7 +6,7 @@ the browser (web/js/practical-core.js).
 """
 
 import chess
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -73,7 +73,7 @@ def evals_lookup(s: Session, fens: list[str], multipv: int, movetime_ms: int = 0
     this depth."""
     keys = [key_from_fen(f) for f in fens]
     rows = s.scalars(select(PracticalEval).where(PracticalEval.key.in_(set(keys)))).all()
-    good = {r.key: r for r in rows if r.multipv >= multipv and r.movetime_ms >= movetime_ms and r.depth >= depth}
+    good = {r.key: r for r in rows if r.multipv >= multipv and r.movetime_ms >= movetime_ms and max(r.depth, r.asked_depth) >= depth}
     return [
         {"multipv": good[k].multipv, "movetime_ms": good[k].movetime_ms, "depth": good[k].depth, "lines": good[k].lines}
         if k in good else None
@@ -86,11 +86,16 @@ def evals_save(s: Session, items: list[dict]) -> int:
     saved = 0
     for item in items:
         values = {"key": key_from_fen(item["fen"]), **{k: item[k] for k in ("multipv", "movetime_ms", "depth", "lines", "engine")}}
+        values["asked_depth"] = max(item.get("asked_depth") or 0, item["depth"])
+        cols = ("multipv", "movetime_ms", "depth", "asked_depth", "lines", "engine")
         stmt = insert(PracticalEval).values(**values)
         stmt = stmt.on_conflict_do_update(
             index_elements=[PracticalEval.key],
-            set_={k: stmt.excluded[k] for k in ("multipv", "movetime_ms", "depth", "lines", "engine")} | {"updated_at": stmt.excluded.updated_at},
-            where=(PracticalEval.multipv <= stmt.excluded.multipv) & (PracticalEval.depth <= stmt.excluded.depth),
+            set_={k: stmt.excluded[k] for k in cols} | {"updated_at": stmt.excluded.updated_at},
+            # only by at least as many lines, asked at least as deep and reaching at least as far
+            where=(PracticalEval.multipv <= stmt.excluded.multipv)
+            & (func.greatest(PracticalEval.depth, PracticalEval.asked_depth) <= stmt.excluded.asked_depth)
+            & (PracticalEval.depth <= stmt.excluded.depth),
         ).returning(PracticalEval.key)
         saved += len(s.execute(stmt).all())
     return saved

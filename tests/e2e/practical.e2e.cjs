@@ -193,11 +193,17 @@ async function api(page, method, path, body) {
 
   // ---- a second run uses the saved engine lines -------------------------------------------------------
   await page.selectOption('#pr-decisions', '3');
+  let lookups = 0;
+  const countLookups = (req) => { if (req.url().includes('/practical/evals/lookup')) lookups += 1; };
+  page.on('request', countLookups);
   await page.click('#pr-go');
   await page.waitForFunction(() => document.querySelector('#pr-go').textContent === 'Stop', null, { timeout: 5000 });
   await page.waitForFunction(() => document.querySelector('#pr-go').textContent === 'Analyse', null, { timeout: 60000 });
   const again = await page.textContent('#pr-progress');
   check(/engine: 0 new/.test(again), `second run from saved lines (${again})`);
+  page.off('request', countLookups);
+  const savedN = Number(again.match(/(\d+) saved/)[1]);
+  check(lookups * 3 <= savedN, `saved lines looked up in batches (${lookups} requests for ${savedN} positions)`);
   const againRows = await page.$$eval('.pr-pos:first-of-type tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
   check(JSON.stringify(againRows) === JSON.stringify(firstRows), 'saved lines give the same results');
   check(new Set(againRows.map((r) => r[2])).size > 1, `engine values differ between moves (${againRows.map((r) => r[2]).join(' ')})`);

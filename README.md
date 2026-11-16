@@ -840,7 +840,10 @@ The engine runs in the browser (Stockfish), searching every analysis to the chos
 24 half-moves, with 8 lines at once, about 9 analyses a position. A 30-second limit per analysis stops a hard
 position from stalling the run; the **Depth** column (and each position's heading) shows how deep each line
 actually got, in amber when the limit stopped it short. Lines are saved on the server (`practical_evals`) with
-their depth, so running the same branch again at the same or a lower depth is quick.
+their depth, so running the same branch again at the same or a lower depth is quick. A search the 30-second limit
+stopped short is saved with the depth it was asked for too (`asked_depth`), so it isn't searched again (it would
+stop at the same limit). Saved lines are looked up in batches (every position of the branch at the start, then each
+position's moves, then each of their decisions), not one request per position.
 
 API: `GET /api/practical/positions?opening_id=&tag_id=`, `POST /api/practical/evals/lookup`
 (`{"fens", "multipv", "movetime_ms"}`), `POST /api/practical/evals`, `POST /api/practical/seen/lookup` (`{"keys"}`),

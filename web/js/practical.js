@@ -132,6 +132,32 @@ class Worker {
     this.pending = [];
     this.cancelled = false;
     this.counts = { engine: 0, saved: 0, limited: 0 };
+    this.missing = new Set(); // fen|multipv looked up and not saved: straight to the engine
+  }
+
+  /**
+   * Look up saved lines for many positions in one request (a request per position adds up over
+   * the internet), so lines() then finds them here.
+   */
+  async prefetch(fens, multipv) {
+    const want = [...new Set(fens)].filter((f) => !this.evals.has(`${f}|${multipv}`) && !this.missing.has(`${f}|${multipv}`));
+    for (let i = 0; i < want.length; i += 200) {
+      const chunk = want.slice(i, i + 200);
+      let found;
+      try {
+        found = (await api.practicalEvals(chunk, multipv, { depth: this.depth })).evals;
+      } catch {
+        return; // the cache is a help, not a need: lines() asks again
+      }
+      chunk.forEach((f, j) => {
+        const k = `${f}|${multipv}`;
+        if (found[j]) {
+          this.evals.set(k, found[j].lines);
+          this.depths.set(k, found[j].depth);
+          this.counts.saved += 1;
+        } else this.missing.add(k);
+      });
+    }
   }
 
   /** The engine's best `multipv` moves: [{uci, score}] (White-POV). */
@@ -139,10 +165,12 @@ class Worker {
     const k = `${fen}|${multipv}`;
     if (this.evals.has(k)) return this.evals.get(k);
     let found = null;
-    try {
-      found = (await api.practicalEvals([fen], multipv, { depth: this.depth })).evals[0];
-    } catch {
-      // the cache is a help, not a need
+    if (!this.missing.has(k)) {
+      try {
+        found = (await api.practicalEvals([fen], multipv, { depth: this.depth })).evals[0];
+      } catch {
+        // the cache is a help, not a need
+      }
     }
     let lines;
     let depth;
@@ -163,7 +191,7 @@ class Worker {
         .filter((l) => l.pv?.length && !seen.has(l.pv[0]) && seen.add(l.pv[0]))
         .map((l) => ({ uci: l.pv[0], score: l.score, pv: l.pv.slice(0, 12) }));
       this.counts.engine += 1;
-      this.pending.push({ fen, multipv, movetime_ms: Math.min(ms, 60000), depth: r.depth, engine: ENGINE_NAME, lines });
+      this.pending.push({ fen, multipv, movetime_ms: Math.min(ms, 60000), depth: r.depth, asked_depth: this.depth, engine: ENGINE_NAME, lines });
       if (this.pending.length >= SAVE_BATCH) this.flush();
     }
     this.evals.set(k, lines);
@@ -228,6 +256,37 @@ async function answer(w, fen, lines, uci) {
 }
 
 /**
+ * Before a decision's positions are scored: look up, in one go, the saved lines for every position
+ * they'll need (after your answer to each reply followed; where the engine's line has no answer,
+ * the position before it, to ask for one).
+ */
+async function prefetchAnswers(w, pairs, opts) {
+  const answered = [];
+  const toAsk = [];
+  for (const [node, replies] of pairs) {
+    for (const reply of replies) {
+      let r;
+      try {
+        r = after(node.fen, reply.uci);
+      } catch {
+        continue;
+      }
+      if (r.over) continue;
+      const mine = node.lines.find((l) => l.uci === reply.uci)?.pv?.[1];
+      let m = null;
+      try {
+        m = mine ? after(r.fen, mine) : null;
+      } catch {
+        m = null;
+      }
+      if (m && !m.over) answered.push(m.fen);
+      else if (!m) toAsk.push(r.fen);
+    }
+  }
+  await Promise.all([w.prefetch(answered, opts.replies), w.prefetch(toAsk, 1)]);
+}
+
+/**
  * Follow their decisions after your move `c`: every good reply of theirs (your best answer to
  * each), so each decision covers all the positions they can reach by playing only good moves,
  * summed up worst case for you. The main line (their best reply each time) is tracked too. A
@@ -241,11 +300,13 @@ async function followLine(w, c, fen, theirLines, me, opts) {
   for (let k = 2; k <= opts.decisions && !w.cancelled; k++) {
     const next = [];
     let mainSans = null;
+    const follow = (node) => (wide ? node.d.replies.filter((r) => r.good).slice(0, opts.maxGood) : node.main ? node.d.replies.slice(0, 1) : []);
+    await prefetchAnswers(w, frontier.map((node) => [node, follow(node)]), opts);
     for (const node of frontier) {
       if (w.cancelled) return;
       // their replies to follow: the good ones (at most maxGood: more and it isn't sharp anyway),
       // or just the best once the line has stopped being sharp (your own move only)
-      const replies = wide ? node.d.replies.filter((r) => r.good).slice(0, opts.maxGood) : node.main ? node.d.replies.slice(0, 1) : [];
+      const replies = follow(node);
       for (const [i, reply] of replies.entries()) {
         const a = await answer(w, node.fen, node.lines, reply.uci);
         if (!a) continue;
@@ -278,6 +339,16 @@ async function followLine(w, c, fen, theirLines, me, opts) {
 async function analysePosition(w, position, me, opts) {
   const fen = position.fen;
   const mine = await w.lines(fen, opts.candidates);
+  const nexts = [];
+  for (const uci of candidateMoves(mine, position.repertoire, opts)) {
+    try {
+      const n = after(fen, uci);
+      if (!n.over) nexts.push(n.fen);
+    } catch {
+      // skipped below too
+    }
+  }
+  await w.prefetch(nexts, opts.replies);
   const cands = [];
   for (const uci of candidateMoves(mine, position.repertoire, opts)) {
     if (w.cancelled) break;
@@ -576,6 +647,7 @@ export class PracticalView {
     this._keepAwake();
     let failed = null;
     try {
+      await w.prefetch(info.positions.map((p) => p.fen), opts.candidates);
       for (const position of info.positions) {
         if (w.cancelled) break;
         this._progress(position);
