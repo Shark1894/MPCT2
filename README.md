@@ -821,6 +821,12 @@ B and B2 the same for the suggestion. **free** = at least as good as yours even 
 **never** = no miss rate makes it better. The table is sorted by it, lowest first; tap a heading to sort by
 another column.
 
+**Same line**: a suggestion can be later in the same line as another (changing the earlier move means the later
+position never comes up), so you'd only change one move per line. Next to the position, **↑n** counts the other
+suggestions earlier in its line, **↓n** those later in it (and **=n** others in the same position); tap the mark to
+highlight them (the tapped row blue, earlier ones copper, later ones green, the rest dimmed), or tap the **After**
+heading to sort by line so each line's suggestions sit together, earliest first.
+
 **Every position** lists the positions searched, folded to one line each: the move that led there, your move with
 its good replies decision by decision, and how many other moves stay sharp all the way (named). Tap one (or **Open
 all**) for its table of every move checked: eval, engine, cost, good replies, in a row, gap, sharpness, depth and

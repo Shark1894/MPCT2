@@ -321,3 +321,26 @@ export const signed = (x) => {
   const n = Math.round(x);
   return n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0';
 };
+
+/**
+ * How suggestions relate along your lines: for each pick ({position: {sans}}), the indexes of the
+ * other picks earlier in the same line (their position leads to this one: changing that move means
+ * this position never comes up), later in it (this one would take those away) and in the same
+ * position. You'd only change one move per line.
+ */
+export function lineLinks(picks) {
+  const prefix = (a, b) => a.length < b.length && a.every((m, i) => b[i] === m);
+  const same = (a, b) => a.length === b.length && a.every((m, i) => b[i] === m);
+  return picks.map((p, i) => {
+    const out = { earlier: [], later: [], same: [] };
+    picks.forEach((q, j) => {
+      if (i === j) return;
+      const a = p.position.sans ?? [];
+      const b = q.position.sans ?? [];
+      if (prefix(b, a)) out.earlier.push(j);
+      else if (prefix(a, b)) out.later.push(j);
+      else if (same(a, b)) out.same.push(j);
+    });
+    return out;
+  });
+}

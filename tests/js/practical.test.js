@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  DEFAULTS, addDecision, level, stillSharp, worthFollowing, breakEven, breakEvenText, candidateMoves, decision, lineValue, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
+  DEFAULTS, addDecision, lineLinks, level, stillSharp, worthFollowing, breakEven, breakEvenText, candidateMoves, decision, lineValue, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
 } from '../../web/js/practical-core.js';
 
 const near = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
@@ -225,4 +225,14 @@ test('a decision is the worst case over every good-move branch', () => {
   // recaptures among the branches don't count; all recaptures: a recapture
   const r = { good: 5, gap: 30, sharpness: 30, recapture: true };
   assert.deepEqual([level([r, { good: 1, gap: 9, sharpness: 12, recapture: false }]).good, level([r, r]).recapture], [1, true]);
+});
+
+test('suggestions in the same line: earlier, later, the same position', () => {
+  const pick = (sans) => ({ position: { sans } });
+  const picks = [pick(['e4', 'd5']), pick(['e4', 'd5', 'exd5', 'Qxd5']), pick(['e4', 'e5', 'Nf3']), pick(['e4', 'd5']), pick(['e4', 'd5', 'Nc3'])];
+  const l = lineLinks(picks);
+  assert.deepEqual(l[0], { earlier: [], later: [1, 4], same: [3] });
+  assert.deepEqual(l[1], { earlier: [0, 3], later: [], same: [] });
+  assert.deepEqual(l[2], { earlier: [], later: [], same: [] }); // another line
+  assert.deepEqual(l[4], { earlier: [0, 3], later: [], same: [] }); // a different branch from 1
 });

@@ -6037,6 +6037,58 @@ th[aria-sort='ascending'] .pr-sort.on::after {
   color: var(--text-dim);
 }
 
+.pr-link-btn {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  min-height: 0;
+  height: auto;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pr-link-btn.on {
+  border-color: var(--blue);
+  color: var(--text);
+  background: var(--blue-soft);
+}
+
+.pr-focusing tr.pr-focus > td:first-child {
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
+.pr-focusing tr.pr-focus {
+  background: var(--blue-soft);
+}
+
+.pr-focusing tr.pr-link-earlier > td:first-child {
+  box-shadow: inset 3px 0 0 var(--copper);
+}
+
+.pr-focusing tr.pr-link-earlier {
+  background: color-mix(in srgb, var(--copper) 14%, transparent);
+}
+
+.pr-focusing tr.pr-link-later > td:first-child,
+.pr-focusing tr.pr-link-same > td:first-child {
+  box-shadow: inset 3px 0 0 var(--green);
+}
+
+.pr-focusing tr.pr-link-later,
+.pr-focusing tr.pr-link-same {
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.pr-focusing tr.pr-unlinked {
+  opacity: 0.35;
+}
+
 .pr-instead {
   margin-left: 6px;
   font-size: 11px;

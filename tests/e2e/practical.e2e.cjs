@@ -125,7 +125,7 @@ async function api(page, method, path, body) {
   check(wHeads.join('|') === 'After|Play|Break-even|Sharpness|Yours|Difference|Good replies|In a row|Gap|Cost|Eval|Yours (eval)|Eval change|Depth|Seen', `sharpest alternatives as a table (${wHeads.join('|')})`);
   const cellsOf = () => page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
   let wrows = await cellsOf();
-  check(wrows.length > 0 && wrows.every((r) => /^(\d+\.|\d+…)\S+$/.test(r[0])), `After shows just the last move (${wrows.map((r) => r[0]).join(', ')})`);
+  check(wrows.length > 0 && wrows.every((r) => /^(\d+\.|\d+…)\S+?([↑↓=]\d+( [↑↓=]\d+)*)?$/.test(r[0])), `After shows just the last move (${wrows.map((r) => r[0]).join(', ')})`);
   const be = (t) => (t === 'free' ? 0 : t === 'never' ? Infinity : t === '–' ? Infinity : Number(t.replace('%', '')));
   check(wrows.every((r) => /^(\d+%|free|never|–)$/.test(r[2])) && wrows.map((r) => be(r[2])).every((v, i, a) => i === 0 || v >= a[i - 1]), `sorted by break-even, lowest first (${wrows.map((r) => r[2]).join(' ')})`);
   const num = (t) => Number(t.replace('−', '-'));
@@ -201,6 +201,32 @@ async function api(page, method, path, body) {
   const againRows = await page.$$eval('.pr-pos:first-of-type tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
   check(JSON.stringify(againRows) === JSON.stringify(firstRows), 'saved lines give the same results');
   check(new Set(againRows.map((r) => r[2])).size > 1, `engine values differ between moves (${againRows.map((r) => r[2]).join(' ')})`);
+
+  // ---- suggestions in the same line ----------------------------------------------------------------------
+  // Following one decision gives more suggestions, some of them later in the same line as others.
+  await page.selectOption('#pr-decisions', '1');
+  await page.click('#pr-go');
+  await page.waitForFunction(() => /^Done/.test(document.querySelector('#pr-progress').textContent) && document.querySelector('#pr-go').textContent === 'Analyse', null, { timeout: 240000 });
+  await settle(page, 400);
+  const links = await page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => [tr.children[0].firstChild.textContent, tr.querySelector('.pr-link-btn')?.textContent ?? '']));
+  console.log('  same-line marks:', links.map((l) => l.join(' ')).join(' | '));
+  const ply = (t) => Number(t.match(/^(\d+)/)[1]) * 2 + (t.includes('…') ? 1 : 0);
+  check(links.some(([, b]) => /↓/.test(b)) && links.some(([, b]) => /↑/.test(b)), 'suggestions earlier / later in the same line are marked');
+  check(links.every(([w, b]) => !/↑/.test(b) || links.some(([w2, b2]) => /↓/.test(b2) && ply(w2) < ply(w))), 'an earlier one for each ↑');
+  const iLater = links.findIndex(([, b]) => /↑/.test(b));
+  await page.click(`#pr-worth-table tbody tr:nth-child(${iLater + 1}) .pr-link-btn`);
+  await settle(page, 200);
+  const cls = await page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => tr.className));
+  check(cls[iLater].includes('pr-focus') && cls.some((c) => c.includes('pr-link-earlier')), `tap highlights the others in the line (${cls.join(',')})`);
+  await page.click('#pr-worth-table .pr-link-btn.on');
+  check(!(await page.$('#pr-worth-table.pr-focusing')), 'tap again to clear');
+  await page.click('#pr-worth-table .pr-sort[data-sort="line"]');
+  const byLine = await page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => tr.children[0].title.replace(/ …$/, '')));
+  check(byLine.every((t, i) => i === 0 || t.startsWith(byLine[i - 1]) || t >= byLine[i - 1]), `sort by After groups each line, earlier first (${byLine.join(' | ')})`);
+  if (SHOTS) {
+    await page.click(`#pr-worth-table .pr-link-btn >> nth=0`);
+    await page.screenshot({ path: `${SHOTS}/practical-links.png`, clip: { x: 0, y: 0, width: 1440, height: 900 } });
+  }
 
   // ---- show on board --------------------------------------------------------------------------------
   await page.click('.pr-pos:first-of-type .pr-pos-title button');

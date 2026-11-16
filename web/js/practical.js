@@ -13,7 +13,7 @@ import { api } from './api.js';
 import { button, el, miniBoard } from './dom.js';
 import { Engine } from './engine.js';
 import {
-  DEFAULTS, addDecision, breakEven, stillSharp, worthFollowing, breakEvenText, candidateMoves, decision, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
+  DEFAULTS, addDecision, breakEven, lineLinks, stillSharp, worthFollowing, breakEvenText, candidateMoves, decision, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
 } from './practical-core.js';
 import { plural, store, toast } from './ui.js';
 
@@ -648,7 +648,7 @@ export class PracticalView {
     box.hidden = !picks.length && !final;
     box.replaceChildren(
       el('h2', 'dash-h2', 'Sharpest alternatives'),
-      el('p', 'pr-note', 'Moves you don’t play yet, at least as sharp as yours, where they have at most two good replies at every one of their decisions along the main line (all of the ones you chose to follow) and, at one of them, their second-best is at least 5 points worse. Break-even: how often they’d have to miss (playing their second-best, at any of their decisions on the line) for the move to score better than yours; “free” when it’s no worse even if they always find the best. Eval change is in pawns from White’s side: green when it’s better for you. Tap a heading to sort; tap a move to see it on the board (it’s then ticked as seen).'),
+      el('p', 'pr-note', 'Moves you don’t play yet, at least as sharp as yours, where they have at most two good replies at every one of their decisions along the main line (all of the ones you chose to follow) and, at one of them, their second-best is at least 5 points worse. Break-even: how often they’d have to miss (playing their second-best, at any of their decisions on the line) for the move to score better than yours; “free” when it’s no worse even if they always find the best. Eval change is in pawns from White’s side: green when it’s better for you. ↑ / ↓ next to a position: other suggestions earlier / later in the same line (you’d only change one move per line); tap it to highlight them, or sort by After to group each line together. Tap a heading to sort; tap a move to see it on the board (it’s then ticked as seen).'),
     );
     if (!picks.length) {
       box.appendChild(el('p', 'pr-note', final && this.results.length
@@ -683,7 +683,7 @@ export class PracticalView {
     const sharp = (c) => (Number.isFinite(c?.sharpness) ? Math.round(c.sharpness) : null);
     const COLS = [
       // [heading, sort key, value for sorting, ascending]
-      ['After', null],
+      ['After', 'line', (p) => (p.position.sans ?? []).join('\u0001'), true], // grouped by line, earlier first
       ['Play', null],
       ['Break-even', 'breakeven', (p) => breakEven(p.cand, p.mine) ?? Infinity, true],
       ['Sharpness', 'sharpness', (p) => p.cand.sharpness],
@@ -710,7 +710,8 @@ export class PracticalView {
       if (x === y) return 0;
       if (x === Infinity || y === -Infinity) return 1; // "never" / unknown last, whichever way
       if (y === Infinity || x === -Infinity) return -1;
-      return col[3] ? x - y : y - x;
+      const d = typeof x === 'string' ? x.localeCompare(y) : x - y; // the line: by its moves
+      return col[3] ? d : -d;
     };
     const rows = [...picks].sort((a, b) => order(a, b) || b.cand.sharpness - a.cand.sharpness);
 
@@ -734,11 +735,36 @@ export class PracticalView {
     const thead = el('thead');
     thead.appendChild(hr);
     const tbody = el('tbody');
-    for (const { position, cand: c, mine } of rows) {
+    const links = lineLinks(rows);
+    const id = (p) => `${p.position.key}|${p.cand.uci}`;
+    const focus = rows.findIndex((p) => id(p) === this.worthFocus);
+    if (focus < 0) this.worthFocus = null;
+    table.classList.toggle('pr-focusing', focus >= 0);
+    for (const [i, { position, cand: c, mine }] of rows.entries()) {
       const seen = this._isSeen(position, c.uci);
       const tr = el('tr', seen ? 'seen' : '');
-      const where = el('td', 'pr-where', this._last(position.sans));
+      if (focus >= 0) {
+        const f = links[focus];
+        tr.classList.add(i === focus ? 'pr-focus' : f.earlier.includes(i) ? 'pr-link-earlier' : f.later.includes(i) ? 'pr-link-later' : f.same.includes(i) ? 'pr-link-same' : 'pr-unlinked');
+      }
+      const where = el('td', 'pr-where');
+      where.appendChild(el('span', '', this._last(position.sans)));
       where.title = `${movetext(position.sans)} …`;
+      const { earlier, later, same } = links[i];
+      if (earlier.length || later.length || same.length) {
+        const parts = [earlier.length ? `↑${earlier.length}` : '', later.length ? `↓${later.length}` : '', same.length ? `=${same.length}` : ''].filter(Boolean);
+        const tip = [
+          earlier.length ? `${earlier.length} earlier in this line (changing ${earlier.length > 1 ? 'one of those' : 'that'} means this position doesn’t come up)` : '',
+          later.length ? `${later.length} later in this line (this one would take ${later.length > 1 ? 'them' : 'it'} away)` : '',
+          same.length ? `${same.length} more in this same position` : '',
+        ].filter(Boolean).join('; ');
+        const b = button(parts.join(' '), `pr-link-btn${i === focus ? ' on' : ''}`, () => {
+          this.worthFocus = i === focus ? null : id(rows[i]);
+          this._drawWorth(!this.run);
+        }, `Same line: ${tip}. Tap to highlight them.`);
+        b.setAttribute('aria-pressed', String(i === focus));
+        where.appendChild(b);
+      }
       const play = el('td', 'pr-move');
       play.appendChild(button(c.san, 'pr-move-btn', () => this._open(position, c), `Show on board. Main line: ${c.line.join(' ')}`));
       if (mine) play.appendChild(el('span', 'pr-instead', `not ${mine.san}`));
