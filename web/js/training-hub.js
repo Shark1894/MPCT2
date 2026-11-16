@@ -380,17 +380,17 @@ export class TrainingView {
       b.setAttribute('aria-pressed', String(k === filter));
       chips.appendChild(b);
     }
-    const imp = button('Import course', 'tr-cta small', () => this.importCourse(), 'Import a Chessable course (one combined .json file)');
+    const imp = button('Import course', 'tr-cta small', () => this.importCourse(), 'Import a Chessable course (one combined .json file) or a PGN file of studies or exercises');
     imp.id = 'cv-import';
     sec.appendChild(this._sectionHead('tr-courses', 'Courses', 'Your library, worked through in order.', [chips, imp]));
     const shelf = el('div', 'tr-shelf');
     const shown = this.courses.filter((c) => !filter || c.kind === filter);
     for (const c of shown) shelf.appendChild(this._cover(c));
     const add = button('', 'tr-cover tr-cover-add', () => this.importCourse());
-    add.append(el('span', 'tr-plus', '+'), el('span', '', 'Import a Chessable course'));
+    add.append(el('span', 'tr-plus', '+'), el('span', '', 'Import a Chessable course or a PGN file'));
     shelf.appendChild(add);
     sec.appendChild(shelf);
-    const empty = el('p', 'tr-muted', this.loadError ? `Couldn't load your courses: ${this.loadError}` : 'Import adds your Chessable courses here: tactics, strategy, endgame courses or the Woodpecker Method.');
+    const empty = el('p', 'tr-muted', this.loadError ? `Couldn't load your courses: ${this.loadError}` : 'Import adds your Chessable courses here (tactics, strategy, endgame courses or the Woodpecker Method), or a PGN file of endgame studies or exercises.');
     empty.id = 'cv-empty';
     empty.hidden = this.courses.length > 0 && !this.loadError;
     sec.appendChild(empty);
@@ -599,10 +599,14 @@ export class TrainingView {
     await this.refresh();
   }
 
-  /** Choose a combined Chessable course file, the chapters, name and kind; import. */
+  /** Choose a combined Chessable course file (or a PGN file), the chapters, name and kind; import. */
   async importCourse() {
-    const file = await pickFile();
+    const file = await pickFile('.json,application/json,.pgn,application/x-chess-pgn');
     if (!file) return;
+    if (/\.pgn$/i.test(file.name)) {
+      await this.importPgn(file);
+      return;
+    }
     let course;
     try {
       course = readCourse(JSON.parse(await file.text()));
@@ -662,6 +666,62 @@ export class TrainingView {
       message: parts.join('\n') + (skipped.length ? `\n\n${skipped.join('\n')}` : ''),
       submit: 'OK',
     });
+  }
+
+  /**
+   * A PGN file as a course: each game an exercise from its start position (endgame studies:
+   * chapters by material). The server reads the file; you pick the chapters, name and kind.
+   */
+  async importPgn(file) {
+    const pgn = await file.text();
+    const name = file.name.replace(/\.pgn$/i, '').slice(0, 100);
+    let preview;
+    try {
+      preview = await api.previewPgnCourse({ pgn, name, group: 'auto' });
+    } catch (err) {
+      toast(`Couldn't read ${file.name}: ${err.message}`, 'error');
+      return;
+    }
+    const grouping = { material: 'by material', event: 'by event', none: 'as one chapter' }[preview.group];
+    const values = await formDialog({
+      title: 'Import a PGN file for Training',
+      message:
+        `${file.name}: ${plural(preview.exercises, 'exercise')} in ${plural(preview.chapters.length, 'chapter')} (${grouping}). ` +
+        'Each game is an exercise from its start position: you play the side to move and its main line is the solution. ' +
+        'Tick the chapters to import. Importing the same file under the same name again updates it and keeps your progress.' +
+        (preview.skipped.length ? `\n\n${plural(preview.skipped.length, 'game')} can't be used: ${preview.skipped.slice(0, 3).join('; ')}${preview.skipped.length > 3 ? '…' : ''}` : ''),
+      fields: [
+        { name: 'name', label: 'Course name', value: name, maxLength: 100 },
+        { name: 'kind', label: 'Kind', type: 'select', options: KINDS, value: 'endgames' },
+        ...preview.chapters.map((c) => ({ name: `ch_${c.id}`, label: `${c.title} (${plural(c.count, 'exercise')})`, type: 'checkbox', value: true })),
+      ],
+      submit: 'Import',
+    });
+    if (!values) return;
+    const chapterIds = preview.chapters.filter((c) => values[`ch_${c.id}`]).map((c) => c.id);
+    if (!chapterIds.length) {
+      toast('No exercises chosen: tick at least one chapter.', 'error');
+      return;
+    }
+    const total = preview.chapters.filter((c) => values[`ch_${c.id}`]).reduce((n, c) => n + c.count, 0);
+    toast(`Importing ${plural(total, 'exercise')}…`);
+    let r;
+    try {
+      r = await api.importPgnCourse({ pgn, name: values.name, kind: values.kind, group: preview.group, chapter_ids: chapterIds });
+    } catch (err) {
+      toast(`Not imported: ${err.message}`, 'error');
+      return;
+    }
+    const parts = [
+      `${r.created_course ? 'Created' : 'Updated'} “${r.course}”: ${plural(r.added, 'new exercise')}`,
+      r.updated ? `${plural(r.updated, 'exercise')} updated` : '',
+      r.unchanged ? `${r.unchanged} unchanged` : '',
+      r.reset ? `${plural(r.reset, 'exercise')} changed, so they're new again` : '',
+    ].filter(Boolean);
+    this.page = { view: 'course', id: r.course_id };
+    store.set('trainingPage', this.page);
+    await this.refresh();
+    await formDialog({ title: 'Course imported', message: parts.join('\n'), submit: 'OK' });
   }
 }
 

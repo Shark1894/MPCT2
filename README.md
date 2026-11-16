@@ -46,6 +46,7 @@ The full plan, decisions and data model are in the project's
 | — | Training tab redesign: a hub where puzzles, courses and drills each have their own look | Done |
 | — | Named endgames: Lucena, Philidor, Vančura, Q v P, Q v R, R v B, wrong rook pawn, Réti (win and defend drills with guides) | Done |
 | — | Stats tab: time spent on openings, tactics, endgames, strategy, games and analysis | Done |
+| — | PGN import into the Training tab: endgame studies (chapters by material) or any exercises from set-up positions | Done |
 
 ## Using the board
 
@@ -630,6 +631,30 @@ through in order, move by move, on the board.
 - While solving, navigation and the engine are off; once an exercise is finished you can step through it and
   analyse.
 
+### PGN files (endgame studies)
+
+**Import course** also takes a **.pgn** file: endgame studies, or any set of exercises from set-up positions.
+Each game is one exercise: from its start position (the `FEN` tag, else the initial position) you play the side
+to move, the other side's moves are played for you, and the main line is the solution. The server reads the file
+first and shows what it holds; you name the course (the file name to start with), choose its kind (Endgames to
+start with) and tick the chapters.
+
+- **Chapters**: by material when most games start from a set-up position (Pawn endings, Minor piece endings, Rook
+  endings, Rook and minor piece endings, Queen endings, Many pieces: more than 8 pieces besides kings and pawns),
+  else one chapter per `Event`.
+- **Titles**: composer and year, then the material, e.g. "Reti, Richard, 1921 · P v P" (for a game: "White – Black").
+  In study collections (HHdb style) `White` is the composer and `Black` the stipulation ("Win" / "Draw").
+- **Start note**: the task ("White to play and draw", from the `Black` stipulation or the result), the source
+  (composer, event, year) and the game's opening comment. Comments after moves become notes after those moves; a
+  sideline is written out in brackets on the note after the main move it replaces, so it never gives the answer away.
+- Games with no moves, an illegal start position or a reading error are skipped (and listed); a study that appears
+  twice is imported once. At most 20,000 exercises an import: tick fewer chapters for bigger files.
+- Importing the same file under the same name again updates the course and keeps your progress (an exercise is
+  matched by its start position and moves).
+
+API: `POST /api/courses/pgn/preview` (`{"pgn", "name", "group": "auto" | "material" | "event" | "none"}` → the chapters
+and counts) and `POST /api/courses/pgn/import` (the same plus `"kind"` and `"chapter_ids"`).
+
 ### Endgame drills
 
 In **Endgame drills** on the Training page, in four groups:
@@ -832,6 +857,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/masters.e2e.cjs
 # the fake also plays Lichess (user JasonS); server started with LICHESS_API_URL=http://127.0.0.1:8099
 # (restart the fake between runs: some checks count its requests):
 MPCT_URL=http://localhost:8010/ node tests/e2e/lichess.e2e.cjs
+MPCT_URL=http://localhost:8010/ node tests/e2e/studies.e2e.cjs      # empty database (PGN of endgame studies into Training)
 MPCT_URL=http://localhost:8010/ node tests/e2e/courseimport.e2e.cjs  # empty database (COURSE_FILE=export.json also imports a real one)
 MPCT_URL=http://localhost:8010/ node tests/e2e/courses.e2e.cjs      # empty database (Training tab)
 MPCT_URL=http://localhost:8010/ node tests/e2e/stats.e2e.cjs        # empty database (time tracking, Stats tab)

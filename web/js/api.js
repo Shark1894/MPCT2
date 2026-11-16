@@ -96,6 +96,8 @@ export const api = {
   courses: () => request('GET', '/courses'),
   course: (id) => request('GET', `/courses/${id}`),
   importTrainingCourse: (body) => request('POST', '/courses/import', { body }),
+  previewPgnCourse: (body) => request('POST', '/courses/pgn/preview', { body }),
+  importPgnCourse: (body) => request('POST', '/courses/pgn/import', { body }),
   updateCourse: (id, body) => request('PATCH', `/courses/${id}`, { body }),
   deleteCourse: (id) => request('DELETE', `/courses/${id}`),
   resetCourse: (id, chapterId = null) => request('POST', `/courses/${id}/reset`, { body: { chapter_id: chapterId } }),

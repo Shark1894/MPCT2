@@ -67,12 +67,12 @@ export function chosenLines(course, chapterIds, withReference) {
     .map(slimLine);
 }
 
-/** Pick a .json file with the browser's file chooser (resolves null if none is chosen). */
-export function pickFile() {
+/** Pick a file with the browser's file chooser (resolves null if none is chosen). */
+export function pickFile(accept = '.json,application/json') {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,application/json';
+    input.accept = accept;
     input.addEventListener('change', () => resolve(input.files[0] ?? null), { once: true });
     input.addEventListener('cancel', () => resolve(null), { once: true });
     input.click();
