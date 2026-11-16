@@ -68,11 +68,12 @@ def positions(s: Session, opening_id: int, tag_id: int | None = None) -> dict:
 # ---- engine lines --------------------------------------------------------------------------------
 
 
-def evals_lookup(s: Session, fens: list[str], multipv: int, movetime_ms: int) -> list[dict | None]:
-    """Saved lines for each FEN (same order) with at least this many lines and this much time."""
+def evals_lookup(s: Session, fens: list[str], multipv: int, movetime_ms: int = 0, depth: int = 0) -> list[dict | None]:
+    """Saved lines for each FEN (same order) with at least this many lines, this much time and
+    this depth."""
     keys = [key_from_fen(f) for f in fens]
     rows = s.scalars(select(PracticalEval).where(PracticalEval.key.in_(set(keys)))).all()
-    good = {r.key: r for r in rows if r.multipv >= multipv and r.movetime_ms >= movetime_ms}
+    good = {r.key: r for r in rows if r.multipv >= multipv and r.movetime_ms >= movetime_ms and r.depth >= depth}
     return [
         {"multipv": good[k].multipv, "movetime_ms": good[k].movetime_ms, "depth": good[k].depth, "lines": good[k].lines}
         if k in good else None
@@ -81,7 +82,7 @@ def evals_lookup(s: Session, fens: list[str], multipv: int, movetime_ms: int) ->
 
 
 def evals_save(s: Session, items: list[dict]) -> int:
-    """Save lines. They replace saved ones only with at least as many lines and as much time."""
+    """Save lines. They replace saved ones only with at least as many lines and as deep a search."""
     saved = 0
     for item in items:
         values = {"key": key_from_fen(item["fen"]), **{k: item[k] for k in ("multipv", "movetime_ms", "depth", "lines", "engine")}}
@@ -89,7 +90,7 @@ def evals_save(s: Session, items: list[dict]) -> int:
         stmt = stmt.on_conflict_do_update(
             index_elements=[PracticalEval.key],
             set_={k: stmt.excluded[k] for k in ("multipv", "movetime_ms", "depth", "lines", "engine")} | {"updated_at": stmt.excluded.updated_at},
-            where=(PracticalEval.multipv <= stmt.excluded.multipv) & (PracticalEval.movetime_ms <= stmt.excluded.movetime_ms),
+            where=(PracticalEval.multipv <= stmt.excluded.multipv) & (PracticalEval.depth <= stmt.excluded.depth),
         ).returning(PracticalEval.key)
         saved += len(s.execute(stmt).all())
     return saved

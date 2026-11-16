@@ -80,6 +80,10 @@ def test_evals_cache(client):
     assert (hit["multipv"], hit["movetime_ms"], len(hit["lines"])) == (5, 800, 2)
     assert look(8, 500)[0] is None and look(5, 1000)[0] is None  # not enough lines / time
     assert save(1, 800, [line("d7d5", -30)]) == 0  # fewer lines: the saved one stays
+    by_depth = lambda d: client.post("/api/practical/evals/lookup", json={"fens": [fen], "multipv": 3, "depth": d}).json()["evals"][0]
+    assert by_depth(14)["depth"] == 14 and by_depth(16) is None  # searched to depth 14 only
+    shallower = client.post("/api/practical/evals", json={"evals": [{"fen": fen, "multipv": 8, "movetime_ms": 900, "depth": 10, "engine": "sf", "lines": [line("a7a6", 0)]}]}).json()["saved"]
+    assert shallower == 0  # more lines but a shallower search: the saved one stays
     assert save(8, 800, [line("c7c5", -25)]) == 1
     assert look(8, 800)[0]["lines"][0]["uci"] == "c7c5"
     r = client.post("/api/practical/evals", json={"evals": [{"fen": "nonsense", "multipv": 1, "movetime_ms": 100, "depth": 1, "engine": "x", "lines": []}]})

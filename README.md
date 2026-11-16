@@ -798,7 +798,7 @@ recapture), where they have at most two good replies and their second-best is at
 left out). Columns: after (the move that led there; hover for the whole line), the move and the one it replaces,
 **break-even**, sharpness, yours, the difference, good replies, gap, cost, the evals of the suggestion and of your
 move, the **eval change** (suggestion minus yours, pawns from White's side, green when better for you, red when
-worse) and **seen**.
+worse), the **depth** searched and **seen**.
 
 **Break-even** puts the trade-off in one number: how often they'd have to miss their best reply (playing their
 second-best instead) for the suggestion to score better than your move. With A, A2 your winning chances after
@@ -811,8 +811,11 @@ lowest first; tap a heading to sort by another column.
 the server (`practical_seen`) so it shows on every device; tap the tick to undo. Seen rows are dimmed, and **Hide
 the ones you've seen** leaves them out.
 
-The engine runs in the browser (Stockfish, Quick 0.3 s / Normal 0.8 s / Deep 2 s an analysis, about 9 analyses a
-position); its lines are saved on the server (`practical_evals`), so running the same branch again is quick.
+The engine runs in the browser (Stockfish), searching every analysis to the chosen depth: 12, 16 (default), 20 or
+24 half-moves, with 8 lines at once, about 9 analyses a position. A 30-second limit per analysis stops a hard
+position from stalling the run; the **Depth** column (and each position's heading) shows how deep each line
+actually got, in amber when the limit stopped it short. Lines are saved on the server (`practical_evals`) with
+their depth, so running the same branch again at the same or a lower depth is quick.
 
 API: `GET /api/practical/positions?opening_id=&tag_id=`, `POST /api/practical/evals/lookup`
 (`{"fens", "multipv", "movetime_ms"}`), `POST /api/practical/evals`, `POST /api/practical/seen/lookup` (`{"keys"}`),

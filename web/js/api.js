@@ -103,7 +103,7 @@ export const api = {
   importTrainingCourse: (body) => request('POST', '/courses/import', { body }),
   // Practical tab
   practicalPositions: (openingId, tagId) => request('GET', '/practical/positions', { params: { opening_id: openingId, ...(tagId ? { tag_id: tagId } : {}) } }),
-  practicalEvals: (fens, multipv, movetimeMs) => request('POST', '/practical/evals/lookup', { body: { fens, multipv, movetime_ms: movetimeMs } }),
+  practicalEvals: (fens, multipv, { depth = 0, movetimeMs = 0 } = {}) => request('POST', '/practical/evals/lookup', { body: { fens, multipv, depth, movetime_ms: movetimeMs } }),
   savePracticalEvals: (evals) => request('POST', '/practical/evals', { body: { evals } }),
   practicalSeen: (keys) => request('POST', '/practical/seen/lookup', { body: { keys } }),
   markPracticalSeen: (key, uci) => request('PUT', '/practical/seen', { body: { key, uci } }),

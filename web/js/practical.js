@@ -18,17 +18,27 @@ import {
 import { plural, store, toast } from './ui.js';
 
 const ENGINE_NAME = 'Stockfish 19 Lite';
-const THINK = [
-  [300, 'Quick (0.3 s a position)'],
-  [800, 'Normal (0.8 s)'],
-  [2000, 'Deep (2 s)'],
+const DEPTHS = [
+  [12, 'Fast (depth 12)'],
+  [16, 'Normal (depth 16)'],
+  [20, 'Deep (depth 20)'],
+  [24, 'Very deep (depth 24, slow)'],
 ];
+const LIMIT_MS = 30000; // most time one analysis may take, so a hard position can't stall the run
 const CAPS = [
   [8, 'Up to 8 points worse'],
   [15, 'Up to 15 points worse'],
   [25, 'Up to 25 points worse'],
 ];
 const SAVE_BATCH = 20;
+
+/** The depth a line was searched to; amber when the time limit stopped it short of `wanted`. */
+function depthCell(depth, wanted) {
+  const short = depth != null && depth < wanted;
+  const td = el('td', `num pr-depth${short ? ' short' : ''}`, depth == null ? '–' : String(depth));
+  td.title = depth == null ? '' : short ? `Searched to depth ${depth}: the ${LIMIT_MS / 1000} s limit stopped it before depth ${wanted}` : `Searched to depth ${depth}`;
+  return td;
+}
 
 /** A move's sharpness, marked when it's only a capture they take back. */
 function sharpCell(c) {
@@ -78,13 +88,14 @@ function after(fen, uci) {
  * enough, new ones saved in batches.
  */
 class Worker {
-  constructor({ movetime }) {
-    this.movetime = movetime;
+  constructor({ depth }) {
+    this.depth = depth;
     this.engine = null;
     this.evals = new Map(); // fen|multipv -> lines
+    this.depths = new Map(); // fen|multipv -> depth the search reached
     this.pending = [];
     this.cancelled = false;
-    this.counts = { engine: 0, saved: 0 };
+    this.counts = { engine: 0, saved: 0, limited: 0 };
   }
 
   /** The engine's best `multipv` moves: [{uci, score}] (White-POV). */
@@ -93,28 +104,40 @@ class Worker {
     if (this.evals.has(k)) return this.evals.get(k);
     let found = null;
     try {
-      found = (await api.practicalEvals([fen], multipv, this.movetime)).evals[0];
+      found = (await api.practicalEvals([fen], multipv, { depth: this.depth })).evals[0];
     } catch {
       // the cache is a help, not a need
     }
     let lines;
+    let depth;
     if (found) {
       lines = found.lines;
+      depth = found.depth;
       this.counts.saved += 1;
     } else {
       this.engine ??= new Engine({ onUpdate: () => {}, onStatus: () => {} });
-      const r = await this.engine.evaluate(fen, { multipv, movetime: this.movetime });
+      const t0 = performance.now();
+      const r = await this.engine.evaluate(fen, { multipv, depth: this.depth, movetime: LIMIT_MS });
       if (!r || this.cancelled) throw new Error('stopped');
+      const ms = Math.max(10, Math.round(performance.now() - t0));
+      if (r.depth < this.depth) this.counts.limited += 1; // the time limit stopped it first
+      depth = r.depth;
       const seen = new Set(); // a move can come back under two lines as the search settles
       lines = r.lines
         .filter((l) => l.pv?.length && !seen.has(l.pv[0]) && seen.add(l.pv[0]))
         .map((l) => ({ uci: l.pv[0], score: l.score, pv: l.pv.slice(0, 12) }));
       this.counts.engine += 1;
-      this.pending.push({ fen, multipv, movetime_ms: this.movetime, depth: r.depth, engine: ENGINE_NAME, lines });
+      this.pending.push({ fen, multipv, movetime_ms: Math.min(ms, 60000), depth: r.depth, engine: ENGINE_NAME, lines });
       if (this.pending.length >= SAVE_BATCH) this.flush();
     }
     this.evals.set(k, lines);
+    this.depths.set(k, depth);
     return lines;
+  }
+
+  /** How deep the search behind lines(fen, multipv) went. */
+  depthOf(fen, multipv) {
+    return this.depths.get(`${fen}|${multipv}`) ?? null;
   }
 
   flush() {
@@ -151,8 +174,11 @@ async function analysePosition(w, position, me, opts) {
     }
     const theirLines = await w.lines(next.fen, opts.replies);
     const sans = Object.fromEntries(theirLines.map((l) => [l.uci, sanOf(next.fen, l.uci)]));
-    cands.push(scoreCandidate({ uci, san, me, theirLines, sans, repertoire, capture: san.includes('x') }, opts));
+    const c = scoreCandidate({ uci, san, me, theirLines, sans, repertoire, capture: san.includes('x') }, opts);
+    c.depth = w.depthOf(next.fen, opts.replies); // how deep their replies were searched
+    cands.push(c);
   }
+  position.depth = w.depthOf(fen, opts.candidates); // how deep your candidate moves were searched
   return finish(cands, opts);
 }
 
@@ -162,7 +188,7 @@ export class PracticalView {
     this.onShowLine = onShowLine;
     this.box = document.getElementById('practical-view');
     const saved = store.get('practical', {});
-    this.settings = { openingId: saved.openingId ?? null, tagId: saved.tagId ?? null, movetime: saved.movetime ?? 800, cap: saved.cap ?? 15 };
+    this.settings = { openingId: saved.openingId ?? null, tagId: saved.tagId ?? null, depth: saved.depth ?? 16, cap: saved.cap ?? 15 };
     this.results = [];
     this.run = null;
     this.info = null;
@@ -267,7 +293,7 @@ export class PracticalView {
       });
       return s;
     };
-    this.el.think = select('pr-think', THINK, this.settings.movetime, 'movetime');
+    this.el.depth = select('pr-depth', DEPTHS, this.settings.depth, 'depth');
     this.el.cap = select('pr-cap', CAPS, this.settings.cap, 'cap');
 
     this.el.go = button('Analyse', 'primary', () => (this.run ? this.stop() : this.start()));
@@ -275,7 +301,7 @@ export class PracticalView {
     controls.append(
       field('Opening', this.el.opening),
       field('Branch', this.el.tag),
-      field('Engine time', this.el.think),
+      field('Engine depth', this.el.depth),
       field('Moves to consider', this.el.cap),
       this.el.go,
     );
@@ -298,6 +324,7 @@ export class PracticalView {
         ['Cost', 'winning chances the move gives away against the engine’s best move here. Points aren’t pawns: near equality a pawn is about 9 points (half a pawn about 5), and the same pawn is worth fewer points when one side is already well ahead'],
         ['Good replies', 'how many of their 8 best replies stay within 7 points of their best: 1 means an only move'],
         ['Gap', 'how many points worse their second-best reply is than their best'],
+        ['Depth', 'how deep the engine searched their replies to the move (in half-moves). It’s the depth you chose unless the 30-second limit for one analysis stopped it first (shown in amber)'],
         ['Sharpness', 'how many points worse their other top replies are than their best, on average: high when nearly everything but the best move goes wrong for them. Marked “recapture” when your move takes something and their best is simply to take back: obvious, so not sharp in practice (left out of the sharpest alternatives)'],
       ]),
       el('p', 'pr-note', 'Points are winning chances (0–100) from the engine’s evaluations. ✗ marks a reply that isn’t good for them.'),
@@ -382,9 +409,9 @@ export class PracticalView {
     this.info = info;
     this.results = [];
     await this._loadSeen(info.positions);
-    const opts = { ...DEFAULTS, cap: this.settings.cap };
+    const opts = { ...DEFAULTS, cap: this.settings.cap, depth: this.settings.depth };
     this.opts = opts;
-    const w = new Worker({ movetime: this.settings.movetime });
+    const w = new Worker({ depth: this.settings.depth });
     this.run = { w, started: performance.now(), done: 0, total: info.positions.length };
     this.el.go.textContent = 'Stop';
     this.el.positions.replaceChildren();
@@ -420,7 +447,7 @@ export class PracticalView {
       const secs = Math.round((performance.now() - run.started) / 1000);
       this.el.progress.textContent = failed
         ? `Stopped: ${failed.message}`
-        : `${run.done === run.total ? 'Done' : 'Stopped'}: ${plural(run.done, 'position')} of ${run.total} in ${secs} s (engine: ${w.counts.engine} new, ${w.counts.saved} saved).`;
+        : `${run.done === run.total ? 'Done' : 'Stopped'}: ${plural(run.done, 'position')} of ${run.total} in ${secs} s at depth ${this.settings.depth} (engine: ${w.counts.engine} new, ${w.counts.saved} saved${w.counts.limited ? `; ${w.counts.limited} stopped by the ${LIMIT_MS / 1000} s limit before reaching it` : ''}).`;
       if (failed) toast(failed.message, 'error');
       this._drawWorth(true);
     }
@@ -504,7 +531,7 @@ export class PracticalView {
       ['Break-even', 'breakeven', (p) => breakEven(p.cand, p.mine) ?? Infinity, true],
       ['Sharpness', 'sharpness', (p) => p.cand.sharpness],
       ['Yours', null],
-      ['Difference', 'diff', (p) => (sharp(p.mine) === null ? -Infinity : sharp(p.cand) - sharp(p.mine))],
+      ['Difference', 'diff', (p) => (sharp(p.mine) === null || p.mine.recapture ? -Infinity : sharp(p.cand) - sharp(p.mine))],
       ['Good replies', 'good', (p) => p.cand.good, true],
       ['Gap', 'gap', (p) => (Number.isFinite(p.cand.gap) ? p.cand.gap : -1)],
       ['Cost', 'cost', (p) => p.cand.cost, true],
@@ -514,6 +541,7 @@ export class PracticalView {
         const d = evalChange(p.cand, p.mine, this.info.color);
         return d === null ? -Infinity : this.info.color === 'white' ? d.cp : -d.cp; // best for you first
       }],
+      ['Depth', 'depth', (p) => p.cand.depth ?? 0],
       ['Seen', 'seen', (p) => (this._isSeen(p.position, p.cand.uci) ? 1 : 0), true],
     ];
     const sortKey = this.worthSort ?? 'breakeven';
@@ -572,13 +600,15 @@ export class PracticalView {
         beCell,
         el('td', 'num pr-hot', sharp(c) === null ? '–' : String(sharp(c))),
         el('td', 'num', sharp(mine) === null ? '–' : `${sharp(mine)}${mine.recapture ? ' (recapture)' : ''}`),
-        diffCell(sharp(mine) === null || sharp(c) === null ? null : sharp(c) - sharp(mine)), // from the shown values, so they add up
+        // from the shown values, so they add up; none against a recapture (its sharpness isn't real)
+        diffCell(sharp(mine) === null || sharp(c) === null || mine.recapture ? null : sharp(c) - sharp(mine)),
         el('td', `num${c.good === 1 ? ' pr-hot' : ''}`, String(c.good)),
         el('td', 'num', Number.isFinite(c.gap) ? String(Math.round(c.gap)) : '–'),
         el('td', 'num', String(Math.round(c.cost))),
         el('td', 'num pr-eval', evalText(c.score)),
         el('td', 'num pr-eval', mine ? evalText(mine.score) : '–'),
         evalChangeCell(evalChange(c, mine, this.info.color)),
+        depthCell(c.depth, this.opts.depth),
         seenCell,
       ];
       cells.forEach((td, i) => (td.dataset.label = COLS[i][0]));
@@ -600,7 +630,7 @@ export class PracticalView {
     const yours = position.repertoire.map((u) => cands.find((c) => c.uci === u)?.san).filter(Boolean);
     t.append(
       el('h3', 'pr-pos-moves', `${movetext(position.sans)} …`),
-      el('p', 'pr-note', yours.length ? `Your move here: ${yours.join(', ')}` : 'Your move here'),
+      el('p', 'pr-note', `${yours.length ? `Your move here: ${yours.join(', ')}` : 'Your move here'}${position.depth != null ? ` · your moves searched to depth ${position.depth}` : ''}`),
       button('Show on board', 'small', () => this.onShowLine(position.sans)),
     );
     head.appendChild(t);
@@ -609,7 +639,7 @@ export class PracticalView {
     const table = el('table', 'pr-table');
     const thead = el('thead');
     const hr = el('tr');
-    const HEADS = ['Move', 'Eval', 'Engine', 'Cost', 'Good replies', 'Gap', 'Sharpness', 'Their replies → you'];
+    const HEADS = ['Move', 'Eval', 'Engine', 'Cost', 'Good replies', 'Gap', 'Sharpness', 'Depth', 'Their replies → you'];
     for (const h of HEADS) hr.appendChild(el('th', '', h));
     thead.appendChild(hr);
     const tbody = el('tbody');
@@ -634,6 +664,7 @@ export class PracticalView {
         el('td', `num${c.good === 1 ? ' pr-hot' : ''}`, final ? '–' : String(c.good)),
         el('td', 'num', final || !Number.isFinite(c.gap) ? '–' : String(Math.round(c.gap))),
         sharpCell(c),
+        depthCell(c.final ? null : c.depth, this.opts.depth),
         likely,
       );
       [...tr.children].forEach((td, i) => (td.dataset.label = HEADS[i]));

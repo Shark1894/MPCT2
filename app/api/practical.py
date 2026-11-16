@@ -34,7 +34,8 @@ class PositionsOut(BaseModel):
 class EvalsLookupIn(BaseModel):
     fens: list[Fen] = Field(max_length=500)
     multipv: int = Field(ge=1, le=10)
-    movetime_ms: int = Field(ge=0, le=60000)
+    movetime_ms: int = Field(default=0, ge=0, le=60000)
+    depth: int = Field(default=0, ge=0, le=245)  # saved lines searched at least this deep
 
 
 class PracticalEvalOut(BaseModel):
@@ -73,7 +74,7 @@ def positions(opening_id: int, s: Db, tag_id: int | None = None):
 
 @router.post("/practical/evals/lookup", response_model=EvalsLookupOut)
 def evals_lookup(body: EvalsLookupIn, s: Db):
-    return {"evals": repo.evals_lookup(s, body.fens, body.multipv, body.movetime_ms)}
+    return {"evals": repo.evals_lookup(s, body.fens, body.multipv, body.movetime_ms, body.depth)}
 
 
 @router.post("/practical/evals", response_model=SavedOut)

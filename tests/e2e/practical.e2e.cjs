@@ -55,7 +55,9 @@ async function api(page, method, path, body) {
   const tags = await page.$$eval('#pr-tag option', (os) => os.map((x) => x.textContent));
   check(tags[0] === 'Whole opening' && tags.some((t) => t.startsWith('Wuss')), `branches listed (${tags.join(' | ')})`);
   await page.selectOption('#pr-tag', String(tag.id));
-  await page.selectOption('#pr-think', '300');
+  const depths = await page.$$eval('#pr-depth option', (os) => os.map((x) => x.value));
+  check(depths.join() === '12,16,20,24' && (await page.inputValue('#pr-depth')) === '16', `engine depth options, 16 by default (${depths.join()})`);
+  await page.selectOption('#pr-depth', '12');
   check(!(await page.$('#pr-data')) && !(await page.$('#pr-strength')), 'no opponent model or game-data settings');
 
   // ---- analyse ------------------------------------------------------------------------------------
@@ -65,14 +67,14 @@ async function api(page, method, path, body) {
   check(true, 'analysis starts (button becomes Stop)');
   await page.waitForFunction(() => /^(Done|Stopped)/.test(document.querySelector('#pr-progress').textContent), null, { timeout: 240000 });
   const progress = await page.textContent('#pr-progress');
-  check(progress.startsWith('Done: 5 positions of 5'), `done (${progress})`);
+  check(progress.startsWith('Done: 5 positions of 5') && progress.includes('at depth 12'), `done (${progress})`);
   console.log(`  first run: ${Math.round((Date.now() - t0) / 1000)} s`);
   const cards = await page.$$eval('.pr-pos .pr-pos-moves', (hs) => hs.map((h) => h.textContent));
   check(cards.length === 5 && cards[0] === '1.e4 d5 2.exd5 Nf6 3.d4 Bg4 4.Be2 …', `a card per position, the branch's first (${cards[0]})`);
   const firstRows = await page.$$eval('.pr-pos:first-of-type tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
   check(firstRows.length >= 3, `candidate rows (${firstRows.length})`);
   const heads = await page.$$eval('.pr-pos:first-of-type thead th', (ths) => ths.map((t) => t.textContent));
-  check(heads.join('|') === 'Move|Eval|Engine|Cost|Good replies|Gap|Sharpness|Their replies → you', `columns (${heads.join('|')})`);
+  check(heads.join('|') === 'Move|Eval|Engine|Cost|Good replies|Gap|Sharpness|Depth|Their replies → you', `columns (${heads.join('|')})`);
   const yours = firstRows.find((r) => r[0].includes('yours'));
   check(yours && yours[0].startsWith('Bxe2'), 'your repertoire move is marked');
   const evalRe = /^([+−]\d+\.\d\d|0\.00|#.*)$/;
@@ -82,11 +84,14 @@ async function api(page, method, path, body) {
   const allRows = await page.$$eval('.pr-pos tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
   check(allRows.some((r) => r[4] === '1'), 'an only move somewhere');
   check(/recapture/.test(yours[6]), `your Bxe2 is marked as a recapture (${yours[6]})`);
-  check(firstRows.some((r) => /→ \d+%/.test(r[7])), 'their replies with your winning chances');
+  check(firstRows.some((r) => /→ \d+%/.test(r[8])), 'their replies with your winning chances');
+  check(allRows.every((r) => r[7] === '–' || Number(r[7]) <= 12 && Number(r[7]) >= 1), `depth reached per line (${[...new Set(allRows.map((r) => r[7]))].join(' ')})`);
+  check(allRows.filter((r) => r[7] !== '–').some((r) => r[7] === '12'), 'searched to the chosen depth');
+  check(/searched to depth 12/.test(await page.textContent('.pr-pos:first-of-type .pr-pos-title')), 'each position says how deep your moves were searched');
   check(!(await page.textContent('#practical-view')).match(/go wrong|Trap value|Practical\b(?! choices)/), 'no opponent-model measures on the page');
   check(await page.isVisible('#pr-worth'), 'sharpest alternatives shown');
   const wHeads = await page.$$eval('#pr-worth-table thead th', (ths) => ths.map((t) => t.textContent.replace(/[↕▼▲]/g, '').trim()));
-  check(wHeads.join('|') === 'After|Play|Break-even|Sharpness|Yours|Difference|Good replies|Gap|Cost|Eval|Yours (eval)|Eval change|Seen', `sharpest alternatives as a table (${wHeads.join('|')})`);
+  check(wHeads.join('|') === 'After|Play|Break-even|Sharpness|Yours|Difference|Good replies|Gap|Cost|Eval|Yours (eval)|Eval change|Depth|Seen', `sharpest alternatives as a table (${wHeads.join('|')})`);
   const cellsOf = () => page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
   let wrows = await cellsOf();
   check(wrows.length > 0 && wrows.every((r) => /^(\d+\.|\d+…)\S+$/.test(r[0])), `After shows just the last move (${wrows.map((r) => r[0]).join(', ')})`);
@@ -94,7 +99,7 @@ async function api(page, method, path, body) {
   check(wrows.every((r) => /^(\d+%|free|never|–)$/.test(r[2])) && wrows.map((r) => be(r[2])).every((v, i, a) => i === 0 || v >= a[i - 1]), `sorted by break-even, lowest first (${wrows.map((r) => r[2]).join(' ')})`);
   const num = (t) => Number(t.replace('−', '-'));
   check(wrows.every((r) => r[4].includes('recapture') || num(r[5]) >= 0), `never less sharp than yours (${wrows.map((r) => r[5]).join(' ')})`);
-  check(wrows.every((r) => r[4] === '–' || num(r[3]) - num(r[4].split(' ')[0]) === num(r[5])), 'difference = sharpness − yours');
+  check(wrows.every((r) => r[4] === '–' || (r[4].includes('recapture') ? r[5] === '–' : num(r[3]) - num(r[4].split(' ')[0]) === num(r[5]))), `difference = sharpness − yours, none against a recapture (${wrows.map((r) => `${r[4]}/${r[5]}`).join(' ')})`);
   check(wrows.every((r) => Number(r[6]) <= 2 && Number(r[7]) >= 5), 'at most two good replies and a gap of 5+');
   const pawns = (t) => Number(t.replace('−', '-'));
   check(wrows.every((r) => evalRe.test(r[9]) && evalRe.test(r[10]) && Math.abs(pawns(r[9]) - pawns(r[10]) - pawns(r[11])) < 0.011), `eval change = eval − yours (${wrows.map((r) => r[11]).join(' ')})`);
@@ -103,7 +108,7 @@ async function api(page, method, path, body) {
   check(sharps.every((t, i) => i === 0 || t <= sharps[i - 1]), `sorted by sharpness (${sharps.join(' ')})`);
 
   // ---- seen ---------------------------------------------------------------------------------------
-  check((await cellsOf()).every((r) => r[12] === ''), 'nothing seen yet');
+  check((await cellsOf()).every((r) => r[13] === ''), 'nothing seen yet');
   const opened = (await cellsOf())[0];
   await page.click('#pr-worth-table tbody tr:first-child .pr-move-btn');
   await settle(page, 800);
@@ -113,7 +118,7 @@ async function api(page, method, path, body) {
   await settle(page, 600);
   const afterSeen = await cellsOf();
   const seenRow = afterSeen.find((r) => r[0] === opened[0] && r[1] === opened[1]);
-  check(seenRow && seenRow[12] === '✓', 'back on the tab: that one is ticked as seen');
+  check(seenRow && seenRow[13] === '✓', 'back on the tab: that one is ticked as seen');
   check((await page.$$('#pr-worth-table tbody tr.seen')).length === 1, 'and shown dimmed');
   const saved = await api(page, 'POST', '/practical/seen/lookup', { keys: (await page.evaluate(() => mpct.practicalView.info.positions.map((p) => p.key))) });
   check(saved.length === 1, 'remembered on the server');
@@ -122,7 +127,7 @@ async function api(page, method, path, body) {
   await page.uncheck('#pr-hide-seen');
   await page.click('#pr-worth-table tbody tr.seen .pr-seen');
   await settle(page, 400);
-  check((await cellsOf()).every((r) => r[12] === ''), 'untick: not seen any more');
+  check((await cellsOf()).every((r) => r[13] === ''), 'untick: not seen any more');
   check((await api(page, 'POST', '/practical/seen/lookup', { keys: (await page.evaluate(() => mpct.practicalView.info.positions.map((p) => p.key))) })).length === 0, 'and forgotten on the server');
   const firstWhere = (await cellsOf())[0][0];
   check(!firstWhere.startsWith('1.e4'), `positions shown by their last move (${firstWhere})`);

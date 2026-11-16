@@ -142,11 +142,11 @@ export class Engine {
   }
 
   /**
-   * Analyse one position for a fixed time and resolve with the final result:
-   * { depth, lines: [{ score, pv, ... }] } (scores from White's point of view),
-   * or null if stopped first. Used by the move-by-move review.
+   * Analyse one position for a fixed time (or to a fixed depth, with `movetime` as a limit) and
+   * resolve with the final result: { depth, lines: [{ score, pv, ... }] } (scores from White's
+   * point of view), or null if stopped first. Used by the move-by-move review and the Practical tab.
    */
-  async evaluate(fen, { multipv = 2, movetime = 1000 } = {}) {
+  async evaluate(fen, { multipv = 2, movetime = 1000, depth = null } = {}) {
     await this.start();
     this.cancelBestMove();
     this._stopSearch();
@@ -156,7 +156,7 @@ export class Engine {
     this.current = { fen, whiteToMove: fen.split(' ')[1] === 'w', lines: new Map(), depth: 0, done: false, resolve };
     this._send(`setoption name MultiPV value ${multipv}`);
     this._send(`position fen ${fen}`);
-    this._send(`go movetime ${movetime}`);
+    this._send(depth ? `go depth ${depth}${movetime ? ` movetime ${movetime}` : ''}` : `go movetime ${movetime}`);
     return done;
   }
 

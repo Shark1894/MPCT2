@@ -5835,6 +5835,15 @@ th[aria-sort='ascending'] .pr-sort.on::after {
   color: var(--text-dim);
 }
 
+.pr-depth {
+  color: var(--text-dim);
+}
+
+.pr-depth.short {
+  color: #e8b64c;
+  font-weight: 700;
+}
+
 .pr-be {
   font-weight: 700;
 }
