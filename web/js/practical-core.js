@@ -12,11 +12,15 @@
 //   recapture  your move captures and their best reply simply takes back on that square: the
 //              "only move" is obvious, so it isn't sharp in practice (as in the old Sharpness scripts)
 //
-// Those describe one decision of theirs. The page follows the engine's main line (their best
-// reply, your best answer) to their next decisions, up to `decisions` of them, and each move
-// gets the chain: good replies decision by decision, how many only moves in a row they face from
-// the start, and the sharpest decision (whose sharpness and gap the move then shows). Recaptures
-// are obvious, so they never count as only moves or as the sharpest point.
+// Those describe one decision of theirs. The page then follows every good reply of theirs (your
+// best answer to each) to their next decisions, up to `decisions` of them, so a decision is all
+// the positions they can reach by playing only good moves. Each decision is summed up worst case
+// for you (`level`): the most good replies at any of those positions, the smallest gap and
+// sharpness. Each move gets the chain of those (good replies decision by decision), how many only
+// moves in a row they face from the start, and the sharpest decision (whose sharpness and gap the
+// move then shows). Recaptures are obvious, so they never count as only moves or as the sharpest
+// point. The engine's main line (their best reply, your best answer) is kept too (`chain`, `line`)
+// for the break-even and for showing on the board.
 
 export const DEFAULTS = {
   candidates: 8, // engine moves considered for you
@@ -77,16 +81,37 @@ export function decision(theirLines, me, { sans = {}, capture = false, myUci = '
   };
 }
 
-/** Recompute a move's summary from its chain of decisions. */
+/**
+ * One of their decisions, worst case for you over every position they can reach there by playing
+ * only good moves (`nodes`: decisions; the first is the main line's): the most good replies, the
+ * smallest gap and sharpness, among the ones that aren't recaptures. A recapture only when they
+ * all are.
+ */
+export function level(nodes) {
+  const real = nodes.filter((d) => !d.recapture);
+  if (!real.length) return { ...nodes[0], nodes: nodes.length };
+  const fin = (xs) => xs.filter(Number.isFinite);
+  const min = (xs) => (fin(xs).length ? Math.min(...fin(xs)) : NaN);
+  return {
+    good: Math.max(...real.map((d) => d.good)),
+    gap: min(real.map((d) => d.gap)),
+    sharpness: min(real.map((d) => d.sharpness)),
+    recapture: false,
+    nodes: nodes.length,
+  };
+}
+
+/** Recompute a move's summary from its decisions. */
 function summarise(c) {
-  const real = c.chain.filter((d) => !d.recapture);
-  const peak = real.length ? real.reduce((a, d) => ((d.sharpness || 0) > (a.sharpness || 0) ? d : a)) : c.chain[0];
+  const L = c.levels ?? c.chain;
+  const real = L.filter((d) => !d.recapture);
+  const peak = real.length ? real.reduce((a, d) => ((d.sharpness || 0) > (a.sharpness || 0) ? d : a)) : L[0];
   c.sharpness = peak?.sharpness ?? NaN;
   c.gap = peak?.gap ?? NaN;
-  c.peakAt = peak ? c.chain.indexOf(peak) + 1 : 0;
-  c.goodChain = c.chain.map((d) => (d.recapture ? 'r' : d.good));
+  c.peakAt = peak ? L.indexOf(peak) + 1 : 0;
+  c.goodChain = L.map((d) => (d.recapture ? 'r' : d.good));
   let inRow = 0;
-  for (const d of c.chain) {
+  for (const d of L) {
     if (d.recapture) continue; // obvious: neither adds pressure nor takes it away
     if (d.good !== 1) break;
     inRow += 1;
@@ -122,23 +147,28 @@ export function scoreCandidate({ uci, san, me, theirLines, sans = {}, repertoire
     firstSharpness: first.sharpness,
     recapture: first.recapture,
     replies: first.replies,
-    chain: [first],
+    chain: [first], // the main line's decisions
+    levels: [level([first])], // each decision, worst case over every good-move branch
     line: [san], // the main line followed: your move, their best, your best, ...
     final: false,
   };
   return summarise(c);
 }
 
-/** Add their next decision (after their best reply `theirSan` and your answer `mySan`). */
-export function addDecision(c, d, theirSan, mySan) {
+/**
+ * Add their next decision: `d` on the main line (after their best reply `theirSan` and your answer
+ * `mySan`), `side` the same decision in the other positions reached by their good replies.
+ */
+export function addDecision(c, d, theirSan, mySan, side = []) {
   c.chain.push(d);
+  (c.levels ??= c.chain.slice(0, -1).map((x) => level([x]))).push(level([d, ...side]));
   c.line.push(theirSan, mySan);
   return summarise(c);
 }
 
 /** A move that ends the game: its value straight from the result. */
 export function finalCandidate({ uci, san, value, repertoire = false }) {
-  return { uci, san, repertoire, engine: value, score: value === 50 ? { cp: 0 } : null, cost: 0, good: 0, gap: NaN, sharpness: NaN, firstGap: NaN, firstSharpness: NaN, replies: [], chain: [], line: [san], goodChain: [], inRow: 0, onlyMoves: 0, allRecapture: true, final: true, mate: value === 100 };
+  return { uci, san, repertoire, engine: value, score: value === 50 ? { cp: 0 } : null, cost: 0, good: 0, gap: NaN, sharpness: NaN, firstGap: NaN, firstSharpness: NaN, replies: [], chain: [], levels: [], line: [san], goodChain: [], inRow: 0, onlyMoves: 0, allRecapture: true, final: true, mate: value === 100 };
 }
 
 /**
@@ -157,7 +187,8 @@ export function stillSharp(d, opts = DEFAULTS) {
 export function worthFollowing(c, best, opts = DEFAULTS) {
   if (c.final) return false;
   if (c.repertoire) return true;
-  return best - c.engine <= opts.cap && c.chain.length > 0 && stillSharp(c.chain[c.chain.length - 1], opts);
+  const L = c.levels ?? c.chain;
+  return best - c.engine <= opts.cap && L.length > 0 && stillSharp(L[L.length - 1], opts);
 }
 
 /** Costs against your best move; keep those within the cap (and yours); least cost first. */
@@ -183,9 +214,10 @@ export function worthALook(results, opts = DEFAULTS) {
       if (c.repertoire || c.final) continue;
       // the whole line followed (all of their decisions), at most two good replies at every one of them,
       // and a clear gap at one that isn't a recapture
-      if (c.chain.length < (opts.decisions ?? 1)) continue;
-      if (!c.chain.every((d) => stillSharp(d, opts))) continue; // a recapture is obvious
-      if (!c.chain.some((d) => !d.recapture && d.gap >= opts.minGap)) continue;
+      const L = c.levels ?? c.chain;
+      if (L.length < (opts.decisions ?? 1)) continue;
+      if (!L.every((d) => stillSharp(d, opts))) continue; // a recapture is obvious
+      if (!L.some((d) => !d.recapture && d.gap >= opts.minGap)) continue;
       if (mine && !mine.allRecapture && Number.isFinite(mine.sharpness) && Math.round(c.sharpness) < Math.round(mine.sharpness)) continue;
       out.push({ position: r.position, cand: c, mine });
     }

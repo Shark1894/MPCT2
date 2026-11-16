@@ -53,7 +53,7 @@ function sharpCell(c) {
     td.appendChild(el('span', 'pr-model', 'recapture'));
     td.title = 'They simply take back: the only move is obvious, so this isn’t sharp in practice';
   } else {
-    td.title = `Sharpest at their decision ${c.peakAt}. Decision by decision: ${c.chain.map((d) => (d.recapture ? 'recapture' : Number.isFinite(d.sharpness) ? Math.round(d.sharpness) : '–')).join(' → ')}`;
+    td.title = `Sharpest at their decision ${c.peakAt}. Decision by decision (worst case over their good replies): ${(c.levels ?? c.chain).map((d) => (d.recapture ? 'recapture' : Number.isFinite(d.sharpness) ? Math.round(d.sharpness) : '–')).join(' → ')}`;
   }
   return td;
 }
@@ -66,7 +66,7 @@ function chainCell(c, onShow) {
     return td;
   }
   const b = button('', 'pr-chain-btn', onShow);
-  c.chain.forEach((d, i) => {
+  (c.levels ?? c.chain).forEach((d, i) => {
     if (i) b.append(' → ');
     const v = d.recapture ? 'r' : String(d.good);
     b.appendChild(el('span', d.recapture ? 'pr-chain-r' : d.good === 1 ? 'pr-chain-1' : '', v));
@@ -75,7 +75,7 @@ function chainCell(c, onShow) {
     b.append(' → ');
     b.appendChild(el('span', 'pr-chain-r', '…'));
   }
-  b.title = `Main line: ${c.line.join(' ')}. Good replies at each of their decisions (r = they just take back).${c.stopped ? ' Not followed further: too many good replies (or too costly) for it to be a sharp alternative.' : ''} Tap to see the line on the board.`;
+  b.title = `Main line: ${c.line.join(' ')}. Good replies at each of their decisions, the most in any position they can reach by playing only good moves (positions checked: ${(c.levels ?? []).map((d) => d.nodes ?? 1).join(', ')}; r = they just take back).${c.stopped ? ' Not followed further: too many good replies (or too costly) for it to be a sharp alternative.' : ''} Tap to see the line on the board.`;
   td.appendChild(b);
   return td;
 }
@@ -193,54 +193,84 @@ class Worker {
  * Follow the engine's main line after one of your moves: their best reply, your best answer, and
  * score their next decision; up to opts.decisions of them. Stops at the end of the game.
  */
-async function followLine(w, c, fen, theirLines, me, opts) {
-  let pos = fen;
-  let lines = theirLines;
-  for (let k = 2; k <= opts.decisions && !w.cancelled; k++) {
-    const best = c.chain[c.chain.length - 1].replies[0];
-    if (!best) return;
-    let r;
+/**
+ * Your best answer to their reply `uci` in `fen` (they're to move): the next move of the engine's
+ * line for that reply if it has one, else ask the engine. {fen after your answer, san, uci} | null.
+ */
+async function answer(w, fen, lines, uci) {
+  let r;
+  try {
+    r = after(fen, uci);
+  } catch {
+    return null;
+  }
+  if (r.over) return null;
+  let mine = lines.find((l) => l.uci === uci)?.pv?.[1];
+  let m = null;
+  if (mine) {
     try {
-      r = after(pos, best.uci);
+      m = after(r.fen, mine);
     } catch {
-      return;
+      m = null;
     }
-    if (r.over) return;
-    // your best answer: from the engine's line for their reply, else ask the engine
-    let mine = lines.find((l) => l.uci === best.uci)?.pv?.[1];
-    let m = null;
-    if (mine) {
-      try {
-        m = after(r.fen, mine);
-      } catch {
-        m = null;
+  }
+  if (!m) {
+    mine = (await w.lines(r.fen, 1))[0]?.uci;
+    if (!mine) return null;
+    try {
+      m = after(r.fen, mine);
+    } catch {
+      return null;
+    }
+  }
+  if (m.over) return null;
+  return { fen: m.fen, uci: mine, san: sanOf(r.fen, mine) };
+}
+
+/**
+ * Follow their decisions after your move `c`: every good reply of theirs (your best answer to
+ * each), so each decision covers all the positions they can reach by playing only good moves,
+ * summed up worst case for you. The main line (their best reply each time) is tracked too. A
+ * move other than yours stops as soon as a decision has more than `maxGood` good replies (it
+ * can't be a sharp alternative then); after such a decision your own move follows the main line only.
+ */
+async function followLine(w, c, fen, theirLines, me, opts) {
+  // positions where they're to move: {fen, lines, d (their decision there), main}
+  let frontier = [{ fen, lines: theirLines, d: c.chain[0], main: true }];
+  let wide = stillSharp(c.levels[0], opts);
+  for (let k = 2; k <= opts.decisions && !w.cancelled; k++) {
+    const next = [];
+    let mainSans = null;
+    for (const node of frontier) {
+      if (w.cancelled) return;
+      // their replies to follow: the good ones (at most maxGood: more and it isn't sharp anyway),
+      // or just the best once the line has stopped being sharp (your own move only)
+      const replies = wide ? node.d.replies.filter((r) => r.good).slice(0, opts.maxGood) : node.main ? node.d.replies.slice(0, 1) : [];
+      for (const [i, reply] of replies.entries()) {
+        const a = await answer(w, node.fen, node.lines, reply.uci);
+        if (!a) continue;
+        const lines = await w.lines(a.fen, opts.replies);
+        if (!lines.length) continue;
+        const sans = Object.fromEntries(lines.map((l) => [l.uci, sanOf(a.fen, l.uci)]));
+        const d = decision(lines, me, { sans, capture: a.san.includes('x'), myUci: a.uci }, opts);
+        const main = node.main && i === 0;
+        if (main) mainSans = [reply.san, a.san];
+        next.push({ fen: a.fen, lines, d, main });
+        const depth = w.depthOf(a.fen, opts.replies);
+        if (depth != null && (c.depth == null || depth < c.depth)) c.depth = depth;
       }
     }
-    if (!m) {
-      mine = (await w.lines(r.fen, 1))[0]?.uci;
-      if (!mine) return;
-      try {
-        m = after(r.fen, mine);
-      } catch {
+    const mainNode = next.find((n) => n.main);
+    if (!mainNode) return; // the main line ended (mate or no moves)
+    addDecision(c, mainNode.d, mainSans[0], mainSans[1], next.filter((n) => !n.main).map((n) => n.d));
+    if (!stillSharp(c.levels[c.levels.length - 1], opts)) {
+      if (!c.repertoire) {
+        if (k < opts.decisions) c.stopped = true;
         return;
       }
+      wide = false;
     }
-    if (m.over) return;
-    const mySan = sanOf(r.fen, mine);
-    lines = await w.lines(m.fen, opts.replies);
-    if (!lines.length) return;
-    const sans = Object.fromEntries(lines.map((l) => [l.uci, sanOf(m.fen, l.uci)]));
-    const dec = decision(lines, me, { sans, capture: mySan.includes('x'), myUci: mine }, opts);
-    addDecision(c, dec, best.san, mySan);
-    const d = w.depthOf(m.fen, opts.replies);
-    if (d != null && (c.depth == null || d < c.depth)) c.depth = d;
-    pos = m.fen;
-    // too many good replies here: it can't be a sharpest alternative, so save the engine the rest
-    // (your own move is always followed to the end, as the alternatives are compared with it)
-    if (!c.repertoire && !stillSharp(dec, opts) && k < opts.decisions) {
-      c.stopped = true;
-      return;
-    }
+    frontier = next;
   }
 }
 
@@ -431,11 +461,11 @@ export class PracticalView {
         ['Eval', 'the engine’s evaluation after the move and their best reply, in pawns from White’s side (+ good for White)'],
         ['Engine', 'the same as your winning chances (0–100)'],
         ['Cost', 'winning chances the move gives away against the engine’s best move here. Points aren’t pawns: near equality a pawn is about 9 points (half a pawn about 5), and the same pawn is worth fewer points when one side is already well ahead'],
-        ['Good replies', 'how many of their 8 best replies stay within 7 points of their best, at each of their decisions along the engine’s main line (their best reply, your best answer, …): “3 → 1 → 1”. 1 is an only move; r is a recapture (obvious); … means the line wasn’t followed further, as it already had too many good replies (or cost too much) to be a sharp alternative. Tap it to see the line on the board'],
+        ['Good replies', 'how many of their 8 best replies stay within 7 points of their best, at each of their decisions: “3 → 1 → 1”. Every good reply of theirs is followed (with your best answer), and each number is the most good replies they have in any position they can reach by playing only good moves, so a 1 means an only move whichever good path they took. 1 is an only move; r is a recapture (obvious); … means the line wasn’t followed further, as it already had too many good replies (or cost too much) to be a sharp alternative. Tap it to see the line on the board'],
         ['In a row', 'how many only moves they have to find one after another, from their first decision'],
-        ['Gap', 'how many points worse their second-best reply is than their best, at their sharpest decision'],
+        ['Gap', 'how many points worse their second-best reply is than their best, at their sharpest decision (the smallest gap among the positions they can reach there)'],
         ['Depth', 'how deep the engine searched their replies (in half-moves; the shallowest of their decisions). It’s the depth you chose unless the 30-second limit for one analysis stopped it first (shown in amber)'],
-        ['Sharpness', 'how many points worse their other top replies are than their best, on average, at their sharpest decision along the line: high when nearly everything but the best move goes wrong for them. Recaptures (your move takes something and their best is simply to take back) are obvious, so they’re never the sharpest point; a move that only leads to recaptures is marked “recapture”'],
+        ['Sharpness', 'how many points worse their other top replies are than their best, on average, at their sharpest decision (the least sharp of the positions they can reach there by playing good moves): high when nearly everything but the best move goes wrong for them. Recaptures (your move takes something and their best is simply to take back) are obvious, so they’re never the sharpest point; a move that only leads to recaptures is marked “recapture”'],
       ]),
       el('p', 'pr-note', 'Points are winning chances (0–100) from the engine’s evaluations. ✗ marks a reply that isn’t good for them.'),
     );

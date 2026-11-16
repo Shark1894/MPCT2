@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  DEFAULTS, addDecision, stillSharp, worthFollowing, breakEven, breakEvenText, candidateMoves, decision, lineValue, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
+  DEFAULTS, addDecision, level, stillSharp, worthFollowing, breakEven, breakEvenText, candidateMoves, decision, lineValue, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
 } from '../../web/js/practical-core.js';
 
 const near = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
@@ -207,4 +207,22 @@ test('which lines are worth following further', () => {
   assert.equal(worthFollowing(mk({ engine: 30 }), 50), false); // over the cost cap (15)
   assert.equal(worthFollowing(mk({ chain: [dec(7)], engine: 10, repertoire: true }), 50), true); // yours always
   assert.equal(worthFollowing(mk({ final: true, repertoire: true }), 50), false);
+});
+
+test('a decision is the worst case over every good-move branch', () => {
+  // Their best reply leads to an only move; their other good reply leads to a position with three good replies.
+  const first = [{ uci: 'a2a3', score: cp(20) }, { uci: 'b2b3', score: cp(10) }, { uci: 'c2c3', score: cp(-300) }];
+  const onlyOne = [{ uci: 'd2d4', score: cp(30) }, { uci: 'e2e4', score: cp(-150) }];
+  const easy = [{ uci: 'f2f4', score: cp(25) }, { uci: 'g2g3', score: cp(20) }, { uci: 'h2h3', score: cp(15) }, { uci: 'a3a4', score: cp(-400) }];
+  const c = scoreCandidate({ uci: 'x', san: 'Qd6', me: 'black', theirLines: first });
+  addDecision(c, decision(onlyOne, 'black'), 'a3', 'Nc6', [decision(easy, 'black')]);
+  assert.deepEqual(c.goodChain, [2, 3]); // not 2 → 1: after b3 they have three good replies
+  assert.equal(c.levels[1].nodes, 2);
+  assert.equal(c.chain[1].good, 1); // the main line still has the only move
+  near(c.levels[1].gap, decision(easy, 'black').gap); // the smaller gap
+  assert.deepEqual(c.line, ['Qd6', 'a3', 'Nc6']);
+  assert.equal(worthALook([{ position: {}, cands: [{ ...c, cost: 0, repertoire: false, final: false }] }], { ...DEFAULTS, decisions: 2 }).length, 0);
+  // recaptures among the branches don't count; all recaptures: a recapture
+  const r = { good: 5, gap: 30, sharpness: 30, recapture: true };
+  assert.deepEqual([level([r, { good: 1, gap: 9, sharpness: 12, recapture: false }]).good, level([r, r]).recapture], [1, true]);
 });

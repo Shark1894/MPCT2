@@ -787,13 +787,16 @@ replies to it, in winning chances (0-100):
 - **Eval**: the engine's evaluation after the move and their best reply, in pawns from White's side; **Engine**:
   the same as your winning chances; **Cost**: winning chances given away against the engine's best move (near
   equality a pawn is about 9 points). Moves costing more than the chosen limit (8, 15 or 25) aren't listed.
-- **Good replies**, **gap** and **sharpness** are measured at each of their decisions along the engine's main line
-  (their best reply, your best answer, their next decision, ...), following 1, 2 or 3 of their decisions (the
-  **Follow** setting, 3 by default):
+- **Good replies**, **gap** and **sharpness** are measured at each of their decisions, following 1, 2 or 3 of
+  them (the **Follow** setting, 3 by default). Every good reply of theirs is followed (with your best answer), so
+  a decision covers all the positions they can reach by playing only good moves, taken worst case for you: the
+  most good replies, the smallest gap and sharpness. (Only the first two good replies are followed: with more,
+  the move can't be a sharp alternative anyway.)
   - **Good replies**: how many of their replies stay within 7 points of their best at each decision, shown as a
     chain, e.g. "3 → 1 → 1" (1 = an only move, r = a recapture). Tap it to see the main line on the board. To save
     engine time, a move other than yours stops being followed as soon as it has more than two good replies at a
-    decision, or costs more than the chosen limit (shown as "8 → …"); your own move is always followed to the end.
+    decision, or costs more than the chosen limit (shown as "8 → …"); your own move is always followed to the end
+    (along the engine's main line only, after a decision with more than two good replies).
   - **In a row**: how many only moves they face one after another from the start (recaptures skipped).
   - **Gap**: how many points worse their second-best reply is than their best, at the sharpest decision.
   - **Sharpness**: how many points worse their other top replies are than their best, on average, at the sharpest
@@ -808,7 +811,7 @@ the evals of the suggestion and of your move, the **eval change** (suggestion mi
 green when better for you, red when worse), the **depth** searched and **seen**.
 
 **Break-even** puts the trade-off in one number: how often they'd have to miss their best reply (playing their
-second-best instead), at each of their decisions along the line, for the suggestion to score better than your
+second-best instead), at each of their decisions along the engine's main line (their best reply, your best answer), for the suggestion to score better than your
 move. A line's value at miss rate p adds up, decision by decision, the chance of reaching it times p times your
 winning chances after their second-best there, plus the chance of getting through every decision times your
 winning chances at the end (recaptures are never missed). Break-even is the smallest p where the suggestion's value
