@@ -5399,3 +5399,156 @@ button.wp-cell:hover {
 .wp-sets {
   margin: 4px 0 12px;
 }
+
+/* ---- endgame studies (Training tab) ---- */
+.st-facts {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.st-cta {
+  flex-wrap: wrap;
+}
+
+.st-filters {
+  gap: 10px;
+}
+
+.st-filter-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.st-filter-row select {
+  width: auto;
+  flex: 0 0 auto;
+  min-height: 32px;
+}
+
+.st-search {
+  flex: 1 1 220px;
+  min-width: 0;
+  min-height: 32px;
+}
+
+.st-fav-filter[aria-pressed='true'] {
+  color: #e8b64c;
+}
+
+.st-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.st-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.st-row:first-child {
+  border-top: none;
+}
+
+.st-open {
+  padding: 0;
+  min-height: 0;
+  border: none;
+  background: none;
+  width: 76px;
+}
+
+.st-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.st-title {
+  padding: 0;
+  min-height: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-weight: 600;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.st-title:hover {
+  color: var(--green);
+}
+
+.st-meta {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.st-note.empty {
+  color: var(--text-dim);
+  font-style: normal;
+}
+
+.st-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.st-status {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.st-status.solved { color: var(--ok); }
+.st-status.missed { color: var(--error); }
+
+.st-none {
+  padding: 12px 0;
+}
+
+.st-more {
+  align-self: center;
+}
+
+.st-coll-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.st-coll-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.st-tile-top {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.st-tile-fav .st-tile-top {
+  color: #e8b64c;
+}
+
+.st-empty a {
+  color: var(--green);
+}

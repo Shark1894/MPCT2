@@ -119,12 +119,16 @@ def _title(game: chess.pgn.Game, number: int, material: str) -> str:
     return " · ".join(x for x in (", ".join(x for x in (who, year) if x), material) if x)
 
 
+def _composer(game: chess.pgn.Game) -> str:
+    """Studies (HHdb style: Black is the stipulation, or empty): White is the composer."""
+    black = _header(game, "Black")
+    return _header(game, "White") if black.lower() in STIPULATIONS or not black else ""
+
+
 def _start_note(game: chess.pgn.Game, turn: chess.Color, stip: str) -> str:
     side = "White" if turn == chess.WHITE else "Black"
     task = f"{side} to play and {stip}." if stip else f"{side} to play."
-    black = _header(game, "Black")
-    who = _header(game, "White") if black.lower() in STIPULATIONS or not black else ""
-    source = ", ".join(x for x in (who, _header(game, "Event"), _year(game)) if x)
+    source = ", ".join(x for x in (_composer(game), _header(game, "Event"), _year(game)) if x)
     return f"{task}\n\n{source}" if source else task
 
 
@@ -254,6 +258,15 @@ def parse_course(text: str, course: str = "", group: str = "auto") -> PgnCourse:
             sans=sans,
             comments=comments,
             start_fen=start_fen,
+            meta={
+                "composer": _composer(game),
+                "year": int(_year(game)) if _year(game) else None,
+                "source": _header(game, "Event"),
+                "stipulation": stip,
+                "material": material,
+                "group": material_group(board),
+                "pieces": len(board.piece_map()),
+            },
         ))
     if not lines:
         raise NotACourse(f"Nothing to import: {skipped[0]}" if skipped else "Nothing to import")

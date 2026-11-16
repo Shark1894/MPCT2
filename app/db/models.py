@@ -616,6 +616,45 @@ class EndgameAttempt(Base):
     finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class EndgameStudy(Base):
+    """A composed endgame study (Training tab › Endgame studies), imported from a PGN file. From
+    `start_fen` you play `color` (the side to move); `ucis` is the solution, the other side's moves
+    played for you. `key` (start position + moves) makes importing the same study again update it.
+    `material_group`: pawn / minor / rook / rook_minor / queen / many. `stipulation`: win / draw / ''.
+    Progress: new / solved / missed. Favourites, like bookmarked lines: `favourited_at` + a note."""
+
+    __tablename__ = "endgame_studies"
+    __table_args__ = (
+        CheckConstraint("status IN ('new', 'solved', 'missed')", name="status"),
+        Index("ix_endgame_studies_group", "material_group", "position"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[int] = mapped_column(BigInteger, unique=True)
+    collection: Mapped[str] = mapped_column(String(100), index=True)  # the file it came from (as named on import)
+    position: Mapped[int] = mapped_column(server_default="0")  # order in its collection
+    title: Mapped[str] = mapped_column(String(200), server_default="")
+    composer: Mapped[str] = mapped_column(String(200), server_default="")
+    year: Mapped[int | None]
+    source: Mapped[str] = mapped_column(String(200), server_default="")
+    stipulation: Mapped[str] = mapped_column(String(5), server_default="")
+    material: Mapped[str] = mapped_column(String(60), server_default="")  # "R+P v B"
+    material_group: Mapped[str] = mapped_column(String(10))
+    pieces: Mapped[int] = mapped_column(server_default="0")  # on the board at the start, kings included
+    color: Mapped[str] = mapped_column(String(5))
+    start_fen: Mapped[str] = mapped_column(Text)
+    ucis: Mapped[str] = mapped_column(Text, server_default="")
+    sans: Mapped[str] = mapped_column(Text, server_default="")
+    comments: Mapped[dict] = mapped_column(JSONB, server_default="{}")
+    status: Mapped[str] = mapped_column(String(6), server_default="new")
+    attempts: Mapped[int] = mapped_column(server_default="0")
+    solved_count: Mapped[int] = mapped_column(server_default="0")
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    favourited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    favourite_note: Mapped[str] = mapped_column(Text, server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class ActivitySession(Base):
     """Time spent in one part of the app (Stats tab). The browser counts active seconds (visible
     and touched within the last 2 minutes) per stretch of one activity, and sends them under a

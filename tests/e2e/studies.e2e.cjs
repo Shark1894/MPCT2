@@ -1,5 +1,6 @@
-// Browser checks for importing a PGN file of endgame studies into the Training tab (chapters by
-// material) and starting one. Needs a server with an EMPTY database.
+// Browser checks for Endgame studies in the Training tab: importing a PGN file, the page with its
+// filters, favourites (in the list and while solving) and solving one. Needs a server with an
+// EMPTY database.
 // Usage: MPCT_URL=http://localhost:8010/ node tests/e2e/studies.e2e.cjs   [MPCT_SHOTS=/tmp/shots]
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -50,16 +51,7 @@ async function move(page, uci) {
 }
 const waitTurn = (p) => p.waitForFunction(() => mpct.courseTrainer.canMove(), null, { timeout: 5000 });
 const notes = (p) => p.$$eval('#cx-notes .cx-note', (els) => els.map((e) => e.textContent));
-
-async function importFile(page, file) {
-  if (!(await page.isVisible('#cv-import'))) {
-    await page.click('.tr-crumb >> nth=0');
-    await page.waitForSelector('#cv-import');
-  }
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('#cv-import')]);
-  await chooser.setFiles(file);
-  await page.waitForSelector('dialog[open] input[name=name]');
-}
+const rows = (p) => p.$$eval('#st-list .st-row .st-title', (els) => els.map((e) => e.textContent));
 
 (async () => {
   const dir = fs.mkdtempSync('/tmp/mpct-studies-');
@@ -72,38 +64,110 @@ async function importFile(page, file) {
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await settle(page, 800);
+
+  // ---- the hub, empty -----------------------------------------------------------------------------
   await page.click('#view-courses');
   await settle(page);
-  check((await text(page, '#cv-empty')).includes('PGN file of endgame studies'), 'empty state mentions PGN files');
+  check(await page.isVisible('#tr-studies'), 'Endgame studies section on the hub');
+  check((await text(page, '#tr-studies')).includes('Import studies'), 'empty: invites an import');
+  check((await page.$$eval('.tr-section-link', (bs) => bs.map((b) => b.textContent))).includes('Endgame studies'), 'section link in the hub nav');
+  await page.click('#st-hub-open');
+  await settle(page);
+  check((await text(page, '.tr-crumbs')).includes('Training›Endgame studies'), 'studies page with its breadcrumb');
+  check(await page.isVisible('#st-empty'), 'empty page explains and links a sample');
 
-  await importFile(page, `${dir}/Classic studies.pgn`);
-  check((await text(page, 'dialog[open] h2')) === 'Import a PGN file for Training', 'PGN import dialog');
-  check((await page.inputValue('dialog[open] input[name=name]')) === 'Classic studies', 'name from the file name');
-  check((await page.inputValue('dialog[open] select[name=kind]')) === 'endgames', 'kind: endgames');
-  const msg = await text(page, 'dialog[open] .modal-message');
-  check(msg.includes('2 exercises in 2 chapters (by material)'), `preview (${msg.slice(0, 80)})`);
+  // ---- import -------------------------------------------------------------------------------------
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('#st-import')]);
+  await chooser.setFiles(`${dir}/Classic studies.pgn`);
+  await page.waitForSelector('dialog[open] input[name=collection]');
+  check((await text(page, 'dialog[open] h2')) === 'Import endgame studies', 'import dialog');
+  check((await page.inputValue('dialog[open] input[name=collection]')) === 'Classic studies', 'collection named after the file');
   const labels = await page.$$eval('dialog[open] label', (ls) => ls.map((l) => l.textContent.trim()));
-  check(labels.some((l) => l.startsWith('Pawn endings (1 exercise)')) && labels.some((l) => l.startsWith('Rook endings (1 exercise)')), 'chapters by material');
+  check(labels.some((l) => l.startsWith('Pawn endings (1 study)')) && labels.some((l) => l.startsWith('Rook endings (1 study)')), 'kinds of ending to tick');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/studies-import.png` });
   await page.click('dialog[open] button[type=submit]');
-  await page.waitForFunction(() => document.querySelector('dialog[open] h2')?.textContent === 'Course imported', null, { timeout: 15000 });
-  check((await text(page, 'dialog[open] .modal-message')).includes('Created “Classic studies”: 2 new exercises'), 'import report');
+  await page.waitForFunction(() => document.querySelector('dialog[open] h2')?.textContent === 'Studies imported', null, { timeout: 15000 });
+  check((await text(page, 'dialog[open] .modal-message')).includes('“Classic studies”: 2 new studies'), 'import report');
+  await page.click('dialog[open] button[type=submit]');
+  await page.waitForSelector('#st-list .st-row');
+  await settle(page);
+  check((await text(page, '#st-facts')).includes('2 studies · 0 solved'), 'page facts');
+  check((await rows(page)).join(' | ') === 'Reti, Richard, 1921 · P v P | Saavedra, Fernando, 1895 · P v R', 'listed by material: pawn endings first');
+  check((await text(page, '#st-list .st-row >> nth=0')).includes('White to play and draw'), 'each row says the task');
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/studies-page.png`, fullPage: true });
+
+  // ---- filters ------------------------------------------------------------------------------------
+  await page.click('.st-groups button[data-group=rook]');
+  await settle(page);
+  check((await rows(page)).join() === 'Saavedra, Fernando, 1895 · P v R', 'material filter');
+  await page.click('.st-groups button[data-group=""]');
+  await page.selectOption('select[name=stipulation]', 'draw');
+  await settle(page);
+  check((await rows(page)).join() === 'Reti, Richard, 1921 · P v P', 'win/draw filter');
+  await page.selectOption('select[name=stipulation]', '');
+  await page.fill('input[name=q]', 'saavedra');
+  await settle(page, 700);
+  check((await rows(page)).join() === 'Saavedra, Fernando, 1895 · P v R', 'search by composer');
+  await page.fill('input[name=q]', '');
+  await settle(page, 700);
+
+  // ---- favourites in the list -----------------------------------------------------------------------
+  await page.click('#st-list .st-row:has-text("Saavedra") button.star');
+  await settle(page);
+  check((await page.getAttribute('#st-list .st-row:has-text("Saavedra") button.star', 'aria-pressed')) === 'true', 'star: favourite');
+  check((await text(page, '#st-fav-filter')).includes('★ Favourites 1'), 'favourites count');
+  await page.click('#st-list .st-row:has-text("Saavedra") .st-note');
+  await page.fill('dialog[open] input[name=note]', 'Underpromote to a rook!');
   await page.click('dialog[open] button[type=submit]');
   await settle(page);
-  check((await page.$$('.cv-chapter')).length === 2, 'the course opens with its chapters');
-  if (SHOTS) await page.screenshot({ path: `${SHOTS}/studies-course.png` });
+  check((await text(page, '#st-list .st-row:has-text("Saavedra") .st-note')) === 'Underpromote to a rook!', 'favourite note');
+  await page.click('#st-fav-filter');
+  await settle(page);
+  check((await rows(page)).join() === 'Saavedra, Fernando, 1895 · P v R', 'favourites filter');
+  await page.click('#st-fav-filter');
+  await settle(page);
 
-  // Start: course order is pawn endings first, so Réti's study.
-  await page.click('.cv-head-card .cv-actions button.primary');
+  // ---- solve: Start goes through new ones, pawn endings first ------------------------------------------
+  await page.click('#st-start');
   await waitTurn(page);
   check((await text(page, '#cx-title')).startsWith('Reti, Richard, 1921'), 'first study: Réti');
-  const start = (await notes(page)).join('|');
-  check(start.includes('White to play and draw.') && start.includes('Kagans Neueste Schachnachrichten'), 'start note: the task and the source');
-  check((await page.evaluate(() => mpct.board.orientation())) === 'white', 'board from the side to move');
+  check((await text(page, '#cx-sub')).includes('Pawn endings · Draw'), 'where it is from');
+  check((await notes(page)).join('|').includes('White to play and draw.'), 'start note');
+  check(await page.isVisible('#cx-star'), 'favourite star while solving');
+  check((await text(page, '#cx-star')) === '☆', 'not a favourite yet');
+  await page.click('#cx-star');
+  await settle(page);
+  check((await text(page, '#cx-star')) === '★', 'favourited while solving');
   await move(page, 'h8g7');
   await waitTurn(page);
   check((await page.evaluate(() => mpct.game.moves.map((m) => m.san))).join(' ') === 'Kg7 h4', 'right move: the reply is played');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/studies-solving.png` });
+  // give up the rest: Show move until the end
+  for (let i = 0; i < 8 && !(await page.isVisible('#cx-end')); i++) {
+    if (await page.evaluate(() => mpct.courseTrainer.canMove())) await page.click('#cx-show');
+    await settle(page, 1500);
+  }
+  await page.waitForSelector('#cx-end:not([hidden])', { timeout: 15000 });
+  check((await text(page, '#cx-result')).includes('Missed'), 'shown moves: missed');
+  await page.click('#cx-stop');
+  await page.waitForSelector('#st-list .st-row');
+  await settle(page, 800);
+  check((await text(page, '#st-facts')).includes('2 studies · 0 solved · 1 missed · ★ 2'), 'back on the page: progress and favourites');
+  check((await text(page, '#st-list .st-row:has-text("Reti") .st-status')).includes('Missed'), 'status in the list');
+
+  // ---- the hub shows the database ---------------------------------------------------------------------
+  await page.click('.tr-crumb >> nth=0');
+  await settle(page);
+  const tiles = await page.$$eval('#tr-studies .st-tile', (ts) => ts.map((t) => t.dataset.studyGroup));
+  check(tiles.join() === 'pawn,rook,favourites', `hub tiles (${tiles.join()})`);
+  if (SHOTS) {
+    await page.locator('#tr-studies').scrollIntoViewIfNeeded();
+    await page.locator('#tr-studies').screenshot({ path: `${SHOTS}/studies-hub.png` });
+  }
+  await page.click('#tr-studies .st-tile[data-study-group=favourites]');
+  await settle(page);
+  check((await page.getAttribute('#st-fav-filter', 'aria-pressed')) === 'true' && (await rows(page)).length === 2, 'favourites tile opens them');
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/studies-favourites.png`, fullPage: true });
 
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();

@@ -10,6 +10,7 @@ import { pickFile, readCourse, slimLine } from './courseimport.js';
 import { KINDS, guessKind, queueFor } from './courses.js';
 import { DRILLS, GROUPS as DRILL_GROUPS, drillById, goalText } from './endgame-core.js';
 import { EndgamePage } from './endgames.js';
+import { StudiesPage, nStudies } from './studies.js';
 import { WoodpeckerPage } from './woodpecker.js';
 import { pace } from './woodpecker-core.js';
 import { breadcrumb, button, diceIcon, el, miniBoard, rings, sparkline } from './dom.js';
@@ -51,18 +52,20 @@ export class TrainingView {
       onEdit: (c) => this._edit(c),
     });
     this.endgame = new EndgamePage({ onStart: (id, fen) => this.onEndgame(id, fen) });
+    this.studies = new StudiesPage({ onStart: (list, label, opts) => this.onStart(list, label, opts), onChanged: () => this.refresh() });
   }
 
   // ---- data and navigation ----------------------------------------------------------------------
 
   async refresh() {
     this.visible = true;
-    const [courses, pz, mine, eg, status] = await Promise.allSettled([
+    const [courses, pz, mine, eg, status, st] = await Promise.allSettled([
       api.courses(),
       api.puzzleSummary(),
       api.gamePuzzles(false),
       api.endgameStats(),
       api.puzzleStatus(),
+      api.studiesSummary(),
     ]);
     this.courses = courses.status === 'fulfilled' ? courses.value : [];
     this.loadError = courses.status === 'rejected' ? courses.reason.message : null;
@@ -70,6 +73,7 @@ export class TrainingView {
     this.mine = mine.status === 'fulfilled' ? mine.value : [];
     this.egStats = eg.status === 'fulfilled' ? eg.value : {};
     this.pzStatus = status.status === 'fulfilled' ? status.value : null;
+    this.studySummary = st.status === 'fulfilled' ? st.value : null;
     this.details.clear(); // statuses change as you work through a course
     if (this.page.view === 'course' && !this.courses.some((c) => c.id === this.page.id)) this.page = { view: 'hub' };
     if (this.page.view === 'drill' && !drillById(this.page.id)) this.page = { view: 'hub' };
@@ -81,7 +85,7 @@ export class TrainingView {
     this.puzzles.hide();
   }
 
-  /** Open a page: {view: 'hub'} | {view: 'course', id} | {view: 'drill', id} | {view: 'puzzles', which}. */
+  /** Open a page: {view: 'hub'} | {view: 'course', id} | {view: 'drill', id} | {view: 'studies'} | {view: 'puzzles', which}. */
   async go(page, anchor = null) {
     this.page = page;
     store.set('trainingPage', page);
@@ -110,6 +114,12 @@ export class TrainingView {
       this.endgame.render(body, p.id, this.egStats);
       return;
     }
+    if (p.view === 'studies') {
+      const body = el('div', 'tr-detail fam-eg st-page');
+      box.replaceChildren(this._crumbs([['Endgame studies', 'tr-studies']]), body);
+      await this.studies.render(body, this.studySummary);
+      return;
+    }
     if (onPuzzles) {
       box.replaceChildren(this._crumbs([['Puzzles', 'tr-puzzles'], [p.which === 'mine' ? 'From your games' : 'Rated puzzles']]));
       this.el.puzzles.dataset.show = p.which === 'mine' ? 'mine' : 'rated';
@@ -136,13 +146,13 @@ export class TrainingView {
     title.append(el('h1', '', 'Training'), el('p', '', 'Puzzles to sharpen, courses to work through, endgames to drill until they’re automatic.'));
     const nav = el('nav', 'tr-sections');
     nav.setAttribute('aria-label', 'Training sections');
-    for (const [label, anchor, fam] of [['Overview', null, ''], ['Puzzles', 'tr-puzzles', 'fam-pz'], ['Courses', 'tr-courses', 'fam-co'], ['Endgame drills', 'tr-endgames', 'fam-eg']]) {
+    for (const [label, anchor, fam] of [['Overview', null, ''], ['Puzzles', 'tr-puzzles', 'fam-pz'], ['Courses', 'tr-courses', 'fam-co'], ['Endgame drills', 'tr-endgames', 'fam-eg'], ['Endgame studies', 'tr-studies', 'fam-eg']]) {
       const b = button(label, `tr-section-link ${fam}`, () => (anchor ? document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth' }) : window.scrollTo({ top: 0, behavior: 'smooth' })));
       if (!anchor) b.setAttribute('aria-current', 'page');
       nav.appendChild(b);
     }
     head.append(title, nav);
-    hub.append(head, this._upNext(), this._puzzlesSection(), this._coursesSection(), this._drillsSection());
+    hub.append(head, this._upNext(), this._puzzlesSection(), this._coursesSection(), this._drillsSection(), this._studiesSection());
     return hub;
   }
 
@@ -380,17 +390,17 @@ export class TrainingView {
       b.setAttribute('aria-pressed', String(k === filter));
       chips.appendChild(b);
     }
-    const imp = button('Import course', 'tr-cta small', () => this.importCourse(), 'Import a Chessable course (one combined .json file) or a PGN file of studies or exercises');
+    const imp = button('Import course', 'tr-cta small', () => this.importCourse(), 'Import a Chessable course (one combined .json file)');
     imp.id = 'cv-import';
     sec.appendChild(this._sectionHead('tr-courses', 'Courses', 'Your library, worked through in order.', [chips, imp]));
     const shelf = el('div', 'tr-shelf');
     const shown = this.courses.filter((c) => !filter || c.kind === filter);
     for (const c of shown) shelf.appendChild(this._cover(c));
     const add = button('', 'tr-cover tr-cover-add', () => this.importCourse());
-    add.append(el('span', 'tr-plus', '+'), el('span', '', 'Import a Chessable course or a PGN file'));
+    add.append(el('span', 'tr-plus', '+'), el('span', '', 'Import a Chessable course'));
     shelf.appendChild(add);
     sec.appendChild(shelf);
-    const empty = el('p', 'tr-muted', this.loadError ? `Couldn't load your courses: ${this.loadError}` : 'Import adds your Chessable courses here (tactics, strategy, endgame courses or the Woodpecker Method), or a PGN file of endgame studies or exercises.');
+    const empty = el('p', 'tr-muted', this.loadError ? `Couldn't load your courses: ${this.loadError}` : 'Import adds your Chessable courses here: tactics, strategy, endgame courses or the Woodpecker Method.');
     empty.id = 'cv-empty';
     empty.hidden = this.courses.length > 0 && !this.loadError;
     sec.appendChild(empty);
@@ -471,6 +481,53 @@ export class TrainingView {
     progress.classList.add('cv-item-progress'); // (kept for tests and old links)
     b.append(top, name, strip, progress);
     return b;
+  }
+
+  // ---- endgame studies ----------------------------------------------------------------------------
+
+  /** Open the studies page, filtered (null: as last left). */
+  _openStudies(filters = null) {
+    if (filters) {
+      Object.assign(this.studies.filters, { group: '', stipulation: '', status: '', favourites: false, q: '' }, filters);
+      this.studies._save();
+    }
+    return this.go({ view: 'studies' });
+  }
+
+  _studiesSection() {
+    const s = this.studySummary;
+    const sec = el('section', 'tr-sec fam-eg');
+    sec.id = 'tr-studies';
+    sec.setAttribute('aria-labelledby', 'tr-studies-h');
+    const open = button(s?.total ? 'All studies' : 'Open', 'tr-link', () => this._openStudies());
+    open.id = 'st-hub-open';
+    sec.appendChild(this._sectionHead('tr-studies', 'Endgame studies', 'Composed positions with one way to win or draw. Your own database, by material.', [open]));
+    if (!s?.total) {
+      const card = el('div', 'tr-card st-hub-empty');
+      card.append(
+        el('p', 'tr-muted', 'Import a PGN file of studies (each a set-up position with its solution): they’re sorted into pawn, minor piece, rook and queen endings, and you can keep favourites to look at later.'),
+        button('Import studies', 'tr-cta small', async () => {
+          await this._openStudies();
+          this.studies.importFile();
+        }),
+      );
+      sec.appendChild(card);
+      return sec;
+    }
+    const grid = el('div', 'tr-drills st-hub-grid');
+    const tile = (cls, top, name, sub, onClick, data = {}) => {
+      const b = button('', `tr-drill st-tile ${cls}`, onClick);
+      Object.assign(b.dataset, data);
+      b.append(el('span', 'tr-drill-top st-tile-top', top), el('span', 'tr-drill-name', name), el('span', 'tr-drill-stat', sub));
+      return b;
+    };
+    for (const g of s.groups) {
+      const done = g.total ? Math.round((100 * g.solved) / g.total) : 0;
+      grid.appendChild(tile('', `${done}%`, g.title, `${nStudies(g.total)} · ${g.solved} solved${g.missed ? ` · ${g.missed} missed` : ''}`, () => this._openStudies({ group: g.group }), { studyGroup: g.group }));
+    }
+    grid.appendChild(tile('st-tile-fav', '★', 'Favourites', s.favourites ? `${nStudies(s.favourites)} to look at again` : 'Tap ☆ on a study to keep it here', () => this._openStudies({ favourites: true }), { studyGroup: 'favourites' }));
+    sec.appendChild(grid);
+    return sec;
   }
 
   // ---- a course's page ---------------------------------------------------------------------------------
@@ -599,14 +656,10 @@ export class TrainingView {
     await this.refresh();
   }
 
-  /** Choose a combined Chessable course file (or a PGN file), the chapters, name and kind; import. */
+  /** Choose a combined Chessable course file, the chapters, name and kind; import. */
   async importCourse() {
-    const file = await pickFile('.json,application/json,.pgn,application/x-chess-pgn');
+    const file = await pickFile();
     if (!file) return;
-    if (/\.pgn$/i.test(file.name)) {
-      await this.importPgn(file);
-      return;
-    }
     let course;
     try {
       course = readCourse(JSON.parse(await file.text()));
@@ -666,62 +719,6 @@ export class TrainingView {
       message: parts.join('\n') + (skipped.length ? `\n\n${skipped.join('\n')}` : ''),
       submit: 'OK',
     });
-  }
-
-  /**
-   * A PGN file as a course: each game an exercise from its start position (endgame studies:
-   * chapters by material). The server reads the file; you pick the chapters, name and kind.
-   */
-  async importPgn(file) {
-    const pgn = await file.text();
-    const name = file.name.replace(/\.pgn$/i, '').slice(0, 100);
-    let preview;
-    try {
-      preview = await api.previewPgnCourse({ pgn, name, group: 'auto' });
-    } catch (err) {
-      toast(`Couldn't read ${file.name}: ${err.message}`, 'error');
-      return;
-    }
-    const grouping = { material: 'by material', event: 'by event', none: 'as one chapter' }[preview.group];
-    const values = await formDialog({
-      title: 'Import a PGN file for Training',
-      message:
-        `${file.name}: ${plural(preview.exercises, 'exercise')} in ${plural(preview.chapters.length, 'chapter')} (${grouping}). ` +
-        'Each game is an exercise from its start position: you play the side to move and its main line is the solution. ' +
-        'Tick the chapters to import. Importing the same file under the same name again updates it and keeps your progress.' +
-        (preview.skipped.length ? `\n\n${plural(preview.skipped.length, 'game')} can't be used: ${preview.skipped.slice(0, 3).join('; ')}${preview.skipped.length > 3 ? '…' : ''}` : ''),
-      fields: [
-        { name: 'name', label: 'Course name', value: name, maxLength: 100 },
-        { name: 'kind', label: 'Kind', type: 'select', options: KINDS, value: 'endgames' },
-        ...preview.chapters.map((c) => ({ name: `ch_${c.id}`, label: `${c.title} (${plural(c.count, 'exercise')})`, type: 'checkbox', value: true })),
-      ],
-      submit: 'Import',
-    });
-    if (!values) return;
-    const chapterIds = preview.chapters.filter((c) => values[`ch_${c.id}`]).map((c) => c.id);
-    if (!chapterIds.length) {
-      toast('No exercises chosen: tick at least one chapter.', 'error');
-      return;
-    }
-    const total = preview.chapters.filter((c) => values[`ch_${c.id}`]).reduce((n, c) => n + c.count, 0);
-    toast(`Importing ${plural(total, 'exercise')}…`);
-    let r;
-    try {
-      r = await api.importPgnCourse({ pgn, name: values.name, kind: values.kind, group: preview.group, chapter_ids: chapterIds });
-    } catch (err) {
-      toast(`Not imported: ${err.message}`, 'error');
-      return;
-    }
-    const parts = [
-      `${r.created_course ? 'Created' : 'Updated'} “${r.course}”: ${plural(r.added, 'new exercise')}`,
-      r.updated ? `${plural(r.updated, 'exercise')} updated` : '',
-      r.unchanged ? `${r.unchanged} unchanged` : '',
-      r.reset ? `${plural(r.reset, 'exercise')} changed, so they're new again` : '',
-    ].filter(Boolean);
-    this.page = { view: 'course', id: r.course_id };
-    store.set('trainingPage', this.page);
-    await this.refresh();
-    await formDialog({ title: 'Course imported', message: parts.join('\n'), submit: 'OK' });
   }
 }
 

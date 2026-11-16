@@ -13,6 +13,11 @@ export function gameParams(q = '', filters = {}) {
   return Object.fromEntries(Object.entries({ q, ...filters }).filter(([, v]) => v));
 }
 
+/** Study filters as query parameters: empty and false ones left out. */
+export function studyParams(f = {}) {
+  return Object.fromEntries(Object.entries(f).filter(([, v]) => v !== '' && v != null && v !== false));
+}
+
 async function request(method, path, { body, params } = {}) {
   const url = new URL(`/api${path}`, window.location.origin);
   for (const [k, v] of Object.entries(params ?? {})) url.searchParams.set(k, v);
@@ -96,8 +101,17 @@ export const api = {
   courses: () => request('GET', '/courses'),
   course: (id) => request('GET', `/courses/${id}`),
   importTrainingCourse: (body) => request('POST', '/courses/import', { body }),
-  previewPgnCourse: (body) => request('POST', '/courses/pgn/preview', { body }),
-  importPgnCourse: (body) => request('POST', '/courses/pgn/import', { body }),
+  // endgame studies (Training tab)
+  studiesSummary: () => request('GET', '/studies/summary'),
+  studies: (filters = {}, offset = 0, limit = 50) => request('GET', '/studies', { params: { ...studyParams(filters), offset, limit } }),
+  studyQueue: (filters = {}, { random = false, limit = 50 } = {}) => request('GET', '/studies/queue', { params: { ...studyParams(filters), random, limit } }),
+  study: (id) => request('GET', `/studies/${id}`),
+  studyAttempt: (id, solved) => request('POST', `/studies/${id}/attempt`, { body: { solved } }),
+  favouriteStudy: (id, note = null) => request('PUT', `/studies/${id}/favourite`, { body: { note } }),
+  unfavouriteStudy: (id) => request('DELETE', `/studies/${id}/favourite`),
+  previewStudies: (pgn) => request('POST', '/studies/preview', { body: { pgn } }),
+  importStudies: (body) => request('POST', '/studies/import', { body }),
+  deleteStudyCollection: (name) => request('DELETE', `/studies/collections/${encodeURIComponent(name)}`),
   updateCourse: (id, body) => request('PATCH', `/courses/${id}`, { body }),
   deleteCourse: (id) => request('DELETE', `/courses/${id}`),
   resetCourse: (id, chapterId = null) => request('POST', `/courses/${id}/reset`, { body: { chapter_id: chapterId } }),

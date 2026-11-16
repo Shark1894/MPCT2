@@ -46,7 +46,7 @@ The full plan, decisions and data model are in the project's
 | — | Training tab redesign: a hub where puzzles, courses and drills each have their own look | Done |
 | — | Named endgames: Lucena, Philidor, Vančura, Q v P, Q v R, R v B, wrong rook pawn, Réti (win and defend drills with guides) | Done |
 | — | Stats tab: time spent on openings, tactics, endgames, strategy, games and analysis | Done |
-| — | PGN import into the Training tab: endgame studies (chapters by material) or any exercises from set-up positions | Done |
+| — | Endgame studies: your own database of composed studies from PGN files, by kind of ending, with favourites | Done |
 
 ## Using the board
 
@@ -631,29 +631,41 @@ through in order, move by move, on the board.
 - While solving, navigation and the engine are off; once an exercise is finished you can step through it and
   analyse.
 
-### PGN files (endgame studies)
+### Endgame studies
 
-**Import course** also takes a **.pgn** file: endgame studies, or any set of exercises from set-up positions.
-Each game is one exercise: from its start position (the `FEN` tag, else the initial position) you play the side
-to move, the other side's moves are played for you, and the main line is the solution. The server reads the file
-first and shows what it holds; you name the course (the file name to start with), choose its kind (Endgames to
-start with) and tick the chapters.
+**Endgame studies** on the Training page (after the drills, its own section and page, apart from courses) is your
+own database of composed studies, imported from PGN files. Each game is one study: from its start position (the
+`FEN` tag) you play the side to move, the other side's moves are played for you, and the main line is the
+composer's solution. Solving works like a course exercise: a wrong move, try again; a second one (or **Show
+move**) shows the answer and the study counts as missed.
 
-- **Chapters**: by material when most games start from a set-up position (Pawn endings, Minor piece endings, Rook
-  endings, Rook and minor piece endings, Queen endings, Many pieces: more than 8 pieces besides kings and pawns),
-  else one chapter per `Event`.
-- **Titles**: composer and year, then the material, e.g. "Reti, Richard, 1921 · P v P" (for a game: "White – Black").
-  In study collections (HHdb style) `White` is the composer and `Black` the stipulation ("Win" / "Draw").
-- **Start note**: the task ("White to play and draw", from the `Black` stipulation or the result), the source
-  (composer, event, year) and the game's opening comment. Comments after moves become notes after those moves; a
-  sideline is written out in brackets on the note after the main move it replaces, so it never gives the answer away.
-- Games with no moves, an illegal start position or a reading error are skipped (and listed); a study that appears
-  twice is imported once. At most 20,000 exercises an import: tick fewer chapters for bigger files.
-- Importing the same file under the same name again updates the course and keeps your progress (an exercise is
-  matched by its start position and moves).
+- **Import PGN** (on the page) reads the file on the server first and shows what's in it by kind of ending; name
+  the collection (the file name to start with) and tick the kinds to import. A study is matched by its start
+  position and solution, so importing the same file (or a bigger collection holding the same studies) again
+  updates them and keeps your progress and favourites. Games with no moves or an illegal start position are
+  skipped and listed. Up to 150,000 studies a file (HHdbVII has about 103,000). A free sample to start with:
+  [sample.pgn](https://gadycosteff.com/cql/sample-pgn.html), about 200 studies from HHdbVI.
+- **Kinds of ending** (by the material at the start): Pawn endings, Minor piece endings, Rook endings, Rook and
+  minor piece endings, Queen endings, Many pieces (more than 8 besides kings and pawns).
+- **What's shown**: a title from the composer, year and material ("Reti, Richard, 1921 · P v P"), the task ("White
+  to play and draw": from the `Black` tag in HHdb-style files, where `White` is the composer and `Black` "Win" /
+  "Draw", else from the result) and the source. The start note says the task and source; comments after moves
+  appear after those moves; a sideline appears after the main move it replaces, so it never gives the answer away.
+- **The page**: Start (the studies matching the filters: new first, then missed, then solved), Random study,
+  filters (kind of ending, win or draw, progress, favourites, search by composer, source or material such as
+  `R+P v B`), the list with a small board, task, status and star per study (50 at a time, **Show more**), and the
+  collections (each can be deleted, with its progress and favourites).
+- **Favourites**, like bookmarked lines: ☆ on a study in the list or while solving it (next to Stop). A favourite
+  can have a note (tap **Add a note** under it); removing a favourite with a note asks first. The **Favourites**
+  filter lists them most recent first; **Start** with it on goes through them.
+- The hub's section has a tile per kind of ending (share solved) and a Favourites tile; each opens the page filtered.
+- Time spent solving counts as Endgames in the Stats tab.
 
-API: `POST /api/courses/pgn/preview` (`{"pgn", "name", "group": "auto" | "material" | "event" | "none"}` → the chapters
-and counts) and `POST /api/courses/pgn/import` (the same plus `"kind"` and `"chapter_ids"`).
+API: `POST /api/studies/preview` (`{"pgn"}`), `POST /api/studies/import` (`{"pgn", "collection", "groups"}`),
+`GET /api/studies/summary`, `GET /api/studies` (filters `group`, `stipulation`, `status` (new / solved / missed /
+unsolved), `favourites`, `q`, `collection`; `offset`, `limit`), `GET /api/studies/queue` (same filters, `random`,
+`limit`), `GET /api/studies/{id}`, `POST /api/studies/{id}/attempt`, `PUT|DELETE /api/studies/{id}/favourite`
+(`{"note"}`), `DELETE /api/studies/collections/{name}`.
 
 ### Endgame drills
 
@@ -857,7 +869,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/masters.e2e.cjs
 # the fake also plays Lichess (user JasonS); server started with LICHESS_API_URL=http://127.0.0.1:8099
 # (restart the fake between runs: some checks count its requests):
 MPCT_URL=http://localhost:8010/ node tests/e2e/lichess.e2e.cjs
-MPCT_URL=http://localhost:8010/ node tests/e2e/studies.e2e.cjs      # empty database (PGN of endgame studies into Training)
+MPCT_URL=http://localhost:8010/ node tests/e2e/studies.e2e.cjs      # empty database (endgame studies: import, filters, favourites, solving)
 MPCT_URL=http://localhost:8010/ node tests/e2e/courseimport.e2e.cjs  # empty database (COURSE_FILE=export.json also imports a real one)
 MPCT_URL=http://localhost:8010/ node tests/e2e/courses.e2e.cjs      # empty database (Training tab)
 MPCT_URL=http://localhost:8010/ node tests/e2e/stats.e2e.cjs        # empty database (time tracking, Stats tab)
@@ -1051,6 +1063,7 @@ web/              frontend served as-is
   js/woodpecker.js  Woodpecker page in the Training tab
   js/endgame-core.js  endgame drills: random mates, reading the tablebase (pure logic, unit tested)
   js/endgames.js  endgame drills on the board + their page in the Training tab
+  js/studies.js  endgame studies: their page in the Training tab (filters, favourites, import)
   js/training-hub.js  the Training tab: hub, course pages, puzzle pages
   js/training-core.js  mini boards, drill levels, rating trend (pure logic, unit tested)
   js/dom.js       small DOM builders (mini boards, rings, breadcrumbs)

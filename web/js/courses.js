@@ -8,7 +8,7 @@ import { api } from './api.js';
 import { Chess } from '../vendor/chess.js/chess.js';
 import { ExerciseRun } from './exercise.js';
 import { clock, days } from './woodpecker-core.js';
-import { store, toast } from './ui.js';
+import { confirmDialog, store, toast } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const START_DELAY_MS = 600;
@@ -87,7 +87,9 @@ export class CourseTrainer {
       timer: $('cx-timer'),
       pause: $('cx-pause'),
       auto: $('cx-auto'),
+      star: $('cx-star'),
     };
+    this.el.star.addEventListener('click', () => this.toggleFavourite());
     this.el.pause.addEventListener('click', () => this.togglePause());
     this.el.auto.checked = store.get('wpAutoNext', true);
     this.el.auto.addEventListener('change', () => store.set('wpAutoNext', this.el.auto.checked));
@@ -117,7 +119,8 @@ export class CourseTrainer {
   /**
    * Go through these exercises ({id}) in order. opts.woodpecker = {cycleId, number, done, total,
    * course}: a Woodpecker cycle (each puzzle timed, first go recorded in the cycle). opts.course =
-   * {name, kind}: the course they come from (for the time spent on it).
+   * {name, kind}: the course they come from (for the time spent on it). opts.studies: these are
+   * endgame studies (loaded and recorded as studies, with a favourite star).
    */
   start(list, label, opts = {}) {
     if (!list.length) {
@@ -128,6 +131,8 @@ export class CourseTrainer {
     this.total = list.length;
     this.label = label;
     this.wp = opts.woodpecker ? { ...opts.woodpecker } : null;
+    this.studies = Boolean(opts.studies);
+    this.el.star.hidden = !this.studies;
     this.course = opts.course ? { name: opts.course.name, kind: opts.course.kind } : null;
     this.session = { solved: 0, missed: 0, read: 0, seconds: 0 };
     this.el.clockBox.hidden = !this.wp;
@@ -195,7 +200,7 @@ export class CourseTrainer {
     const { id } = this.queue.shift();
     let ex;
     try {
-      ex = await api.exercise(id);
+      ex = await (this.studies ? api.study(id) : api.exercise(id));
     } catch (err) {
       toast(`Couldn't open the exercise: ${err.message}`, 'error');
       if (!this.active) return;
@@ -244,6 +249,7 @@ export class CourseTrainer {
     this.onLock(!run.done);
     this._arrow(null);
     this.el.title.textContent = ex.title || (run.tested ? 'Exercise' : 'Reading');
+    this._showStar();
     this.el.sub.textContent = `${ex.course} · ${ex.chapter}`;
     this._progress();
     this.el.notes.replaceChildren();
@@ -415,7 +421,9 @@ export class CourseTrainer {
         ? `✓ Solved${timed}!`
         : this.wp
           ? `✗ Missed (${clock(seconds)}).`
-          : '✗ Missed: it comes round again with Retry missed.';
+          : this.studies
+            ? '✗ Missed: it comes round first next time.'
+            : '✗ Missed: it comes round again with Retry missed.';
       if (this.retrying && this.wp) this.el.result.textContent += ' Practice: not recorded.';
       this.el.result.className = `train-result ${solved ? 'good' : 'bad'}`;
       this._message('');
@@ -437,7 +445,7 @@ export class CourseTrainer {
       if (!this.retrying) await this._recordWoodpecker(run, solved, seconds);
     } else {
       try {
-        await api.exerciseAttempt(run.ex.id, solved);
+        await (this.studies ? api.studyAttempt(run.ex.id, solved) : api.exerciseAttempt(run.ex.id, solved));
       } catch (err) {
         toast(`Result not saved: ${err.message}`, 'error');
       }
@@ -474,6 +482,34 @@ export class CourseTrainer {
         this.el.next.textContent = 'Finish';
       }
     }
+  }
+
+  // ---- favourites (endgame studies) ---------------------------------------------------------------
+
+  _showStar() {
+    const fav = Boolean(this.run?.ex.favourite);
+    const b = this.el.star;
+    b.textContent = fav ? '★' : '☆';
+    b.setAttribute('aria-pressed', String(fav));
+    b.title = fav ? 'Remove from favourites' : 'Add to favourites (to look at later)';
+  }
+
+  /** One tap: favourite this study, or take it out of favourites (asking first if it has a note). */
+  async toggleFavourite() {
+    const ex = this.run?.ex;
+    if (!this.studies || !ex) return;
+    try {
+      if (ex.favourite) {
+        if (ex.favourite_note && !(await confirmDialog('Remove from favourites?', `Its note is deleted too:\n“${ex.favourite_note}”`, 'Remove'))) return;
+        Object.assign(ex, await api.unfavouriteStudy(ex.id));
+      } else {
+        Object.assign(ex, await api.favouriteStudy(ex.id));
+      }
+    } catch (err) {
+      toast(`Not changed: ${err.message}`, 'error');
+      return;
+    }
+    if (this.run?.ex === ex) this._showStar();
   }
 
   /** Count the missed first go as solved: the answer was another solution the course doesn't give. */

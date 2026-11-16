@@ -40,6 +40,7 @@ class CourseLine:
     comments: dict[int, str] = field(default_factory=dict)
     kind: str = "line"  # 'line', 'info' (a page to read, not trained), 'reference' (not trained), 'alternative' (another move order)
     start_fen: str = chess.STARTING_FEN
+    meta: dict = field(default_factory=dict)  # PGN studies: composer, year, source, stipulation, material
 
 
 def clean_text(text: str) -> str:

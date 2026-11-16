@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.chessable import NotALine, parse_exercise
-from app.core.pgn_course import NotACourse, parse_course
 from app.db.session import get_session
 from app.repositories import courses as repo
 from app.repositories import woodpecker as wp
@@ -109,34 +108,6 @@ class ImportOut(BaseModel):
     skipped: list[str]
 
 
-PGN_MAX = 60_000_000  # characters: HHdb-sized files (about 100k studies) fit
-PGN_EXERCISES_MAX = 20_000  # in one import: tick fewer chapters for more
-
-
-class PgnIn(BaseModel):
-    pgn: str = Field(max_length=PGN_MAX)
-    name: str = Field(default="", max_length=100)
-    group: Literal["auto", "material", "event", "none"] = "auto"
-
-
-class PgnChapter(BaseModel):
-    id: int
-    title: str
-    count: int
-
-
-class PgnPreviewOut(BaseModel):
-    group: str  # what "auto" chose
-    exercises: int
-    chapters: list[PgnChapter]
-    skipped: list[str]
-
-
-class PgnImportIn(PgnIn):
-    kind: Kind = "endgames"
-    chapter_ids: list[int] | None = Field(default=None, max_length=500)  # None = every chapter
-
-
 class CourseIn(BaseModel):
     name: str | None = Field(default=None, max_length=100)
     kind: Kind | None = None
@@ -184,41 +155,6 @@ def import_course(body: ImportIn, s: Db):
         raise repo.InvalidCourse("Nothing to import" + (f": {skipped[0]}" if skipped else ""))
     report = repo.import_course(s, body.name, body.kind, lines, [c.model_dump() for c in body.chapters])
     return {**report, "skipped": skipped}
-
-
-def _pgn(body: PgnIn):
-    try:
-        return parse_course(body.pgn, body.name.strip(), body.group)
-    except NotACourse as exc:
-        raise repo.InvalidCourse(str(exc)) from exc
-
-
-@router.post("/courses/pgn/preview", response_model=PgnPreviewOut)
-def preview_pgn(body: PgnIn):
-    """What a PGN file would import as: its chapters (by material, event or one) and counts."""
-    parsed = _pgn(body)
-    return {"group": parsed.group, "exercises": len(parsed.lines), "chapters": parsed.chapters, "skipped": parsed.skipped}
-
-
-@router.post("/courses/pgn/import", response_model=ImportOut)
-def import_pgn(body: PgnImportIn, s: Db):
-    """A PGN file (endgame studies, or any exercises from set-up positions) -> a course. Importing
-    the same file under the same name again updates it and keeps your progress."""
-    if not body.name.strip():
-        raise repo.InvalidCourse("A course needs a name")
-    parsed = _pgn(body)
-    lines = parsed.lines
-    if body.chapter_ids is not None:
-        chosen = set(body.chapter_ids)
-        lines = [line for line in lines if line.chapter_id in chosen]
-    if not lines:
-        raise repo.InvalidCourse("No exercises chosen: tick at least one chapter")
-    if len(lines) > PGN_EXERCISES_MAX:
-        raise repo.InvalidCourse(
-            f"{len(lines):,} exercises is too many for one course (at most {PGN_EXERCISES_MAX:,}): tick fewer chapters")
-    chapters = [{"id": c["id"], "title": c["title"]} for c in parsed.chapters]
-    report = repo.import_course(s, body.name, body.kind, lines, chapters)
-    return {**report, "skipped": parsed.skipped}
 
 
 @router.get("/courses/{course_id}", response_model=CourseOut)

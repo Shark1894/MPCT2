@@ -1,4 +1,4 @@
-"""Training courses from a PGN file (endgame studies): reading, chapters by material, import, re-import."""
+"""Reading a PGN file of endgame studies: titles, notes, sidelines, chapters by material."""
 
 import pytest
 
@@ -96,31 +96,3 @@ def test_parse_errors():
     dup = parse_course(SAAVEDRA + "\n" + SAAVEDRA, "x")
     assert len(dup.lines) == 1 and "same as an earlier" in dup.skipped[0]
 
-
-def test_preview_import_and_reimport(client, db):
-    r = client.post("/api/courses/pgn/preview", json={"pgn": FILE, "name": "Studies"})
-    assert r.status_code == 200, r.text
-    p = r.json()
-    assert p["group"] == "material" and p["exercises"] == 3 and len(p["skipped"]) == 1
-    rook = next(ch["id"] for ch in p["chapters"] if ch["title"] == "Rook endings")
-    pawn = next(ch["id"] for ch in p["chapters"] if ch["title"] == "Pawn endings")
-
-    assert client.post("/api/courses/pgn/import", json={"pgn": FILE, "name": ""}).status_code == 422
-    assert client.post("/api/courses/pgn/import", json={"pgn": FILE, "name": "Studies", "chapter_ids": []}).status_code == 422
-    r = client.post("/api/courses/pgn/import", json={"pgn": FILE, "name": "Studies", "chapter_ids": [rook, pawn]})
-    assert r.status_code == 200, r.text
-    out = r.json()
-    assert out["created_course"] and out["added"] == 2 and len(out["skipped"]) == 1
-    course = client.get(f"/api/courses/{out['course_id']}").json()
-    assert course["kind"] == "endgames"
-    assert [c["title"] for c in course["chapters"]] == ["Pawn endings", "Rook endings"]
-    saavedra = course["chapters"][1]["exercises"][0]
-    e = client.get(f"/api/exercises/{saavedra['id']}").json()
-    assert e["color"] == "white" and e["start_fen"] == "8/8/1KP5/3r4/8/8/8/k7 w - - 0 1" and len(e["ucis"]) == 13
-    client.post(f"/api/exercises/{saavedra['id']}/attempt", json={"solved": True})
-
-    # The same file again, every chapter: the two studies are kept (with progress), the game is added.
-    again = client.post("/api/courses/pgn/import", json={"pgn": FILE, "name": "Studies"}).json()
-    assert (again["created_course"], again["added"], again["unchanged"]) == (False, 1, 2)
-    assert client.get(f"/api/exercises/{saavedra['id']}").json()["status"] == "solved"
-    assert len(client.get("/api/courses").json()) == 1
