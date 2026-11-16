@@ -581,7 +581,7 @@ export class PracticalView {
     box.hidden = !picks.length && !final;
     box.replaceChildren(
       el('h2', 'dash-h2', 'Sharpest alternatives'),
-      el('p', 'pr-note', 'Moves you don’t play yet, at least as sharp as yours, where at one of their decisions along the main line they have at most two good replies and their second-best is at least 5 points worse. Break-even: how often they’d have to miss (playing their second-best, at any of their decisions on the line) for the move to score better than yours; “free” when it’s no worse even if they always find the best. Eval change is in pawns from White’s side: green when it’s better for you. Tap a heading to sort; tap a move to see it on the board (it’s then ticked as seen).'),
+      el('p', 'pr-note', 'Moves you don’t play yet, at least as sharp as yours, where they have at most two good replies at every one of their decisions along the main line (all of the ones you chose to follow) and, at one of them, their second-best is at least 5 points worse. Break-even: how often they’d have to miss (playing their second-best, at any of their decisions on the line) for the move to score better than yours; “free” when it’s no worse even if they always find the best. Eval change is in pawns from White’s side: green when it’s better for you. Tap a heading to sort; tap a move to see it on the board (it’s then ticked as seen).'),
     );
     if (!picks.length) {
       box.appendChild(el('p', 'pr-note', final && this.results.length

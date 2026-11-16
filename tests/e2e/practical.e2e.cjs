@@ -105,7 +105,7 @@ async function api(page, method, path, body) {
   const num = (t) => Number(t.replace('−', '-'));
   check(wrows.every((r) => r[4].includes('recapture') || num(r[5]) >= 0), `never less sharp than yours (${wrows.map((r) => r[5]).join(' ')})`);
   check(wrows.every((r) => r[4] === '–' || (r[4].includes('recapture') ? r[5] === '–' : num(r[3]) - num(r[4].split(' ')[0]) === num(r[5]))), `difference = sharpness − yours, none against a recapture (${wrows.map((r) => `${r[4]}/${r[5]}`).join(' ')})`);
-  check(wrows.every((r) => r[6].split(' → ').some((g) => g !== 'r' && Number(g) <= 2) && Number(r[8]) >= 1), `at most two good replies at one of their decisions (${wrows.map((r) => r[6]).join(' | ')})`);
+  check(wrows.every((r) => r[6].split(' → ').length === 3 && r[6].split(' → ').every((g) => g === 'r' || Number(g) <= 2) && Number(r[8]) >= 1), `three decisions, at most two good replies at each (${wrows.map((r) => r[6]).join(' | ')})`);
   const pawns = (t) => Number(t.replace('−', '-'));
   check(wrows.every((r) => evalRe.test(r[10]) && evalRe.test(r[11]) && Math.abs(pawns(r[10]) - pawns(r[11]) - pawns(r[12])) < 0.011), `eval change = eval − yours (${wrows.map((r) => r[12]).join(' ')})`);
   await page.click('#pr-worth-table .pr-sort[data-sort="sharpness"]');

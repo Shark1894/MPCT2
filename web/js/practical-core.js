@@ -162,7 +162,11 @@ export function worthALook(results, opts = DEFAULTS) {
     const mine = r.cands.find((c) => c.repertoire) ?? null;
     for (const c of r.cands) {
       if (c.repertoire || c.final) continue;
-      if (!c.chain.some((d) => !d.recapture && d.good <= opts.maxGood && d.gap >= opts.minGap)) continue;
+      // the whole line followed (all of their decisions), at most two good replies at every one of them,
+      // and a clear gap at one that isn't a recapture
+      if (c.chain.length < (opts.decisions ?? 1)) continue;
+      if (!c.chain.every((d) => d.recapture || d.good <= opts.maxGood)) continue; // a recapture is obvious
+      if (!c.chain.some((d) => !d.recapture && d.gap >= opts.minGap)) continue;
       if (mine && !mine.allRecapture && Number.isFinite(mine.sharpness) && Math.round(c.sharpness) < Math.round(mine.sharpness)) continue;
       out.push({ position: r.position, cand: c, mine });
     }

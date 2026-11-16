@@ -799,8 +799,8 @@ replies to it, in winning chances (0-100):
     never the sharpest point; a move that only leads to recaptures is marked *recapture*.
 
 **Sharpest alternatives** is a table of moves you don't play yet, at least as sharp as yours (unless yours only
-leads to recaptures), where at one of their decisions along the line they have at most two good replies and their
-second-best is at least 5 points worse. Columns: after (the move that led there; hover for the whole line), the
+leads to recaptures), where the line was followed through all of the chosen decisions, they have at most two good
+replies at every one of them, and at one (not a recapture) their second-best is at least 5 points worse. Columns: after (the move that led there; hover for the whole line), the
 move and the one it replaces, **break-even**, sharpness, yours, the difference, good replies, in a row, gap, cost,
 the evals of the suggestion and of your move, the **eval change** (suggestion minus yours, pawns from White's side,
 green when better for you, red when worse), the **depth** searched and **seen**.

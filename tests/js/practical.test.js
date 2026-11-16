@@ -52,7 +52,7 @@ test('an obvious recapture is flagged and kept out of the sharpest alternatives'
   assert.equal(scoreCandidate({ uci: 'g4e2', san: 'Bxe2', me: 'black', theirLines: lines }).recapture, false); // not a capture
   const notBack = scoreCandidate({ uci: 'f6d5', san: 'Nxd5', me: 'black', theirLines: [{ uci: 'c2c4', score: cp(50) }, { uci: 'g1f3', score: cp(-200) }], capture: true });
   assert.equal(notBack.recapture, false); // their best doesn't take back
-  assert.equal(worthALook([{ position: {}, cands: finish([bxe2]) }]).length, 0);
+  assert.equal(worthALook([{ position: {}, cands: finish([bxe2]) }], { ...DEFAULTS, decisions: 1 }).length, 0);
 });
 
 test('costs, the cap, ordering and the sharpest alternatives', () => {
@@ -63,12 +63,13 @@ test('costs, the cap, ordering and the sharpest alternatives', () => {
   assert.deepEqual(cands.map((c) => c.san), ['Nc6', 'd6']); // least cost first; g5 over the cap
   near(nc6.cost, 0);
   near(d6.cost, W(40) - W(20));
-  const w = worthALook([{ position: { sans: ['e4', 'e5', 'Nf3'] }, cands }]);
+  const one = { ...DEFAULTS, decisions: 1 };
+  const w = worthALook([{ position: { sans: ['e4', 'e5', 'Nf3'] }, cands }], one);
   assert.equal(w.length, 1);
   assert.equal(w[0].cand.san, 'd6');
   assert.equal(w[0].mine.san, 'Nc6');
-  assert.equal(worthALook([{ position: {}, cands }], { ...DEFAULTS, minGap: 20 }).length, 0);
-  assert.equal(worthALook([{ position: {}, cands }], { ...DEFAULTS, maxGood: 0 }).length, 0);
+  assert.equal(worthALook([{ position: {}, cands }], { ...one, minGap: 20 }).length, 0);
+  assert.equal(worthALook([{ position: {}, cands }], { ...one, maxGood: 0 }).length, 0);
   assert.equal(finalCandidate({ uci: 'd8h4', san: 'Qh4#', value: 100 }).mate, true);
 });
 
@@ -76,9 +77,9 @@ test('never less sharp than your move (unless yours is a recapture)', () => {
   const mk = (san, sharpness, extra = {}) => ({ san, sharpness, good: 1, gap: 10, cost: 2, repertoire: false, final: false, recapture: false, allRecapture: false, chain: [{ good: 1, gap: 10, recapture: false }], ...extra });
   const mine = mk('Qxd5', 8.4, { repertoire: true });
   const cands = [mine, mk('c6', 12), mk('Qd6', 7.6), mk('g6', 6.2)]; // Qd6 shows as 8, the same as yours
-  assert.deepEqual(worthALook([{ position: {}, cands }]).map((p) => p.cand.san), ['c6', 'Qd6']);
+  assert.deepEqual(worthALook([{ position: {}, cands }], { ...DEFAULTS, decisions: 1 }).map((p) => p.cand.san), ['c6', 'Qd6']);
   const recap = mk('Bxe2', 36, { repertoire: true, recapture: true, allRecapture: true });
-  assert.deepEqual(worthALook([{ position: {}, cands: [recap, mk('h5', 7)] }]).map((p) => p.cand.san), ['h5']);
+  assert.deepEqual(worthALook([{ position: {}, cands: [recap, mk('h5', 7)] }], { ...DEFAULTS, decisions: 1 }).map((p) => p.cand.san), ['h5']);
 });
 
 test('the change in eval against your move, and who it helps', () => {
@@ -179,4 +180,18 @@ test('text helpers', () => {
   assert.equal(signed(-2.4), '−2');
   assert.equal(signed(0.2), '0');
   assert.equal(signed(NaN), '–');
+});
+
+test('alternatives: the whole line followed, at most two good replies at every decision', () => {
+  const dec = (good, gap = 10, recapture = false) => ({ good, gap, recapture });
+  const mk = (san, chain) => ({ san, sharpness: 10, cost: 2, repertoire: false, final: false, allRecapture: false, chain });
+  const cands = [
+    mk('a', [dec(2), dec(1), dec(2)]), // in
+    mk('b', [dec(1), dec(3), dec(1)]), // three good replies at decision 2
+    mk('c', [dec(1), dec(1)]), // the line stopped after two decisions
+    mk('d', [dec(1, 10, true), dec(2, 2), dec(1, 6)]), // recapture first, then a clear gap: in
+    mk('e', [dec(1, 3), dec(2, 2), dec(1, 4)]), // no clear gap anywhere
+  ];
+  assert.deepEqual(worthALook([{ position: {}, cands }]).map((p) => p.cand.san), ['a', 'd']);
+  assert.deepEqual(worthALook([{ position: {}, cands }], { ...DEFAULTS, decisions: 2 }).map((p) => p.cand.san), ['a', 'c', 'd']);
 });
