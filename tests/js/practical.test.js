@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  DEFAULTS, candidateMoves, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
+  DEFAULTS, candidateMoves, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
 } from '../../web/js/practical-core.js';
 
 const near = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
@@ -70,6 +70,26 @@ test('costs, the cap, ordering and the sharpest alternatives', () => {
   assert.equal(worthALook([{ position: {}, cands }], { ...DEFAULTS, minGap: 20 }).length, 0);
   assert.equal(worthALook([{ position: {}, cands }], { ...DEFAULTS, maxGood: 0 }).length, 0);
   assert.equal(finalCandidate({ uci: 'd8h4', san: 'Qh4#', value: 100 }).mate, true);
+});
+
+test('never less sharp than your move (unless yours is a recapture)', () => {
+  const mk = (san, sharpness, extra = {}) => ({ san, sharpness, good: 1, gap: 10, cost: 2, repertoire: false, final: false, recapture: false, ...extra });
+  const mine = mk('Qxd5', 8.4, { repertoire: true });
+  const cands = [mine, mk('c6', 12), mk('Qd6', 7.6), mk('g6', 6.2)]; // Qd6 shows as 8, the same as yours
+  assert.deepEqual(worthALook([{ position: {}, cands }]).map((p) => p.cand.san), ['c6', 'Qd6']);
+  const recap = mk('Bxe2', 36, { repertoire: true, recapture: true });
+  assert.deepEqual(worthALook([{ position: {}, cands: [recap, mk('h5', 7)] }]).map((p) => p.cand.san), ['h5']);
+});
+
+test('the change in eval against your move, and who it helps', () => {
+  // You're Black: yours leaves −0.50, the suggestion 0.00 after their best reply: half a pawn worse for you.
+  const worse = evalChange({ score: { cp: 0 } }, { score: { cp: -50 } }, 'black');
+  assert.deepEqual(worse, { cp: 50, better: false, worse: true });
+  assert.equal(evalText({ cp: worse.cp }), '+0.50');
+  assert.deepEqual(evalChange({ score: { cp: -80, mate: null } }, { score: { cp: -50 } }, 'black'), { cp: -30, better: true, worse: false });
+  assert.deepEqual(evalChange({ score: { cp: 20 } }, { score: { cp: 20 } }, 'white'), { cp: 0, better: false, worse: false });
+  assert.equal(evalChange({ score: { mate: 3 } }, { score: { cp: 0 } }, 'white'), null);
+  assert.equal(evalChange({ score: { cp: 0 } }, null, 'white'), null);
 });
 
 test('text helpers', () => {

@@ -96,7 +96,8 @@ export function finish(cands, opts = DEFAULTS) {
 /**
  * The sharpest alternatives to your repertoire's moves: moves (within the cost cap) where they
  * have at most `maxGood` good replies and their second-best is at least `minGap` worse, sharpest
- * first. Captures they simply take back are left out. results: [{position, cands}]. Returns [{position, cand, mine}].
+ * first. Captures they simply take back are left out, and so are moves less sharp than yours
+ * (compared as shown, rounded). results: [{position, cands}]. Returns [{position, cand, mine}].
  */
 export function worthALook(results, opts = DEFAULTS) {
   const out = [];
@@ -104,10 +105,27 @@ export function worthALook(results, opts = DEFAULTS) {
     const mine = r.cands.find((c) => c.repertoire) ?? null;
     for (const c of r.cands) {
       if (c.repertoire || c.final || c.recapture) continue;
-      if (c.good <= opts.maxGood && c.gap >= opts.minGap) out.push({ position: r.position, cand: c, mine });
+      if (!(c.good <= opts.maxGood && c.gap >= opts.minGap)) continue;
+      // never less sharp than what you play (unless yours only looks sharp because it's a recapture)
+      if (mine && !mine.recapture && Number.isFinite(mine.sharpness) && Math.round(c.sharpness) < Math.round(mine.sharpness)) continue;
+      out.push({ position: r.position, cand: c, mine });
     }
   }
   return out.sort((a, b) => b.cand.sharpness - a.cand.sharpness || a.cand.cost - b.cand.cost).slice(0, opts.maxWorth);
+}
+
+/**
+ * How the eval changes if you play `cand` instead of `mine` (after their best reply each time):
+ * {cp} in White's view (as evals are written) and whether that's better for you (`me`).
+ * null when either is unknown or a mate.
+ */
+export function evalChange(cand, mine, me) {
+  const a = cand?.score;
+  const b = mine?.score;
+  if (!a || !b || a.mate != null || b.mate != null || a.cp == null || b.cp == null) return null;
+  const cp = a.cp - b.cp;
+  const forMe = me === 'white' ? cp : -cp;
+  return { cp, better: forMe > 0, worse: forMe < 0 };
 }
 
 /** An eval as players write it, White's view: "+0.35", "−1.20", "#3", "#−2" ("–" when unknown). */

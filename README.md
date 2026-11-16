@@ -793,10 +793,12 @@ replies to it, in winning chances (0-100):
   *recapture* when your move takes something and their best is simply to take back (obvious, so not sharp in
   practice, as in the old Sharpness scripts).
 
-**Sharpest alternatives** is a table of moves you don't play yet where they have at most two good replies and their
-second-best is at least 5 points worse (recaptures left out), sharpest first: where (from the start of the
-branch), the move and the one it replaces, sharpness, yours, the difference, good replies, gap, cost, the evals of
-the suggestion and of your move, their only move(s) and next best replies with your winning chances after each.
+**Sharpest alternatives** is a table of moves you don't play yet, at least as sharp as yours (unless yours is a
+recapture), where they have at most two good replies and their second-best is at least 5 points worse (recaptures
+left out), sharpest first: where (from the start of the branch), the move and the one it replaces, sharpness,
+yours, the difference, good replies, gap, cost, the evals of the suggestion and of your move, the **eval change**
+(suggestion minus yours, pawns from White's side, green when better for you, red when worse), their only move(s)
+and next best replies with your winning chances after each.
 Tap a heading to sort; tap a move (or **Show on board**) to open the position on the Board tab.
 
 The engine runs in the browser (Stockfish, Quick 0.3 s / Normal 0.8 s / Deep 2 s an analysis, about 9 analyses a

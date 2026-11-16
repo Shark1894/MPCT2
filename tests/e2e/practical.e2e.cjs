@@ -86,11 +86,12 @@ async function api(page, method, path, body) {
   check(!(await page.textContent('#practical-view')).match(/go wrong|Trap value|Practical\b(?! choices)/), 'no opponent-model measures on the page');
   check(await page.isVisible('#pr-worth'), 'sharpest alternatives shown');
   const wHeads = await page.$$eval('#pr-worth-table thead th', (ths) => ths.map((t) => t.textContent.replace(/[↕▼▲]/g, '').trim()));
-  check(wHeads.join('|') === 'After|Play|Sharpness|Yours|Difference|Good replies|Gap|Cost|Eval|Yours (eval)|Only move(s) → you|Next best → you', `sharpest alternatives as a table (${wHeads.join('|')})`);
+  check(wHeads.join('|') === 'After|Play|Sharpness|Yours|Difference|Good replies|Gap|Cost|Eval|Yours (eval)|Eval change|Only move(s) → you|Next best → you', `sharpest alternatives as a table (${wHeads.join('|')})`);
   const sharps = await page.$$eval('#pr-worth-table tbody tr td:nth-child(3)', (tds) => tds.map((td) => Number(td.textContent)));
   check(sharps.length > 0 && sharps.every((t, i) => i === 0 || t <= sharps[i - 1]), `sorted by sharpness (${sharps.join(' ')})`);
   const num = (t) => Number(t.replace('−', '-'));
   const diffs = await page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => [3, 4, 5].map((i) => tr.children[i - 1].textContent)));
+  check(diffs.every(([, y, d]) => y.includes('recapture') || num(d) >= 0), `never less sharp than yours (${diffs.map((r) => r[2]).join(' ')})`);
   check(diffs.every(([t, y, d]) => y === '–' || num(t) - num(y.split(' ')[0]) === num(d)), `difference = sharpness − yours (${diffs.map((r) => r.join('/')).join(' ')})`);
   const goodGap = await page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => [Number(tr.children[5].textContent), Number(tr.children[6].textContent)]));
   check(goodGap.every(([g, gap]) => g <= 2 && gap >= 5), `at most two good replies and a gap of 5+ (${goodGap.map((r) => r.join('/')).join(' ')})`);
@@ -101,7 +102,11 @@ async function api(page, method, path, body) {
   const sortedDiffs = await page.$$eval('#pr-worth-table tbody tr td:nth-child(5)', (tds) => tds.map((td) => td.textContent));
   check(sortedDiffs.map(num).every((d, i, a) => i === 0 || d <= a[i - 1]), `sorted by difference (${sortedDiffs.join(' ')})`);
   const evals = await page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => [tr.children[8].textContent, tr.children[9].textContent]));
-  check(evals.every(([e, y]) => evalRe.test(e) && /^([+−]\d+\.\d\d|0\.00) \(\S+\)$/.test(y)), `evals for the suggestion and yours (${evals.map((r) => r.join(' vs ')).join('; ')})`);
+  check(evals.every(([e, y]) => evalRe.test(e) && evalRe.test(y)), `evals for the suggestion and yours (${evals.map((r) => r.join(' vs ')).join('; ')})`);
+  const changes = await page.$$eval('#pr-worth-table tbody tr', (trs) => trs.map((tr) => [tr.children[8].textContent, tr.children[9].textContent.split(' ')[0], tr.children[10].textContent, tr.children[10].className]));
+  const pawns = (t) => Number(t.replace('−', '-'));
+  check(changes.every(([e, y, d, cls]) => Math.abs(pawns(e) - pawns(y) - pawns(d)) < 0.011 && (pawns(d) > 0 ? cls.includes('down') : pawns(d) < 0 ? cls.includes('up') : cls.includes('same'))),
+    `eval change = eval − yours, red when worse for Black (${changes.map((r) => `${r[2]} ${r[3].split(' ').pop()}`).join('; ')})`);
   const firstWhere = await page.textContent('#pr-worth-table tbody tr:first-child td:first-child');
   check(!firstWhere.startsWith('1.e4'), `positions shown from the branch (${firstWhere})`);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/practical.png`, fullPage: true });

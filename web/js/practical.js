@@ -13,7 +13,7 @@ import { api } from './api.js';
 import { button, el, miniBoard } from './dom.js';
 import { Engine } from './engine.js';
 import {
-  DEFAULTS, candidateMoves, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
+  DEFAULTS, candidateMoves, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
 } from './practical-core.js';
 import { plural, store, toast } from './ui.js';
 
@@ -38,6 +38,14 @@ function sharpCell(c) {
     td.appendChild(el('span', 'pr-model', 'recapture'));
     td.title = 'They simply take back: the only move is obvious, so this isn’t sharp in practice';
   }
+  return td;
+}
+
+/** How the eval moves against your own move, White's view as written, coloured by who it helps. */
+function evalChangeCell(d) {
+  const td = el('td', 'num pr-diff', d === null ? '–' : d.cp === 0 ? '0.00' : evalText({ cp: d.cp }));
+  if (d !== null) td.classList.add(d.better ? 'up' : d.worse ? 'down' : 'same');
+  td.title = 'Eval of this move minus your move’s (pawns, White’s view): green when it’s better for you, red when worse';
   return td;
 }
 
@@ -412,7 +420,7 @@ export class PracticalView {
     box.hidden = !picks.length && !final;
     box.replaceChildren(
       el('h2', 'dash-h2', 'Sharpest alternatives'),
-      el('p', 'pr-note', 'Moves you don’t play yet where they have at most two good replies and their second-best is at least 5 points worse, sharpest first. Tap a heading to sort; tap a move to see it on the board.'),
+      el('p', 'pr-note', 'Moves you don’t play yet, at least as sharp as yours, where they have at most two good replies and their second-best is at least 5 points worse, sharpest first. Eval change is in pawns from White’s side: green when it’s better for you. Tap a heading to sort; tap a move to see it on the board.'),
     );
     if (!picks.length) {
       box.appendChild(el('p', 'pr-note', final && this.results.length
@@ -444,6 +452,10 @@ export class PracticalView {
       ['Cost', 'cost', (p) => p.cand.cost, true],
       ['Eval', null],
       ['Yours (eval)', null],
+      ['Eval change', 'evalchg', (p) => {
+        const d = evalChange(p.cand, p.mine, this.info.color);
+        return d === null ? -Infinity : this.info.color === 'white' ? d.cp : -d.cp; // best for you first
+      }],
       ['Only move(s) → you', null],
       ['Next best → you', null],
     ];
@@ -490,7 +502,8 @@ export class PracticalView {
         el('td', 'num', Number.isFinite(c.gap) ? String(Math.round(c.gap)) : '–'),
         el('td', 'num', String(Math.round(c.cost))),
         el('td', 'num pr-eval', evalText(c.score)),
-        el('td', 'num pr-eval', mine ? `${evalText(mine.score)} (${mine.san})` : '–'),
+        el('td', 'num pr-eval', mine ? evalText(mine.score) : '–'),
+        evalChangeCell(evalChange(c, mine, this.info.color)),
         el('td', 'pr-only', good.length ? good.map((r) => `${r.san} → ${pct(r.mine)}`).join(', ') : '–'),
         el('td', 'pr-replies', next.map((r) => `${r.san} → ${pct(r.mine)}`).join(', ') || '–'),
       ];
