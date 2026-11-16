@@ -821,6 +821,11 @@ B and B2 the same for the suggestion. **free** = at least as good as yours even 
 **never** = no miss rate makes it better. The table is sorted by it, lowest first; tap a heading to sort by
 another column.
 
+**Every position** lists the positions searched, folded to one line each: the move that led there, your move with
+its good replies decision by decision, and how many other moves stay sharp all the way (named). Tap one (or **Open
+all**) for its table of every move checked: eval, engine, cost, good replies, in a row, gap, sharpness, depth and
+their replies. **How to read it** is folded too.
+
 **Seen**: opening a suggestion on the board (tapping it, here or in a position's table) ticks it as seen, kept on
 the server (`practical_seen`) so it shows on every device; tap the tick to undo. Seen rows are dimmed, and **Hide
 the ones you've seen** leaves them out.

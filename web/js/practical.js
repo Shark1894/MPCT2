@@ -371,6 +371,11 @@ export class PracticalView {
     }
   }
 
+  /** Open or fold every position. */
+  _openAll(open) {
+    for (const d of this.el.positions.querySelectorAll('details.pr-pos')) d.open = open;
+  }
+
   /** Draw the results again (after a seen tick changes). */
   _redraw() {
     if (!this.info) return;
@@ -454,9 +459,19 @@ export class PracticalView {
     this.el.worth.hidden = true;
     this.el.positions = el('div', 'pr-positions');
     this.el.positions.id = 'pr-positions';
-    this.el.help = el('section', 'dash-card pr-help');
+    this.el.positionsHead = el('div', 'pr-positions-head');
+    this.el.positionsHead.hidden = true;
+    this.el.positionsHead.append(
+      el('h2', 'dash-h2', 'Every position'),
+      el('p', 'pr-note', 'One line each: your move with their good replies decision by decision, and how many other moves stay sharp all the way. Tap a position to see every move checked there.'),
+      button('Open all', 'small', () => this._openAll(true)),
+      button('Close all', 'small', () => this._openAll(false)),
+    );
+    this.el.help = el('details', 'dash-card pr-help');
+    const helpSum = el('summary', 'pr-help-sum');
+    helpSum.appendChild(el('h2', 'dash-h2', 'How to read it'));
     this.el.help.append(
-      el('h2', 'dash-h2', 'How to read it'),
+      helpSum,
       this._helpList([
         ['Eval', 'the engine’s evaluation after the move and their best reply, in pawns from White’s side (+ good for White)'],
         ['Engine', 'the same as your winning chances (0–100)'],
@@ -469,7 +484,7 @@ export class PracticalView {
       ]),
       el('p', 'pr-note', 'Points are winning chances (0–100) from the engine’s evaluations. ✗ marks a reply that isn’t good for them.'),
     );
-    this.box.replaceChildren(head, this.el.worth, this.el.positions, this.el.help);
+    this.box.replaceChildren(head, this.el.worth, this.el.positionsHead, this.el.positions, this.el.help);
   }
 
   _helpList(rows) {
@@ -555,6 +570,7 @@ export class PracticalView {
     this.run = { w, started: performance.now(), done: 0, total: info.positions.length };
     this.el.go.textContent = 'Stop';
     this.el.positions.replaceChildren();
+    this.el.positionsHead.hidden = true;
     this.el.worth.hidden = true;
     this.el.progress.hidden = false;
     this._keepAwake();
@@ -576,6 +592,7 @@ export class PracticalView {
         this.results.push(r);
         this.run.done += 1;
         this.el.positions.appendChild(this._positionCard(r));
+        this.el.positionsHead.hidden = false;
         this._drawWorth();
       }
     } finally {
@@ -762,9 +779,24 @@ export class PracticalView {
     return wrap;
   }
 
+  /** A position, folded to one line (your move, its chain, how many moves are still sharp); tap to see every move. */
   _positionCard({ position, cands }) {
-    const card = el('section', 'dash-card pr-pos');
+    const card = el('details', 'dash-card pr-pos');
     card.id = `pr-pos-${position.key}`;
+    this.openPositions ??= new Set();
+    card.open = this.openPositions.has(position.key);
+    card.addEventListener('toggle', () => (card.open ? this.openPositions.add(position.key) : this.openPositions.delete(position.key)));
+    const sum = el('summary', 'pr-pos-sum');
+    const mineC = cands.filter((c) => c.repertoire);
+    const sharp = cands.filter((c) => !c.repertoire && !c.final && !c.stopped && (c.levels ?? []).length && c.levels.every((d) => stillSharp(d, this.opts ?? DEFAULTS)));
+    const chainText = (c) => (c.final ? '' : `${c.goodChain.join(' → ')}${c.stopped ? ' → …' : ''}`);
+    sum.append(
+      el('span', 'pr-sum-after', this._last(position.sans)),
+      el('span', 'pr-sum-yours', mineC.length ? mineC.map((c) => `${c.san} ${chainText(c)}`).join(', ') : 'not in your lines'),
+      el('span', `pr-sum-sharp${sharp.length ? ' hot' : ''}`, `${sharp.length} of ${cands.length - mineC.length} still sharp${sharp.length ? `: ${sharp.map((c) => c.san).join(', ')}` : ''}`),
+    );
+    sum.title = `${movetext(position.sans)} … Tap to see every move checked here.`;
+    card.appendChild(sum);
     const head = el('div', 'pr-pos-head');
     const flipped = this.info.color === 'black';
     head.appendChild(miniBoard(position.fen, movetext(position.sans), flipped));

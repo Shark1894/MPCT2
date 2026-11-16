@@ -69,6 +69,16 @@ async function api(page, method, path, body) {
   const progress = await page.textContent('#pr-progress');
   check(progress.startsWith('Done: 5 positions of 5') && progress.includes('at depth 12'), `done (${progress})`);
   console.log(`  first run: ${Math.round((Date.now() - t0) / 1000)} s`);
+  const sums = await page.$$eval('.pr-pos', (ds) => ds.map((d) => [d.open, d.querySelector('summary').textContent]));
+  check(sums.length === 5 && sums.every(([open, t]) => !open && /still sharp/.test(t)), `positions folded to one line each (${sums[0]?.[1]})`);
+  check(/Bxe2 r → \d/.test(sums[0][1]), 'the line shows your move and its good replies');
+  await page.click('.pr-pos:first-of-type summary');
+  check(await page.isVisible('.pr-pos:first-of-type .pr-table'), 'tap a position to see every move');
+  await page.click('.pr-positions-head button:has-text("Open all")');
+  check(await page.$$eval('.pr-pos', (ds) => ds.every((d) => d.open)), 'Open all');
+  check(!(await page.$eval('.pr-help', (d) => d.open)), 'How to read it folded');
+  await page.click('.pr-help summary');
+  check(await page.isVisible('.pr-help dl, .pr-help .pr-help-list, .pr-help dt'), 'and opens on a tap');
   const cards = await page.$$eval('.pr-pos .pr-pos-moves', (hs) => hs.map((h) => h.textContent));
   check(cards.length === 5 && cards[0] === '1.e4 d5 2.exd5 Nf6 3.d4 Bg4 4.Be2 …', `a card per position, the branch's first (${cards[0]})`);
   const firstRows = await page.$$eval('.pr-pos:first-of-type tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
@@ -170,6 +180,16 @@ async function api(page, method, path, body) {
   const firstWhere = (await cellsOf())[0][0];
   check(!firstWhere.startsWith('1.e4'), `positions shown by their last move (${firstWhere})`);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/practical.png`, fullPage: true });
+  await page.click('.pr-positions-head button:has-text("Close all")');
+  check(await page.$$eval('.pr-pos', (ds) => ds.every((d) => !d.open)), 'Close all');
+  if (SHOTS) {
+    await page.screenshot({ path: `${SHOTS}/practical-folded.png`, fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await settle(page, 300);
+    await page.screenshot({ path: `${SHOTS}/practical-folded-mobile.png`, fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+  await page.click('.pr-positions-head button:has-text("Open all")');
 
   // ---- a second run uses the saved engine lines -------------------------------------------------------
   await page.selectOption('#pr-decisions', '3');
