@@ -24,7 +24,8 @@ def export(s: Session, name: str) -> tuple[Opening, list[list[str]]]:
     if exact:
         matches = exact
     if not matches:
-        raise SystemExit(f"No opening called '{name}'")
+        names = ", ".join(f"'{o.name}' ({o.color})" for o in s.scalars(select(Opening).order_by(Opening.name)))
+        raise SystemExit(f"No opening called '{name}'. Openings: {names}")
     if len(matches) > 1:
         raise SystemExit("More than one opening matches: " + ", ".join(f"'{o.name}'" for o in matches))
     opening = matches[0]
