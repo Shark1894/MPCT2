@@ -78,6 +78,7 @@ export const api = {
   activity: (tz, days = 182) => request('GET', '/activity', { params: { tz, days } }),
 
   tags: (openingId) => request('GET', `/openings/${openingId}/tags`),
+  tagsAt: (openingId, fen) => request('GET', `/openings/${openingId}/tags/at`, { params: { fen } }),
   createTag: (openingId, name, fen) => request('POST', `/openings/${openingId}/tags`, { body: { name, fen } }),
   renameTag: (tagId, name) => request('PATCH', `/tags/${tagId}`, { body: { name } }),
   deleteTag: (tagId) => request('DELETE', `/tags/${tagId}`),

@@ -130,3 +130,28 @@ def test_deleting_opening_deletes_its_tags(client, opening, db):
     tag(client, opening, "QGA", QGA_FEN)
     client.delete(f"/api/openings/{opening['id']}")
     assert count(db, "opening_tags") == 0
+
+
+def _fen(*ucis):
+    import chess
+
+    b = chess.Board()
+    for u in ucis:
+        b.push_uci(u)
+    return b.fen()
+
+
+def test_branches_a_position_is_in_however_it_was_reached(client, opening):
+    """A branch shows from positions after its own, also when its position was skipped by another move order."""
+    client.post(f"/api/openings/{opening['id']}/lines", json={"moves": ["d2d4", "d7d5", "c2c4", "e7e6", "g1f3", "g8f6"]})
+    qgd = tag(client, opening, "QGD", _fen("d2d4", "d7d5", "c2c4", "e7e6")).json()["id"]
+    qga = tag(client, opening, "QGA", QGA_FEN).json()["id"]
+    e4 = tag(client, opening, "QGA 3.e4", QGA_E4_FEN).json()["id"]
+    at = lambda fen: client.get(f"/api/openings/{opening['id']}/tags/at", params={"fen": fen}).json()
+    assert at(_fen(*QGA_E4)) == sorted([qga, e4])
+    assert at(QGA_FEN) == [qga]  # the tag's own position counts
+    assert at(_fen("d2d4", "d7d5")) == []  # before any branch
+    # 1.d4 d5 2.Nf3 e6 3.c4 never passes the QGD position (after 2.c4 e6) but is a QGD line's 3.Nf3 position
+    assert at(_fen("d2d4", "d7d5", "g1f3", "e7e6", "c2c4")) == [qgd]
+    assert at(_fen("e2e4")) == []  # not in the lines
+    assert client.get(f"/api/openings/{opening['id']}/tags/at", params={"fen": "nonsense"}).status_code == 422

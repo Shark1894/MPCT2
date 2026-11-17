@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, StringConstraints
 from sqlalchemy.orm import Session
 
@@ -35,6 +35,12 @@ class TagOut(BaseModel):
 @router.get("/openings/{opening_id}/tags", response_model=list[TagOut])
 def list_tags(opening_id: int, s: Db):
     return repo.list_tags(s, opening_id)
+
+
+@router.get("/openings/{opening_id}/tags/at", response_model=list[int])
+def tags_at(opening_id: int, s: Db, fen: Annotated[str, Query(min_length=1)]):
+    """Ids of the branches this position is in, however it was reached (transpositions too)."""
+    return repo.tags_at(s, opening_id, fen)
 
 
 @router.post("/openings/{opening_id}/tags", response_model=TagOut, status_code=201)

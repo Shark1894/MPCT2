@@ -5,7 +5,7 @@ and one line can carry several (nested) tags."""
 from datetime import date
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.core.positions import START_KEY, key_from_fen
 from app.db.models import Line, Move, OpeningTag, Position
@@ -92,6 +92,27 @@ def list_tags(s: Session, opening_id: int) -> list[dict]:
     ]
     # Shallow branches first, then by name; tags whose lines were all deleted go last
     return sorted(out, key=lambda t: (len(t["path"]) or 999, t["name"].lower()))
+
+
+def tags_at(s: Session, opening_id: int, fen: str) -> list[int]:
+    """Ids of the branches the position is in, however it was reached: a line of the opening passes
+    through the tag's position and then (later, or there) through this one. Includes branches
+    whose position isn't on the moves played to get here (a transposition)."""
+    get_opening(s, opening_id)
+    pos_id = s.scalar(select(Position.id).where(Position.key == key_from_fen(fen)))
+    if pos_id is None:
+        return []
+    at_tag, here = aliased(Move), aliased(Move)
+    return sorted(
+        s.scalars(
+            select(OpeningTag.id)
+            .join(at_tag, at_tag.position_after_id == OpeningTag.position_id)
+            .join(here, (here.line_id == at_tag.line_id) & (here.ply >= at_tag.ply))
+            .join(Line, Line.id == at_tag.line_id)
+            .where(OpeningTag.opening_id == opening_id, Line.opening_id == opening_id, here.position_after_id == pos_id)
+            .distinct()
+        )
+    )
 
 
 def create_tag(s: Session, opening_id: int, name: str, fen: str) -> dict:

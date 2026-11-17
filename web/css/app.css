@@ -1313,6 +1313,11 @@ body.playing .fen-actions #btn-fen-load {
   font-weight: 600;
 }
 
+.branch-chip.transposed {
+  background: var(--blue-soft);
+  border-color: var(--blue);
+}
+
 .branch-sep {
   color: var(--text-dim);
 }

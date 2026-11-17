@@ -495,8 +495,18 @@ export class RepertoirePanel {
     const onPath = [];
     keys.forEach((key, i) => {
       const t = this.tags.find((tag) => tag.key === key);
-      if (t) onPath.push({ tag: t, ply: i + 1 });
+      if (t) onPath.push({ tag: t, ply: i + 1, depth: i + 1 });
     });
+    // Branches this position is in that the moves played skipped (reached by another move order).
+    const fen = this.game.fen();
+    if (this.tagsAt?.fen === fen && this.tagsAt.openingId === this.openingId) {
+      for (const id of this.tagsAt.ids) {
+        if (onPath.some((p) => p.tag.id === id)) continue;
+        const t = this.tags.find((tag) => tag.id === id);
+        if (t) onPath.push({ tag: t, ply: null, depth: t.path.length || 999 });
+      }
+      onPath.sort((a, b) => a.depth - b.depth);
+    }
     if (onPath.length === 0) {
       const p = document.createElement('p');
       p.className = 'explorer-empty';
@@ -515,10 +525,17 @@ export class RepertoirePanel {
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'branch-chip';
-      if (ply === this.game.ply) chip.classList.add('here');
       chip.textContent = tag.name;
-      chip.title = `${tag.lines} line${tag.lines === 1 ? '' : 's'}: jump to this position`;
-      chip.addEventListener('click', () => this.onJump(ply));
+      if (ply == null) {
+        // transposed into: its position isn't on the moves played, so tapping shows it by its own moves
+        chip.classList.add('transposed');
+        chip.title = `Transposed into ${tag.name} (${tag.path.join(' ')}) by another move order. ${tag.lines} line${tag.lines === 1 ? '' : 's'}: tap to show its position`;
+        chip.addEventListener('click', () => this.onShowTag?.(tag));
+      } else {
+        if (ply === this.game.ply) chip.classList.add('here');
+        chip.title = `${tag.lines} line${tag.lines === 1 ? '' : 's'}: jump to this position`;
+        chip.addEventListener('click', () => this.onJump(ply));
+      }
       box.appendChild(chip);
     });
 
@@ -667,12 +684,16 @@ export class RepertoirePanel {
     const repId = this.repId;
     const openingId = this.openingId;
 
-    const [explorer, current, previous] = await Promise.all([
+    const [explorer, current, previous, tagsAt] = await Promise.all([
       openingId && !this.training ? api.explorer(openingId, fen).catch((err) => err) : [],
       repId ? api.comment(repId, fen).catch(() => null) : null,
       repId && prevFen ? api.comment(repId, prevFen).catch(() => null) : null,
+      openingId && this.tags.length && game.ply > 0 ? api.tagsAt(openingId, fen).catch(() => []) : [],
     ]);
     if (token !== this.token) return; // the position moved on while we waited
+
+    this.tagsAt = { fen, openingId, ids: tagsAt };
+    this._renderBranches(); // with any branches transposed into
 
     if (!this.training) this._renderExplorer(explorer, openingId);
     // Don't overwrite text being typed for this position since the request went out.

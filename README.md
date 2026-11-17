@@ -187,6 +187,9 @@ tags can nest (a line can be in "QGA" and "QGA 3.e4").
 - **Board:** the **Branches** section shows the tags along the current moves; tap one to jump there. **Tag this
   position** names the current position (not the start, and only where a line in the opening goes);
   **Rename tag** / **Remove tag** appear at a tagged position. Removing a tag keeps the lines.
+- **Transpositions:** a branch shows from any position after its own, however you got there. If the moves played
+  skipped the branch's position (another move order), its chip is blue; tap it to set up the branch's own moves.
+  (`GET /api/openings/{id}/tags/at?fen=` lists the branches a position is in.)
 - **Training:** the **Lines** dropdown (shown once an opening has tags) limits Train due / Train all to one branch.
   Picking a branch there also moves the board to its position: a jump if the board's moves already pass through it
   (later moves are kept), otherwise the branch's moves are set up from the start (asking first if that would end a
