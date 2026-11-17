@@ -62,9 +62,10 @@ def training_lines(
     line_id: int | None = None,
     tag_id: int | None = None,
     line_ids: Annotated[str | None, Query(pattern=r"^\d+(,\d+)*$", description="Comma-separated line ids")] = None,
+    rest: bool = False,  # with tag_id: only the branch's lines in none of its sub-branches
 ):
     ids = [int(x) for x in line_ids.split(",")] if line_ids else None
-    return repo.training_lines(s, opening_id, mode, line_id, tag_id, ids)
+    return repo.training_lines(s, opening_id, mode, line_id, tag_id, ids, rest)
 
 
 @router.post("/lines/{line_id}/reviews", response_model=ReviewOut, status_code=201)

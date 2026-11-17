@@ -42,16 +42,18 @@ def training_lines(
     line_id: int | None = None,
     tag_id: int | None = None,
     line_ids: list[int] | None = None,
+    rest: bool = False,
 ) -> dict:
     """Lines to train, most overdue first. mode: 'due' (next review today or earlier) or 'all'.
-    tag_id restricts to the lines in that branch. line_ids picks exact lines (e.g. the
-    weakest, or those through a problem position), trained in the order given."""
+    tag_id restricts to the lines in that branch (with `rest`, those in none of its sub-branches).
+    line_ids picks exact lines (e.g. the weakest, or those through a problem position), trained in
+    the order given."""
     from app.repositories.tags import lines_with_tag
 
     opening = get_opening(s, opening_id)
     q = select(Line).where(Line.opening_id == opening_id)
     if tag_id is not None:
-        q = q.where(Line.id.in_(lines_with_tag(s, opening_id, tag_id) or {-1}))
+        q = q.where(Line.id.in_(lines_with_tag(s, opening_id, tag_id, rest) or {-1}))
     if line_id is not None:
         q = q.where(Line.id == line_id)
     elif line_ids is not None:

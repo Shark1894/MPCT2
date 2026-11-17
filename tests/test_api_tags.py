@@ -155,3 +155,32 @@ def test_branches_a_position_is_in_however_it_was_reached(client, opening):
     assert at(_fen("d2d4", "d7d5", "g1f3", "e7e6", "c2c4")) == [qgd]
     assert at(_fen("e2e4")) == []  # not in the lines
     assert client.get(f"/api/openings/{opening['id']}/tags/at", params={"fen": "nonsense"}).status_code == 422
+
+
+def test_sub_branches_and_the_rest_of_a_branch(client):
+    """Branches nest by their main line; a branch's other lines are those in none of its sub-branches."""
+    rep = client.post("/api/repertoires", json={"name": "R"}).json()
+    o = client.post(f"/api/repertoires/{rep['id']}/openings", json={"name": "Slav", "color": "black"}).json()
+    slav = ["d2d4", "d7d5", "c2c4", "c7c6"]
+    semi = slav + ["g1f3", "g8f6", "b1c3", "e7e6"]
+    main = slav + ["g1f3", "g8f6", "b1c3", "d5c4"]
+    ids = {}
+    for name, moves in [
+        ("bot", semi + ["c1g5"]), ("semi_e3", semi + ["e2e3"]), ("main", main + ["a2a4"]),
+        ("exch", slav + ["c4d5", "c6d5"]), ("e3", slav + ["e2e3", "g8f6"]),
+    ]:
+        ids[name] = client.post(f"/api/openings/{o['id']}/lines", json={"moves": moves}).json()["line_id"]
+    t = {name: tag(client, o, name, _fen(*moves)).json()["id"] for name, moves in [
+        ("Slav", slav), ("Semi-Slav", semi), ("Main", main), ("Botvinnik", semi + ["c1g5"])]}
+    tags = {x["name"]: x for x in client.get(f"/api/openings/{o['id']}/tags").json()}
+    assert {n: tags[n]["parent_id"] for n in tags} == {"Slav": None, "Semi-Slav": t["Slav"], "Main": t["Slav"], "Botvinnik": t["Semi-Slav"]}
+    assert {n: (tags[n]["lines"], tags[n]["rest_lines"]) for n in tags} == {"Slav": (5, 2), "Semi-Slav": (2, 1), "Main": (1, None), "Botvinnik": (1, None)}
+    assert tags["Slav"]["rest_due"] == 2
+
+    url = f"/api/openings/{o['id']}/training"
+    rest = client.get(url, params={"tag_id": t["Slav"], "rest": True, "mode": "all"}).json()["lines"]
+    assert sorted(x["id"] for x in rest) == sorted([ids["exch"], ids["e3"]])
+    rest = client.get(url, params={"tag_id": t["Semi-Slav"], "rest": True, "mode": "all"}).json()["lines"]
+    assert [x["id"] for x in rest] == [ids["semi_e3"]]
+    d = client.get(f"/api/openings/{o['id']}/dashboard", params={"tag_id": t["Slav"], "rest": True}).json()
+    assert (d["tag_id"], d["rest"], d["stats"]["lines"]) == (t["Slav"], True, 2)

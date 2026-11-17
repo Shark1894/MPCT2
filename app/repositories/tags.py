@@ -47,9 +47,35 @@ def tagged_line_ids(s: Session, opening_id: int) -> dict[int, set[int]]:
     return out
 
 
-def lines_with_tag(s: Session, opening_id: int, tag_id: int) -> set[int]:
+def lines_with_tag(s: Session, opening_id: int, tag_id: int, rest: bool = False) -> set[int]:
+    """The lines in a branch; with `rest`, only those in none of its sub-branches."""
     tag_in_opening(s, opening_id, tag_id)
-    return tagged_line_ids(s, opening_id)[tag_id]
+    lines = tagged_line_ids(s, opening_id)
+    if not rest:
+        return lines[tag_id]
+    paths = _tag_paths(s, opening_id)
+    return lines[tag_id] - set().union(*(lines[t] for t in descendants(paths, tag_id)))
+
+
+def _tag_paths(s: Session, opening_id: int) -> dict[int, list[str]]:
+    tags = s.execute(select(OpeningTag.id, OpeningTag.position_id).where(OpeningTag.opening_id == opening_id)).all()
+    return {tag_id: _path_to(s, opening_id, pos_id) for tag_id, pos_id in tags}
+
+
+def _under(path: list[str], parent: list[str]) -> bool:
+    return bool(parent) and len(path) > len(parent) and path[: len(parent)] == parent
+
+
+def descendants(paths: dict[int, list[str]], tag_id: int) -> list[int]:
+    """Sub-branches: tags whose position comes later on the branch's main line (its shortest route
+    leads through the branch's position)."""
+    return [t for t, p in paths.items() if t != tag_id and _under(p, paths[tag_id])]
+
+
+def parent_of(paths: dict[int, list[str]], tag_id: int) -> int | None:
+    """The branch a tag sits directly under: the deepest one its main line passes through."""
+    above = [t for t, p in paths.items() if t != tag_id and _under(paths[tag_id], p)]
+    return max(above, key=lambda t: len(paths[t]), default=None)
 
 
 def _path_to(s: Session, opening_id: int, position_id: int) -> list[str]:
@@ -79,17 +105,25 @@ def list_tags(s: Session, opening_id: int) -> list[dict]:
     due_ids = set(
         s.scalars(select(Line.id).where(Line.opening_id == opening_id, Line.next_review_on <= date.today()))
     )
-    out = [
-        {
-            "id": tag.id,
-            "name": tag.name,
-            "key": key,
-            "path": _path_to(s, opening_id, tag.position_id),
-            "lines": len(lines[tag.id]),
-            "due": len(lines[tag.id] & due_ids),
-        }
-        for tag, key in tags
-    ]
+    paths = {tag.id: _path_to(s, opening_id, tag.position_id) for tag, _ in tags}
+    out = []
+    for tag, key in tags:
+        subs = descendants(paths, tag.id)
+        rest = lines[tag.id] - set().union(*(lines[t] for t in subs)) if subs else None
+        out.append(
+            {
+                "id": tag.id,
+                "name": tag.name,
+                "key": key,
+                "path": paths[tag.id],
+                "lines": len(lines[tag.id]),
+                "due": len(lines[tag.id] & due_ids),
+                "parent_id": parent_of(paths, tag.id),
+                # lines in none of its sub-branches (None without sub-branches)
+                "rest_lines": None if rest is None else len(rest),
+                "rest_due": None if rest is None else len(rest & due_ids),
+            }
+        )
     # Shallow branches first, then by name; tags whose lines were all deleted go last
     return sorted(out, key=lambda t: (len(t["path"]) or 999, t["name"].lower()))
 

@@ -30,6 +30,9 @@ class TagOut(BaseModel):
     path: list[str]  # SAN moves of the shortest stored route to the position
     lines: int
     due: int
+    parent_id: int | None = None  # the branch it sits under (on its main line)
+    rest_lines: int | None = None  # lines in none of its sub-branches (None: no sub-branches)
+    rest_due: int | None = None
 
 
 @router.get("/openings/{opening_id}/tags", response_model=list[TagOut])

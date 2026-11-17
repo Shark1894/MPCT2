@@ -41,6 +41,9 @@ async function request(method, path, { body, params } = {}) {
   return data;
 }
 
+/** A branch filter as query params: -id = the branch's lines in none of its sub-branches. */
+const tagParams = (tagId) => (!tagId ? {} : tagId < 0 ? { tag_id: -tagId, rest: true } : { tag_id: tagId });
+
 export const api = {
   health: () => request('GET', '/health'),
 
@@ -66,13 +69,13 @@ export const api = {
         ? { line_ids: lineId.join(',') }
         : lineId
           ? { line_id: lineId }
-          : { mode, ...(tagId ? { tag_id: tagId } : {}) },
+          : { mode, ...tagParams(tagId) },
     }),
   recordReview: (lineId, practice, attempts) =>
     request('POST', `/lines/${lineId}/reviews`, { body: { practice, attempts } }),
 
   dashboard: (openingId, tagId = null) =>
-    request('GET', `/openings/${openingId}/dashboard`, { params: tagId ? { tag_id: tagId } : {} }),
+    request('GET', `/openings/${openingId}/dashboard`, { params: tagParams(tagId) }),
 
   overview: (repertoireId) => request('GET', `/repertoires/${repertoireId}/overview`),
   activity: (tz, days = 182) => request('GET', '/activity', { params: { tz, days } }),

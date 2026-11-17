@@ -16,16 +16,17 @@ from app.repositories.training import current_streaks
 RECENT = 5  # results shown per line
 
 
-def dashboard(s: Session, opening_id: int, tag_id: int | None = None) -> dict:
-    """Stats and lines for an opening, or for one branch of it when tag_id is given."""
-    from app.repositories.tags import tag_in_opening, tagged_line_ids
+def dashboard(s: Session, opening_id: int, tag_id: int | None = None, rest: bool = False) -> dict:
+    """Stats and lines for an opening, or for one branch of it when tag_id is given (with `rest`,
+    just its lines in none of its sub-branches)."""
+    from app.repositories.tags import lines_with_tag, tag_in_opening, tagged_line_ids
 
     summary = opening_summary(s, opening_id)
     tag_lines = tagged_line_ids(s, opening_id)
     q = select(Line).where(Line.opening_id == opening_id)
     if tag_id is not None:
         tag_in_opening(s, opening_id, tag_id)
-        q = q.where(Line.id.in_(tag_lines[tag_id] or {-1}))
+        q = q.where(Line.id.in_((lines_with_tag(s, opening_id, tag_id, True) if rest else tag_lines[tag_id]) or {-1}))
     lines = s.scalars(q.order_by(Line.next_review_on, Line.id)).all()
     ids = [line.id for line in lines]
     line_tags: dict[int, list[int]] = {line_id: [] for line_id in ids}
@@ -54,6 +55,7 @@ def dashboard(s: Session, opening_id: int, tag_id: int | None = None) -> dict:
     return {
         "opening": summary,
         "tag_id": tag_id,
+        "rest": rest,
         "stats": {
             "lines": len(lines),
             "due": sum(1 for line in lines if line.next_review_on <= today),

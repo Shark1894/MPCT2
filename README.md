@@ -190,6 +190,9 @@ tags can nest (a line can be in "QGA" and "QGA 3.e4").
 - **Transpositions:** a branch shows from any position after its own, however you got there. If the moves played
   skipped the branch's position (another move order), its chip is blue; tap it to set up the branch's own moves.
   (`GET /api/openings/{id}/tags/at?fen=` lists the branches a position is in.)
+- **Sub-branches:** a branch whose position comes later on another branch's main line (its shortest route passes
+  through it) is nested under it in the **Lines** dropdowns (e.g. Semi-Slav under Slav). A branch with sub-branches
+  also offers **Other … lines**: its lines in none of its sub-branches, to train or see on the dashboard on their own.
 - **Training:** the **Lines** dropdown (shown once an opening has tags) limits Train due / Train all to one branch.
   Picking a branch there also moves the board to its position: a jump if the board's moves already pass through it
   (later moves are kept), otherwise the branch's moves are set up from the start (asking first if that would end a

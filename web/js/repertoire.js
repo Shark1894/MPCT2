@@ -4,7 +4,7 @@
 import { importCourse } from './courseimport.js';
 import { api } from './api.js';
 import { START_FEN } from './game.js';
-import { confirmDialog, fillOpeningSelect, formDialog, store, toast } from './ui.js';
+import { confirmDialog, fillOpeningSelect, fillTagSelect, formDialog, store, tagFilterOf, toast } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const COLORS = [
@@ -101,7 +101,7 @@ export class RepertoirePanel {
         repertoire: this.repertoires.find((r) => r.id === this.repId) ?? null,
         opening: this._opening(),
         tags: this._opening() ? this.tags : [],
-        tag: this.currentTag(),
+        tag: this.currentTag()?.rest ? this.tags.find((t) => t.id === -this.tagId) : this.currentTag(),
       }),
     );
     e.tagFilter.addEventListener('change', () => {
@@ -433,7 +433,7 @@ export class RepertoirePanel {
   // ---- branch tags --------------------------------------------------------
 
   currentTag() {
-    return this.tags.find((t) => t.id === this.tagId) ?? null;
+    return tagFilterOf(this.tags, this.tagId); // -id: a branch's lines in none of its sub-branches
   }
 
   async loadTags() {
@@ -469,9 +469,7 @@ export class RepertoirePanel {
 
   _renderTagFilter() {
     const sel = this.el.tagFilter;
-    sel.innerHTML = '';
-    sel.appendChild(new Option('All lines', ''));
-    for (const t of this.tags) sel.appendChild(new Option(`${t.name} (${t.lines})`, t.id));
+    fillTagSelect(sel, this.tags, { rest: true });
     sel.value = this.tagId ? String(this.tagId) : '';
     this.el.tagFilterBox.hidden = this.tags.length === 0;
   }

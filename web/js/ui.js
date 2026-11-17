@@ -210,3 +210,55 @@ export const store = {
     }
   },
 };
+
+/**
+ * Branch tags as a tree: each under the deepest branch its main line passes through
+ * (`parent_id` from the server), keeping the given order among siblings. [{tag, depth}].
+ */
+export function tagTree(tags) {
+  const ids = new Set(tags.map((t) => t.id));
+  const kids = new Map();
+  for (const t of tags) {
+    const p = t.parent_id != null && ids.has(t.parent_id) ? t.parent_id : null;
+    if (!kids.has(p)) kids.set(p, []);
+    kids.get(p).push(t);
+  }
+  const out = [];
+  const walk = (parent, depth) => {
+    for (const t of kids.get(parent) ?? []) {
+      out.push({ tag: t, depth });
+      walk(t.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return out;
+}
+
+/**
+ * Fill a branch picker: "All lines", then the branches nested under the ones they belong to.
+ * `label(t)` names a branch. With `rest`, a branch with sub-branches also offers its other lines
+ * (those in none of them), as value -id.
+ */
+export function fillTagSelect(sel, tags, { label = (t) => `${t.name} (${t.lines})`, rest = false, all = 'All lines' } = {}) {
+  sel.innerHTML = '';
+  if (all) sel.appendChild(new Option(all, ''));
+  const pad = (depth) => (depth ? `${'\u00a0\u00a0\u00a0'.repeat(depth - 1)}\u00a0└\u00a0` : '');
+  for (const { tag, depth } of tagTree(tags)) {
+    sel.appendChild(new Option(`${pad(depth)}${label(tag)}`, String(tag.id)));
+    if (rest && tag.rest_lines != null) {
+      sel.appendChild(new Option(`${pad(depth + 1)}Other ${tag.name} lines (${tag.rest_lines})`, String(-tag.id)));
+    }
+  }
+}
+
+/**
+ * A tag filter's branch: the tag, or for -id (a branch's other lines, in none of its sub-branches)
+ * the branch with those counts. null when gone.
+ */
+export function tagFilterOf(tags, tagId) {
+  if (tagId == null) return null;
+  if (tagId > 0) return tags.find((t) => t.id === tagId) ?? null;
+  const t = tags.find((x) => x.id === -tagId);
+  if (!t || t.rest_lines == null) return null;
+  return { ...t, id: tagId, branchId: t.id, name: `${t.name} (other lines)`, lines: t.rest_lines, due: t.rest_due, rest: true };
+}

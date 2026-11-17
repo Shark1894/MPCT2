@@ -77,6 +77,7 @@ class DashboardLine(BaseModel):
 class DashboardOut(BaseModel):
     opening: OpeningOut
     tag_id: int | None
+    rest: bool = False
     stats: DashboardStats
     forecast: Forecast
     problems: list[ProblemPosition]
@@ -115,8 +116,8 @@ class ActivityOut(BaseModel):
 
 
 @router.get("/openings/{opening_id}/dashboard", response_model=DashboardOut)
-def dashboard(opening_id: int, s: Db, tag_id: int | None = None):
-    return repo.dashboard(s, opening_id, tag_id)
+def dashboard(opening_id: int, s: Db, tag_id: int | None = None, rest: bool = False):
+    return repo.dashboard(s, opening_id, tag_id, rest)
 
 
 @router.get("/repertoires/{repertoire_id}/overview", response_model=OverviewOut)

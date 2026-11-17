@@ -3,7 +3,7 @@
 
 import { api } from './api.js';
 import { GapsCard } from './gaps.js';
-import { confirmDialog, describeDue, daysFromToday, fillOpeningSelect, formDialog, plural, store, toast } from './ui.js';
+import { confirmDialog, describeDue, daysFromToday, fillOpeningSelect, fillTagSelect, formDialog, plural, store, toast } from './ui.js';
 import {
   enableTips,
   masteryBar,
@@ -166,9 +166,7 @@ export class DashboardView {
 
     const tags = this.repertoire.tags;
     const tagSel = this.el.tag;
-    tagSel.innerHTML = '';
-    tagSel.appendChild(new Option('All lines', ''));
-    for (const t of tags) tagSel.appendChild(new Option(t.name, t.id));
+    fillTagSelect(tagSel, tags, { rest: true, label: (t) => t.name });
     const tagId = this.repertoire.tagId;
     tagSel.value = tagId ? String(tagId) : '';
     tagSel.hidden = tags.length === 0;
@@ -180,7 +178,7 @@ export class DashboardView {
       this._renderEmpty(`Couldn't load the dashboard: ${err.message}`);
       return;
     }
-    if (this._opening()?.id !== data.opening.id || this.repertoire.tagId !== data.tag_id) return; // changed meanwhile
+    if (this._opening()?.id !== data.opening.id || this.repertoire.tagId !== (data.rest ? -data.tag_id : data.tag_id)) return; // changed meanwhile
     this.data = data;
     this._render();
   }

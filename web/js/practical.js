@@ -15,7 +15,7 @@ import { Engine } from './engine.js';
 import {
   DEFAULTS, addDecision, breakEven, lineLinks, stillSharp, worthFollowing, breakEvenText, candidateMoves, decision, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
 } from './practical-core.js';
-import { plural, store, toast } from './ui.js';
+import { plural, store, tagTree, toast } from './ui.js';
 
 const ENGINE_NAME = 'Stockfish 19 Lite';
 const DEPTHS = [
@@ -608,8 +608,9 @@ export class PracticalView {
     } catch {
       // no tags: the whole opening
     }
-    for (const t of tags) {
-      const o = el('option', '', `${t.name} (${(t.path ?? []).join(' ')})`);
+    for (const { tag: t, depth } of tagTree(tags)) {
+      const pad = depth ? `${'\u00a0\u00a0\u00a0'.repeat(depth - 1)}\u00a0└\u00a0` : '';
+      const o = el('option', '', `${pad}${t.name} (${(t.path ?? []).join(' ')})`);
       o.value = String(t.id);
       sel.appendChild(o);
     }

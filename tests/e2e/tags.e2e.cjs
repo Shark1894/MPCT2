@@ -84,8 +84,10 @@ async function dialog(p, name) {
   // ---- training filter ----------------------------------------------------------
   check(await page.isVisible('#train-tag-box'), 'Lines filter appears once tags exist');
   const options = await page.$$eval('#train-tag option', (os) => os.map((o) => o.textContent));
-  check(JSON.stringify(options) === '["All lines","Queen’s Gambit Accepted (3)","QGA 3.e4 (1)"]', 'filter options: ' + options);
+  check(JSON.stringify(options) === JSON.stringify(['All lines', 'Queen’s Gambit Accepted (3)', '\u00a0└\u00a0Other Queen’s Gambit Accepted lines (2)', '\u00a0└\u00a0QGA 3.e4 (1)']), 'filter options, nested: ' + options);
   check((await text(page, '#train-due')) === 'Train due (4)', 'all lines: 4 due');
+  await page.selectOption('#train-tag', { label: '\u00a0└\u00a0Other Queen’s Gambit Accepted lines (2)' });
+  check((await text(page, '#train-due')) === 'Train due (2)', 'the branch’s other lines (in no sub-branch): 2 due');
   await page.selectOption('#train-tag', { label: 'Queen’s Gambit Accepted (3)' });
   check((await text(page, '#train-due')) === 'Train due (3)', 'branch filter: 3 due');
   await settle(page, 300);
@@ -95,7 +97,7 @@ async function dialog(p, name) {
 
   // A branch off the board's moves: its moves are set up from the start.
   await goTo(page, ['d4', 'd5', 'c4', 'e6']);
-  await page.selectOption('#train-tag', { label: 'QGA 3.e4 (1)' });
+  await page.selectOption('#train-tag', { label: '\u00a0└\u00a0QGA 3.e4 (1)' });
   await settle(page, 300);
   pos = await page.evaluate(() => ({ ply: mpct.game.ply, sans: mpct.game.moves.map((m) => m.san).join(' ') }));
   check(pos.ply === 5 && pos.sans === 'd4 d5 c4 dxc4 e4', 'branch elsewhere: board set to its moves: ' + JSON.stringify(pos));
@@ -110,17 +112,32 @@ async function dialog(p, name) {
   check((await text(page, '#train-title')).includes('› Queen’s Gambit Accepted'), 'training title names the branch');
   await page.click('#train-stop');
   await settle(page);
-  await page.selectOption('#train-tag', { label: 'QGA 3.e4 (1)' });
+  await page.selectOption('#train-tag', { label: '\u00a0└\u00a0QGA 3.e4 (1)' });
   check((await text(page, '#train-due')) === 'Train due (1)', 'nested branch filter: 1 due');
 
   // ---- dashboard -----------------------------------------------------------------
   await page.click('#view-dashboard');
   await settle(page, 700);
-  check((await page.$eval('#dash-tag option:checked', (o) => o.textContent)) === 'QGA 3.e4', 'dashboard keeps the branch filter');
+  check((await page.$eval('#dash-tag option:checked', (o) => o.textContent)) === '\u00a0└\u00a0QGA 3.e4', 'dashboard keeps the branch filter');
   check((await text(page, '#stat-lines')) === '1', 'dashboard stats for the branch only');
   await page.selectOption('#dash-tag', { label: 'All lines' });
   await settle(page, 700);
   check((await text(page, '#stat-lines')) === '4', 'all lines again');
+  await page.selectOption('#dash-tag', { label: '\u00a0└\u00a0Other Queen’s Gambit Accepted lines (2)' });
+  await settle(page, 700);
+  check((await text(page, '#stat-lines')) === '2', 'dashboard for the branch’s other lines: 2');
+  check((await text(page, '#train-due')) === 'Train due (2)', 'and the board filter follows');
+  await page.click('#dash-train-all');
+  await page.waitForFunction(() => mpct.trainer.active, null, { timeout: 5000 });
+  check((await text(page, '#train-title')).includes('› Queen’s Gambit Accepted (other lines)'), `training the other lines (${await text(page, '#train-title')})`);
+  await page.waitForFunction(() => mpct.trainer.canMove(), null, { timeout: 5000 }).catch(() => {});
+  check((await text(page, '#train-progress')) === 'Line 1 of 2', `two lines to train (${await text(page, '#train-progress')})`);
+  await page.click('#train-stop');
+  await settle(page);
+  await page.click('#view-dashboard');
+  await settle(page, 700);
+  await page.selectOption('#dash-tag', { label: 'All lines' });
+  await settle(page, 700);
   const e4Row = page.locator('.dash-line', { hasText: '3.e4 e5' });
   const rowTags = await e4Row.locator('.line-tag').allTextContents();
   check(JSON.stringify(rowTags) === '["Queen’s Gambit Accepted","QGA 3.e4"]', 'line shows its branch tags: ' + rowTags);
