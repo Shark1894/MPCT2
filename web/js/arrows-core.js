@@ -25,8 +25,6 @@ export const BRUSHES = {
   engineBad: { key: 'ex', color: '#c62828', opacity: 0.85, lineWidth: 4 },
 };
 
-const LABEL_FILL = { engineDubious: '#e07b00', engineBad: '#c62828' };
-
 /** The Arrows setting: which lines get an arrow. */
 export const SHOW = [
   ['all', 'All lines'],
@@ -67,7 +65,6 @@ export function engineArrows(lines, turn, { show = 'all', depth = 0, limit = 0, 
     }
     // A line exactly as good as the best (e.g. two mates) is drawn as 'equal', never as a second best.
     const shape = { orig: l.pv[0].slice(0, 2), dest: l.pv[0].slice(2, 4), brush: i === 0 ? 'engineBest' : band.key === 'best' ? 'engineEqual' : band.brush };
-    if (LABEL_FILL[shape.brush]) shape.label = { text: `−${Math.round(loss)}`, fill: LABEL_FILL[shape.brush] };
     shapes.push({ shape, loss, i });
   });
   return shapes.sort((a, b) => b.loss - a.loss || b.i - a.i).map((s) => s.shape);

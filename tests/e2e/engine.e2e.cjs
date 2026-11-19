@@ -63,7 +63,7 @@ const engineShapes = (p) => p.evaluate(() => mpct.board.layers.engine ?? []);
   await page.waitForTimeout(300);
   const mateShapes = await engineShapes(page);
   check(mateShapes.at(-1).brush === 'engineBest' && mateShapes.at(-1).dest === 'f7', 'Qxf7# is the best arrow');
-  check(mateShapes.slice(0, -1).every((s) => s.brush === 'engineBad' && /^−\d+$/.test(s.label?.text || '')), 'the rest red and labelled: ' + mateShapes.map((s) => s.brush + ' ' + (s.label?.text || '')));
+  check(mateShapes.slice(0, -1).every((s) => s.brush === 'engineBad' && !s.label), 'the rest red, no labels: ' + mateShapes.map((s) => s.brush));
   if (SHOTS) await page.screenshot({ path: SHOTS + '/engine-arrows.png' });
   await loadFen(page, 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
   await depthAtLeast(page, 12);

@@ -114,8 +114,7 @@ threads and a smaller hash.
 - Click any move in a line to play the line up to that move.
 - Engine arrows are coloured by how much winning chance (win%, as on the Practical tab) each line gives away
   against the best: purple = best (thick), slightly paler purple = within 2%, lavender = within 7% (a good move),
-  orange = within 15%, red = worse (thin); orange and red arrows are labelled with the loss (e.g. −23). Green and
-  blue stay for repertoire moves and transpositions. **Arrows** setting: all lines / good moves only / best only.
+  orange = within 15%, red = worse (thin). Green and blue stay for repertoire moves and transpositions. **Arrows** setting: all lines / good moves only / best only.
   Until depth 12 only the best move gets an arrow (shallow evals jump about). An evaluation bar sits beside the
   board and flips with it.
 - Analysis pauses during training (and is hidden), on the dashboard, and while the tab is in the background.
