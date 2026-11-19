@@ -1,5 +1,6 @@
 // Analysis panel: Stockfish evaluation and best lines for the board position, an
-// evaluation bar beside the board and blue arrows for the engine's moves.
+// evaluation bar beside the board and arrows for the engine's moves, coloured by how
+// much each gives away against the best (arrows-core.js).
 //
 // The engine pauses (without forgetting it's switched on) during training, while
 // playing against the engine, on the
@@ -7,10 +8,11 @@
 
 import { Engine, formatScore, whiteShare } from './engine.js';
 import { store } from './ui.js';
+import { SHOW, engineArrows } from './arrows-core.js';
 
 const $ = (id) => document.getElementById(id);
 const DEPTHS = [12, 16, 20, 24, 30, 0]; // 0 = no limit
-const DEFAULTS = { on: false, multipv: 3, depth: 20 };
+const DEFAULTS = { on: false, multipv: 3, depth: 20, arrows: 'all' };
 
 export class AnalysisPanel {
   /**
@@ -36,6 +38,7 @@ export class AnalysisPanel {
       lines: $('engine-lines'),
       multipv: $('engine-multipv'),
       depthLimit: $('engine-depth-limit'),
+      arrows: $('engine-arrows'),
       status: $('engine-status'),
       bar: $('eval-bar'),
       barFill: $('eval-fill'),
@@ -46,10 +49,18 @@ export class AnalysisPanel {
     for (const d of DEPTHS) this.el.depthLimit.appendChild(new Option(d ? String(d) : 'No limit', d));
     this.el.multipv.value = String(this.settings.multipv);
     this.el.depthLimit.value = String(this.settings.depth);
+    for (const [value, label] of SHOW) this.el.arrows.appendChild(new Option(label, value));
+    if (!SHOW.some(([v]) => v === this.settings.arrows)) this.settings.arrows = DEFAULTS.arrows;
+    this.el.arrows.value = this.settings.arrows;
 
     this.el.toggle.addEventListener('click', () => this.setOn(!this.settings.on));
     this.el.multipv.addEventListener('change', () => this._changeSetting('multipv', Number(this.el.multipv.value)));
     this.el.depthLimit.addEventListener('change', () => this._changeSetting('depth', Number(this.el.depthLimit.value)));
+    this.el.arrows.addEventListener('change', () => {
+      this.settings.arrows = this.el.arrows.value;
+      this._save();
+      this._render(); // redraw only; no need to re-run the engine
+    });
     document.addEventListener('visibilitychange', () =>
       document.hidden ? this.pause('hidden') : this.resume('hidden'),
     );
@@ -182,10 +193,7 @@ export class AnalysisPanel {
     this._renderLines(u.lines);
     this.board.setLayer(
       'engine',
-      u.lines
-        .filter((l) => l.pv.length)
-        .map((l, i) => ({ orig: l.pv[0].slice(0, 2), dest: l.pv[0].slice(2, 4), brush: i === 0 ? 'blue' : 'paleBlue' }))
-        .reverse(), // draw the best move last so it's on top
+      engineArrows(u.lines, this.game.turn(), { show: this.settings.arrows, depth: u.depth, limit, done: u.done }),
     );
     this._renderBar();
   }

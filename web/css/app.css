@@ -873,7 +873,8 @@ button.engine-move:hover {
 
 .engine-settings {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
 }
 
 .engine-settings label {

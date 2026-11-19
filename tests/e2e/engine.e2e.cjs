@@ -48,7 +48,25 @@ const engineShapes = (p) => p.evaluate(() => mpct.board.layers.engine ?? []);
   const firstMoves = await page.$$eval('#engine-lines .engine-line .engine-move:first-child', (els) => els.map((e) => e.textContent));
   check(firstMoves.every((m) => /^1\./.test(m)), 'lines numbered from move 1: ' + firstMoves);
   const shapes = await engineShapes(page);
-  check(shapes.length === 3 && shapes.at(-1).brush === 'blue' && shapes.slice(0, -1).every((s) => s.brush === 'paleBlue'), 'best move blue arrow, others pale');
+  check(shapes.length === 3 && shapes.at(-1).brush === 'engineBest' && shapes.slice(0, -1).every((s) => /^engine(Equal|Good|Dubious|Bad)$/.test(s.brush)), 'best move arrow on top, others by strength: ' + shapes.map((s) => s.brush));
+  const drawn = await page.$$eval('.cg-wrap svg.cg-shapes g line', (els) => els.map((e) => e.getAttribute('stroke')));
+  check(drawn.length === 3 && drawn.includes('#6a1b9a'), 'engine arrows drawn with the engine colours: ' + drawn);
+  check((await page.$$eval('#engine-arrows option', (os) => os.map((o) => o.value))).join() === 'all,good,best', 'Arrows setting offered');
+  const box = await page.$eval('#engine-arrows', (e) => { const r = e.getBoundingClientRect(), p = document.getElementById('engine-panel').getBoundingClientRect(); return r.right <= p.right; });
+  check(box, 'Arrows setting fits inside the engine panel');
+  await page.selectOption('#engine-arrows', 'best');
+  check((await engineShapes(page)).length === 1, 'Arrows: best only');
+  await page.selectOption('#engine-arrows', 'all');
+  // A position where the second-best move is a blunder: White mates with Qxf7#, anything else is far worse.
+  await loadFen(page, 'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4');
+  await depthAtLeast(page, 12);
+  await page.waitForTimeout(300);
+  const mateShapes = await engineShapes(page);
+  check(mateShapes.at(-1).brush === 'engineBest' && mateShapes.at(-1).dest === 'f7', 'Qxf7# is the best arrow');
+  check(mateShapes.slice(0, -1).every((s) => s.brush === 'engineBad' && /^−\d+$/.test(s.label?.text || '')), 'the rest red and labelled: ' + mateShapes.map((s) => s.brush + ' ' + (s.label?.text || '')));
+  if (SHOTS) await page.screenshot({ path: SHOTS + '/engine-arrows.png' });
+  await loadFen(page, 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+  await depthAtLeast(page, 12);
   check(await page.isVisible('#eval-bar') && (await page.evaluate(() => document.body.classList.contains('engine-on'))), 'eval bar shown');
 
   // ---- settings ---------------------------------------------------------------
