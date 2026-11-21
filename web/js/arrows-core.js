@@ -26,9 +26,12 @@ export const BRUSHES = {
   engineBad: { key: 'ex', color: '#c62828', opacity: 0.85, lineWidth: 4 },
 };
 
-/** The explorer's arrow for a move that transposes into another opening (orchid, unlike the engine's purples). */
+/** The explorer's arrows beyond green/blue: into another opening (orchid, unlike the engine's purples), and their moves you can answer back into your lines. */
 export const EXPLORER_BRUSHES = {
   intoOpening: { key: 'io', color: '#c35bd6', opacity: 0.85, lineWidth: 10 },
+  // their move after which you have a move back into the lines / another opening: thin and faint
+  viaReply: { key: 'vr', color: '#3c7fd6', opacity: 0.45, lineWidth: 5 },
+  viaReplyOpening: { key: 'vo', color: '#c35bd6', opacity: 0.45, lineWidth: 5 },
 };
 
 /** The Arrows setting: which lines get an arrow. */

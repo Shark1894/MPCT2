@@ -433,6 +433,20 @@ body.engine-on {
   color: var(--orchid);
 }
 
+.explorer-move.via-reply {
+  border-left-style: dashed;
+  background: transparent;
+}
+
+.explorer-move.via-reply .san {
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.explorer-move.via-reply.transposes .count {
+  color: var(--blue);
+}
+
 .explorer-move .san {
   font-weight: 600;
 }

@@ -67,6 +67,19 @@ const settle = (page, ms = 500) => page.waitForTimeout(ms);
   check(brushes.join() === 'c1f4:green,c2c4:intoOpening', `arrows: green, then orchid (${brushes.join()})`);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/transpose-opening.png` });
 
+  // Their move, then yours back in: from a fresh board, 1.c4 (not in either opening) …d5 2.d4
+  // reaches the QGD's 1.d4 d5 2.c4 (faint purple row and arrow, naming the reply)
+  await page.click('#btn-new');
+  await settle(page);
+  await play(page, 'c2c4');
+  await settle(page);
+  const after = await explorer(page);
+  const d5 = after.find((m) => m[0] === 'd5');
+  check(d5 && d5[1] === 'then d4 → QGD · 2 lines' && d5[2].includes('via-reply') && d5[2].includes('into-opening'), `…d5 then d4 → QGD (${JSON.stringify(after)})`);
+  const viaBrushes = await page.evaluate(() => mpct.board.layers.explorer.map((s) => `${s.orig}${s.dest}:${s.brush}`));
+  check(viaBrushes.includes('d7d5:viaReplyOpening'), `faint purple arrow for …d5 (${viaBrushes.join()})`);
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/via-reply.png` });
+
   check(errors.length === 0, 'no page errors: ' + errors.join(' | '));
   await browser.close();
 })();

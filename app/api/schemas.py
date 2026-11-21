@@ -81,12 +81,18 @@ class OpeningRef(BaseModel):
     name: str
 
 
+class MoveRef(BaseModel):
+    uci: str
+    san: str
+
+
 class ExplorerMoveOut(BaseModel):
     uci: str
     san: str
     lines: int
     transposes: bool = False  # reaches a position in the opening's lines by another move order
-    opening: OpeningRef | None = None  # reaches a position in this other opening by another move order
+    opening: OpeningRef | None = None  # leads into a position of this other opening
+    reply: MoveRef | None = None  # their move only: your move after it that gets back into the lines / opening
 
 
 class CommentIn(BaseModel):

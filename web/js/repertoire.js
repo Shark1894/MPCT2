@@ -824,12 +824,16 @@ export class RepertoirePanel {
     for (const m of moves) {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = `explorer-move${m.transposes ? ' transposes' : ''}${m.opening ? ' into-opening' : ''}`;
+      btn.className = `explorer-move${m.transposes ? ' transposes' : ''}${m.opening ? ' into-opening' : ''}${m.reply ? ' via-reply' : ''}`;
       btn.innerHTML = `<span class="san"></span><span class="count"></span>`;
       btn.querySelector('.san').textContent = m.san;
       const lines = `${m.lines} line${m.lines === 1 ? '' : 's'}`;
       const count = btn.querySelector('.count');
-      if (m.opening) {
+      if (m.reply) {
+        const where = m.opening ? `“${m.opening.name}”` : 'your lines';
+        count.textContent = `then ${m.reply.san} → ${m.opening ? m.opening.name : 'transposes'} · ${lines}`;
+        btn.title = `If they play ${m.san}, ${m.reply.san} takes you back into ${where} (${lines} go through that position)`;
+      } else if (m.opening) {
         count.textContent = `→ ${m.opening.name} · ${lines}`;
         btn.title = `${m.san} transposes into your “${m.opening.name}” opening (${lines} go through that position)`;
       } else if (m.transposes) {
@@ -841,7 +845,8 @@ export class RepertoirePanel {
       btn.addEventListener('click', () => this.onPlaySan(m.san));
       box.appendChild(btn);
     }
-    const brush = (m) => (m.opening ? 'intoOpening' : m.transposes ? 'blue' : 'green');
+    const brush = (m) =>
+      m.reply ? (m.opening ? 'viaReplyOpening' : 'viaReply') : m.opening ? 'intoOpening' : m.transposes ? 'blue' : 'green';
     this.onShapes(moves.map((m) => ({ orig: m.uci.slice(0, 2), dest: m.uci.slice(2, 4), brush: brush(m) })));
   }
 

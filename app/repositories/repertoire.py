@@ -455,7 +455,8 @@ def explorer(s: Session, opening_id: int, fen: str) -> list[dict]:
     transpositions: other legal moves that reach a position somewhere in the opening's lines (by
     another move order), with how many lines pass through it; then the moves that lead into a
     position of another opening of the same repertoire and colour (`opening` = {id, name},
-    lines = that opening's lines through the position)."""
+    lines = that opening's lines through the position). On their move, last: their other moves
+    after which you have a move (`reply`) back into the lines or another opening."""
     opening = get_opening(s, opening_id)
     out: list[dict] = []
     pos_id = _position_id(s, fen)
@@ -474,7 +475,10 @@ def explorer(s: Session, opening_id: int, fen: str) -> list[dict]:
     for m in out:
         after.pop(m.get("key"), None)
         m.pop("key", None)
-    return out + _opening_transpositions(s, opening, after)
+    out += _opening_transpositions(s, opening, after)
+    if chess.Board(fen).turn != (opening.color == "white"):  # their move: look one move further
+        out += _replies_back(s, opening, fen, {m["uci"] for m in out})
+    return out
 
 
 def _moves_after(fen: str, known: set[str]) -> dict[str, tuple[str, str]]:
@@ -537,6 +541,68 @@ def _opening_transpositions(s: Session, opening: Opening, after: dict[str, tuple
         if cur is None or n > cur["lines"] or (n == cur["lines"] and name < cur["opening"]["name"]):
             best[uci] = {"uci": uci, "san": san, "lines": n, "transposes": False, "opening": {"id": oid, "name": name}}
     return sorted(best.values(), key=lambda m: (-m["lines"], m["san"]))
+
+
+def _replies_back(s: Session, opening: Opening, fen: str, known: set[str]) -> list[dict]:
+    """On their move: their moves not otherwise listed after which you have a move back into
+    a position of this opening's lines (blue) or of another opening of the same repertoire and
+    colour (purple). `reply` is your move that gets there; `lines` the lines through it. A way
+    back into this opening wins over another opening, then the one with the most lines. Only
+    positions the lines reach at least two plies on count (the FEN's move number gives the
+    ply), so retreating to an earlier position isn't offered."""
+    board = chess.Board(fen)
+    paths: dict[str, list[tuple[chess.Move, chess.Move]]] = {}  # key after both moves -> [(theirs, yours)]
+    for theirs in list(board.legal_moves):
+        if theirs.uci() in known:
+            continue
+        board.push(theirs)
+        for yours in list(board.legal_moves):
+            board.push(yours)
+            paths.setdefault(position_key(board), []).append((theirs, yours))
+            board.pop()
+        board.pop()
+    if not paths:
+        return []
+    n_lines = func.count(distinct(Move.line_id))
+    rows = s.execute(
+        select(Opening.id, Opening.name, Position.key, n_lines)
+        .join(Line, Line.opening_id == Opening.id)
+        .join(Move, Move.line_id == Line.id)
+        .join(Position, Position.id == Move.position_after_id)
+        .where(
+            Opening.repertoire_id == opening.repertoire_id,
+            Opening.color == opening.color,
+            Position.key.in_(list(paths)),
+            # further on in the lines, not back to an earlier position (…Ng8 Nb1 after 1.d4 Nf6 2.Nc3)
+            Move.ply >= board.ply() + 2,
+        )
+        .group_by(Opening.id, Opening.name, Position.key)
+    ).all()
+    best: dict[str, tuple] = {}  # their uci -> (rank, theirs, yours, opening_id, name, lines)
+    for oid, name, key, n in rows:
+        own = oid == opening.id
+        rank = (own, n, name if own else "")  # own opening first, then most lines
+        for theirs, yours in paths[key]:
+            cur = best.get(theirs.uci())
+            if cur is None or rank[:2] > cur[0][:2] or (rank[:2] == cur[0][:2] and name < cur[4]):
+                best[theirs.uci()] = (rank, theirs, yours, oid, name, n)
+    out = []
+    for _, theirs, yours, oid, name, n in best.values():
+        their_san = board.san(theirs)
+        board.push(theirs)
+        your_san = board.san(yours)
+        board.pop()
+        out.append(
+            {
+                "uci": theirs.uci(),
+                "san": their_san,
+                "lines": n,
+                "transposes": oid == opening.id,
+                "opening": None if oid == opening.id else {"id": oid, "name": name},
+                "reply": {"uci": yours.uci(), "san": your_san},
+            }
+        )
+    return sorted(out, key=lambda m: (not m["transposes"], -m["lines"], m["san"]))
 
 
 # ---- comments ---------------------------------------------------------------
