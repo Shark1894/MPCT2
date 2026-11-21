@@ -213,10 +213,10 @@ def test_explorer_moves_that_transpose_into_another_opening(client, rep, opening
         {"uci": "c1f4", "san": "Bf4", "lines": 1, "transposes": False, "opening": None},
         {"uci": "c2c4", "san": "c4", "lines": 2, "transposes": False, "opening": {"id": qgd["id"], "name": "QGD"}},
     ]
-    # the same move from the same position isn't a transposition: 2.c4 after 1.d4 d5 is just the QGD
+    # openings sharing the moves so far and splitting here: 2.c4 after 1.d4 d5 leads into the QGD
     after_d4_d5 = "rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2"
     moves = client.get(f"/api/openings/{london['id']}/explorer", params={"fen": after_d4_d5}).json()
-    assert [m["san"] for m in moves] == ["Nf3"]
+    assert [(m["san"], (m["opening"] or {}).get("name")) for m in moves] == [("Nf3", None), ("c4", "QGD")]
     # a move transposing within the opening itself stays blue, not purple
     add(client, london, ["d2d4", "d7d5", "c2c4", "e7e6", "g1f3"])
     moves = client.get(f"/api/openings/{london['id']}/explorer", params={"fen": fen}).json()
@@ -231,6 +231,20 @@ def test_explorer_moves_that_transpose_into_another_opening(client, rep, opening
     london = client.post(f"/api/repertoires/{rep['id']}/openings", json={"name": "London", "color": "white"}).json()
     add(client, london, ["d2d4", "d7d5", "g1f3", "e7e6", "c1f4"])
     assert [m["san"] for m in client.get(f"/api/openings/{london['id']}/explorer", params={"fen": fen}).json()] == ["Bf4"]
+
+
+def test_explorer_opponent_reply_covered_by_another_opening(client, rep, opening):
+    """Jason's case: 1.d4 Nf6 2.Nc3 c5 in one White opening, 2...d5 in another."""
+    a = client.post(f"/api/repertoires/{rep['id']}/openings", json={"name": "Jobava c5", "color": "white"}).json()
+    add(client, a, ["d2d4", "g8f6", "b1c3", "c7c5", "d4d5"])
+    b = client.post(f"/api/repertoires/{rep['id']}/openings", json={"name": "Jobava d5", "color": "white"}).json()
+    add(client, b, ["d2d4", "g8f6", "b1c3", "d7d5", "c1f4"])
+    fen = "rnbqkb1r/pppppppp/5n2/8/3P4/2N5/PPP1PPPP/R1BQKBNR b KQkq - 2 2"
+    moves = client.get(f"/api/openings/{a['id']}/explorer", params={"fen": fen}).json()
+    assert moves == [
+        {"uci": "c7c5", "san": "c5", "lines": 1, "transposes": False, "opening": None},
+        {"uci": "d7d5", "san": "d5", "lines": 1, "transposes": False, "opening": {"id": b["id"], "name": "Jobava d5"}},
+    ]
 
 
 def test_explorer_bad_fen(client, opening):

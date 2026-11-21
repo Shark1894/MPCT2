@@ -453,9 +453,9 @@ def delete_line(s: Session, line_id: int) -> None:
 def explorer(s: Session, opening_id: int, fen: str) -> list[dict]:
     """Repertoire moves from a position in this opening, with how many lines use each; then the
     transpositions: other legal moves that reach a position somewhere in the opening's lines (by
-    another move order), with how many lines pass through it; then the moves that transpose into
-    another opening of the same repertoire and colour (`opening` = {id, name}, lines = that
-    opening's lines through the position)."""
+    another move order), with how many lines pass through it; then the moves that lead into a
+    position of another opening of the same repertoire and colour (`opening` = {id, name},
+    lines = that opening's lines through the position)."""
     opening = get_opening(s, opening_id)
     out: list[dict] = []
     pos_id = _position_id(s, fen)
@@ -474,7 +474,7 @@ def explorer(s: Session, opening_id: int, fen: str) -> list[dict]:
     for m in out:
         after.pop(m.get("key"), None)
         m.pop("key", None)
-    return out + _opening_transpositions(s, opening, pos_id, after)
+    return out + _opening_transpositions(s, opening, after)
 
 
 def _moves_after(fen: str, known: set[str]) -> dict[str, tuple[str, str]]:
@@ -510,12 +510,10 @@ def _transpositions(s: Session, opening_id: int, after: dict[str, tuple[str, str
     return sorted(found, key=lambda m: (-m["lines"], m["san"]))
 
 
-def _opening_transpositions(
-    s: Session, opening: Opening, pos_id: int | None, after: dict[str, tuple[str, str]]
-) -> list[dict]:
-    """Moves into a position of another opening (same repertoire and colour) that the other
-    opening reaches by a different move order. A move the other opening plays from this very
-    position isn't a transposition (1.d4 from the start isn't flagged for your 1.d4 opening)."""
+def _opening_transpositions(s: Session, opening: Opening, after: dict[str, tuple[str, str]]) -> list[dict]:
+    """Moves into a position of another opening of the same repertoire and colour: either by
+    another move order or because the two openings share the moves so far and split here
+    (1.d4 Nf6 2.Nc3 c5 in one opening, 2...d5 in another)."""
     if not after:
         return []
     n_lines = func.count(distinct(Move.line_id))
@@ -532,20 +530,9 @@ def _opening_transpositions(
         )
         .group_by(Opening.id, Opening.name, Position.key)
     ).all()
-    same_path: set[tuple[int, str]] = set()
-    if rows and pos_id is not None:
-        same_path = set(
-            s.execute(
-                select(Line.opening_id, Move.uci)
-                .join(Line)
-                .where(Move.position_before_id == pos_id, Line.opening_id.in_({r[0] for r in rows}))
-            ).all()
-        )
     best: dict[str, dict] = {}  # per move: the other opening with the most lines through it
     for oid, name, key, n in rows:
         uci, san = after[key]
-        if (oid, uci) in same_path:
-            continue
         cur = best.get(uci)
         if cur is None or n > cur["lines"] or (n == cur["lines"] and name < cur["opening"]["name"]):
             best[uci] = {"uci": uci, "san": san, "lines": n, "transposes": False, "opening": {"id": oid, "name": name}}

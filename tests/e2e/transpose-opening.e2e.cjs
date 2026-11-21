@@ -55,7 +55,7 @@ const settle = (page, ms = 500) => page.waitForTimeout(ms);
 
   await play(page, 'd2d4', 'd7d5');
   await settle(page);
-  check((await explorer(page)).map((m) => m[0]).join() === 'Nf3', 'after 1.d4 d5: 2.c4 (the QGD\'s own move order) is not flagged');
+  check((await explorer(page)).map((m) => `${m[0]}:${m[1]}`).join() === 'Nf3:1 line,c4:→ QGD · 2 lines', 'after 1.d4 d5: 2.c4 leads into the QGD (openings split here)');
 
   await play(page, 'g1f3', 'e7e6');
   await settle(page);
