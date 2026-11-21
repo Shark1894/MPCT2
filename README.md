@@ -98,7 +98,7 @@ en passant square that allows no capture are ignored, so transpositions match.
 | `GET/DELETE /api/openings/{id}/lines/through?fen=` | Count / delete the lines passing through a position |
 | `DELETE /api/lines/{id}` | Delete one line |
 | `PUT/DELETE /api/lines/{id}/bookmark` | Bookmark a line (optional note) / remove the bookmark |
-| `GET /api/openings/{id}/explorer?fen=` | Repertoire moves from a position, with line counts, then moves that transpose into the lines (`transposes`, blue), then moves leading into a position of another opening of the same repertoire and colour, by transposition or where the openings split (`opening: {id, name}`, orchid); on their move, last, their other moves after which you have a move back into the lines or another opening (`reply: {uci, san}`, faint dashed rows and arrows) |
+| `GET /api/openings/{id}/explorer?fen=` | Repertoire moves from a position, with line counts, then moves that transpose into the lines (`transposes`, blue), then moves leading into a position of another opening of the same repertoire and colour, by transposition or where the openings split (`opening: {id, name}`, orchid); on their move, last, their other moves after which you have a move back into the lines or another opening (`reply: {uci, san}`, faint dashed rows and arrows). Each row's `tag` names the branch tag on the position it leads to |
 | `GET/PUT /api/repertoires/{id}/comment` | Read / save a position comment (empty comment deletes it) |
 
 Lines always start from the initial position. Extending a line makes it due for review today,

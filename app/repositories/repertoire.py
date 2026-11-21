@@ -478,7 +478,39 @@ def explorer(s: Session, opening_id: int, fen: str) -> list[dict]:
     out += _opening_transpositions(s, opening, after)
     if chess.Board(fen).turn != (opening.color == "white"):  # their move: look one move further
         out += _replies_back(s, opening, fen, {m["uci"] for m in out})
+    _add_tags(s, opening_id, fen, out)
     return out
+
+
+def _add_tags(s: Session, opening_id: int, fen: str, moves: list[dict]) -> None:
+    """Set each row's `tag`: the branch tag on the position it leads to (after your reply on a
+    their-move-then-yours row), in the opening that position belongs to (the other opening for a
+    purple row). None when that exact position isn't tagged."""
+    board = chess.Board(fen)
+    wanted: dict[int, tuple[int, str]] = {}  # row index -> (opening id, position key)
+    for i, m in enumerate(moves):
+        m["tag"] = None
+        board.push_uci(m["uci"])
+        if m.get("reply"):
+            board.push_uci(m["reply"]["uci"])
+            wanted[i] = ((m["opening"] or {}).get("id", opening_id), position_key(board))
+            board.pop()
+        else:
+            wanted[i] = ((m["opening"] or {}).get("id", opening_id), position_key(board))
+        board.pop()
+    if not wanted:
+        return
+    rows = s.execute(
+        select(OpeningTag.opening_id, Position.key, OpeningTag.name)
+        .join(Position, Position.id == OpeningTag.position_id)
+        .where(
+            OpeningTag.opening_id.in_({oid for oid, _ in wanted.values()}),
+            Position.key.in_({key for _, key in wanted.values()}),
+        )
+    ).all()
+    names = {(oid, key): name for oid, key, name in rows}
+    for i, target in wanted.items():
+        moves[i]["tag"] = names.get(target)
 
 
 def _moves_after(fen: str, known: set[str]) -> dict[str, tuple[str, str]]:

@@ -157,7 +157,7 @@ def test_explorer_counts_moves_from_position(client, opening):
     oid = opening["id"]
 
     start = client.get(f"/api/openings/{oid}/explorer", params={"fen": START}).json()
-    assert start == [{"uci": "e2e4", "san": "e4", "lines": 2, "transposes": False, "opening": None, "reply": None}, {"uci": "d2d4", "san": "d4", "lines": 1, "transposes": False, "opening": None, "reply": None}]
+    assert start == [{"uci": "e2e4", "san": "e4", "lines": 2, "transposes": False, "opening": None, "reply": None, "tag": None}, {"uci": "d2d4", "san": "d4", "lines": 1, "transposes": False, "opening": None, "reply": None, "tag": None}]
 
     pos = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"
     moves = client.get(f"/api/openings/{oid}/explorer", params={"fen": pos}).json()
@@ -166,7 +166,7 @@ def test_explorer_counts_moves_from_position(client, opening):
     unknown = "rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1"
     # after 1.Nf3 (not in the lines): …e5 lets you play 2.e4, reaching 1.e4 e5 2.Nf3
     assert client.get(f"/api/openings/{oid}/explorer", params={"fen": unknown}).json() == [
-        {"uci": "e7e5", "san": "e5", "lines": 2, "transposes": True, "opening": None, "reply": {"uci": "e2e4", "san": "e4"}}
+        {"uci": "e7e5", "san": "e5", "lines": 2, "transposes": True, "opening": None, "reply": {"uci": "e2e4", "san": "e4"}, "tag": None}
     ]
 
 
@@ -175,7 +175,7 @@ def test_explorer_ignores_en_passant_field_and_counters(client, opening):
     add(client, opening, RUY)
     for fen in (AFTER_E4, AFTER_E4.replace(" e3 0 1", " - 5 40")):
         assert client.get(f"/api/openings/{opening['id']}/explorer", params={"fen": fen}).json() == [
-            {"uci": "e7e5", "san": "e5", "lines": 1, "transposes": False, "opening": None, "reply": None}
+            {"uci": "e7e5", "san": "e5", "lines": 1, "transposes": False, "opening": None, "reply": None, "tag": None}
         ]
 
 
@@ -194,12 +194,12 @@ def test_explorer_moves_that_transpose_into_the_lines(client, opening):
     oid = opening["id"]
     fen = "rnbqkbnr/ppp2ppp/4p3/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 0 3"  # d4 d5 Nf3 e6
     assert client.get(f"/api/openings/{oid}/explorer", params={"fen": fen}).json() == [
-        {"uci": "c2c4", "san": "c4", "lines": 2, "transposes": True, "opening": None, "reply": None}
+        {"uci": "c2c4", "san": "c4", "lines": 2, "transposes": True, "opening": None, "reply": None, "tag": None}
     ]
     # in the lines: their own moves first, then any move into another part of them
     after_c4 = "rnbqkbnr/ppp1pppp/8/3p4/2PP4/8/PP2PPPP/RNBQKBNR b KQkq - 0 2"
     moves = client.get(f"/api/openings/{oid}/explorer", params={"fen": after_c4}).json()
-    assert moves[0] == {"uci": "e7e6", "san": "e6", "lines": 2, "transposes": False, "opening": None, "reply": None}
+    assert moves[0] == {"uci": "e7e6", "san": "e6", "lines": 2, "transposes": False, "opening": None, "reply": None, "tag": None}
     assert all(m["transposes"] for m in moves[1:])
 
 
@@ -213,8 +213,8 @@ def test_explorer_moves_that_transpose_into_another_opening(client, rep, opening
     fen = "rnbqkbnr/ppp2ppp/4p3/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 0 3"  # d4 d5 Nf3 e6
     moves = client.get(f"/api/openings/{london['id']}/explorer", params={"fen": fen}).json()
     assert moves == [
-        {"uci": "c1f4", "san": "Bf4", "lines": 1, "transposes": False, "opening": None, "reply": None},
-        {"uci": "c2c4", "san": "c4", "lines": 2, "transposes": False, "opening": {"id": qgd["id"], "name": "QGD"}, "reply": None},
+        {"uci": "c1f4", "san": "Bf4", "lines": 1, "transposes": False, "opening": None, "reply": None, "tag": None},
+        {"uci": "c2c4", "san": "c4", "lines": 2, "transposes": False, "opening": {"id": qgd["id"], "name": "QGD"}, "reply": None, "tag": None},
     ]
     # openings sharing the moves so far and splitting here: 2.c4 after 1.d4 d5 leads into the QGD
     after_d4_d5 = "rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2"
@@ -245,8 +245,8 @@ def test_explorer_opponent_reply_covered_by_another_opening(client, rep, opening
     fen = "rnbqkb1r/pppppppp/5n2/8/3P4/2N5/PPP1PPPP/R1BQKBNR b KQkq - 2 2"
     moves = client.get(f"/api/openings/{a['id']}/explorer", params={"fen": fen}).json()
     assert moves == [
-        {"uci": "c7c5", "san": "c5", "lines": 1, "transposes": False, "opening": None, "reply": None},
-        {"uci": "d7d5", "san": "d5", "lines": 1, "transposes": False, "opening": {"id": b["id"], "name": "Jobava d5"}, "reply": None},
+        {"uci": "c7c5", "san": "c5", "lines": 1, "transposes": False, "opening": None, "reply": None, "tag": None},
+        {"uci": "d7d5", "san": "d5", "lines": 1, "transposes": False, "opening": {"id": b["id"], "name": "Jobava d5"}, "reply": None, "tag": None},
     ]
 
 
@@ -261,7 +261,7 @@ def test_explorer_their_move_then_yours_back_into_the_lines(client, rep, opening
     moves = client.get(f"/api/openings/{oid}/explorer", params={"fen": after_nf3}).json()
     by_san = {m["san"]: m for m in moves}
     assert by_san["c6"] == {
-        "uci": "c7c6", "san": "c6", "lines": 1, "transposes": True, "opening": None, "reply": {"uci": "c2c4", "san": "c4"}
+        "uci": "c7c6", "san": "c6", "lines": 1, "transposes": True, "opening": None, "reply": {"uci": "c2c4", "san": "c4"}, "tag": None
     }
     assert all(m["reply"] for m in moves)  # nothing here is in the lines directly
     # on your own move there's no look-ahead
@@ -288,12 +288,32 @@ def test_explorer_their_move_then_yours_into_another_opening(client, rep, openin
     d5 = {m["san"]: m for m in client.get(url, params={"fen": after_c4}).json()}["d5"]
     assert d5 == {
         "uci": "d7d5", "san": "d5", "lines": 1, "transposes": False,
-        "opening": {"id": qgd["id"], "name": "QGD"}, "reply": {"uci": "d2d4", "san": "d4"},
+        "opening": {"id": qgd["id"], "name": "QGD"}, "reply": {"uci": "d2d4", "san": "d4"}, "tag": None,
     }
 
     add(client, london, ["d2d4", "d7d5", "c2c4", "c7c6"])  # the London now has 1.d4 d5 2.c4 too
     d5 = {m["san"]: m for m in client.get(url, params={"fen": after_c4}).json()}["d5"]
     assert (d5["transposes"], d5["opening"], d5["reply"]) == (True, None, {"uci": "d2d4", "san": "d4"})
+
+
+def test_explorer_names_the_branch_a_move_leads_to(client, rep, opening):
+    """A row shows the branch tag on the exact position it leads to: in this opening for green and
+    blue rows, in the other opening for purple ones, after your reply on their-move rows."""
+    add(client, opening, ["e2e4", "c7c5", "g1f3"])
+    add(client, opening, ["e2e4", "c7c6", "d2d4"])
+    after_c5 = "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"
+    client.post(f"/api/openings/{opening['id']}/tags", json={"name": "Sicilian", "fen": after_c5})
+    moves = client.get(f"/api/openings/{opening['id']}/explorer", params={"fen": AFTER_E4}).json()
+    assert {m["san"]: m["tag"] for m in moves} == {"c5": "Sicilian", "c6": None}
+
+    # purple row: the tag comes from the other opening
+    d4 = client.post(f"/api/repertoires/{rep['id']}/openings", json={"name": "QG", "color": "white"}).json()
+    add(client, d4, ["d2d4", "d7d5", "c2c4"])
+    client.post(f"/api/openings/{d4['id']}/tags", json={"name": "Queen's Gambit", "fen": "rnbqkbnr/ppp1pppp/8/3p4/2PP4/8/PP2PPPP/RNBQKBNR b KQkq - 0 2"})
+    # 1.c4 (their move, in neither opening): …d5 2.d4 reaches the tagged QG position
+    after_c4 = "rnbqkbnr/pppppppp/8/8/2P5/8/PP1PPPPP/RNBQKBNR b KQkq - 0 1"
+    d5 = {m["san"]: m for m in client.get(f"/api/openings/{opening['id']}/explorer", params={"fen": after_c4}).json()}["d5"]
+    assert (d5["reply"]["san"], d5["opening"]["name"], d5["tag"]) == ("d4", "QG", "Queen's Gambit")
 
 
 def test_explorer_bad_fen(client, opening):

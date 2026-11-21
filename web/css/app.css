@@ -451,6 +451,32 @@ body.engine-on {
   font-weight: 600;
 }
 
+.explorer-move .move-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.explorer-move .count {
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+/* the branch tag the move leads to (copper, like the branch chips) */
+.explorer-move .move-tag {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  background: rgba(201, 138, 78, 0.18);
+  border: 1px solid rgba(201, 138, 78, 0.5);
+}
+
 .explorer-move .count {
   font-size: 13px;
   color: var(--text-dim);

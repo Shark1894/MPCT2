@@ -93,6 +93,7 @@ class ExplorerMoveOut(BaseModel):
     transposes: bool = False  # reaches a position in the opening's lines by another move order
     opening: OpeningRef | None = None  # leads into a position of this other opening
     reply: MoveRef | None = None  # their move only: your move after it that gets back into the lines / opening
+    tag: str | None = None  # branch tag on the position the row leads to (in that row's opening)
 
 
 class CommentIn(BaseModel):

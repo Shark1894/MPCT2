@@ -80,6 +80,18 @@ const settle = (page, ms = 500) => page.waitForTimeout(ms);
   check(viaBrushes.includes('d7d5:viaReplyOpening'), `faint purple arrow for …d5 (${viaBrushes.join()})`);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/via-reply.png` });
 
+  // The branch a move leads to is named on its row
+  await page.evaluate(async (id) => {
+    await fetch(`/api/openings/${id}/tags`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'London proper', fen: 'rnbqkbnr/ppp2ppp/4p3/3p4/3P1B2/5N2/PPP1PPPP/RN1QKB1R b KQkq - 1 3' }) });
+  }, london.id);
+  await page.click('#btn-new');
+  await settle(page);
+  await play(page, 'd2d4', 'd7d5', 'g1f3', 'e7e6');
+  await settle(page);
+  const tags = await page.$$eval('#explorer .explorer-move', (els) => els.map((e) => `${e.querySelector('.san').textContent}:${e.querySelector('.move-tag')?.textContent ?? ''}`));
+  check(tags.join() === 'Bf4:London proper,c4:', `Bf4 names its branch (${tags.join()})`);
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/move-tag.png` });
+
   check(errors.length === 0, 'no page errors: ' + errors.join(' | '));
   await browser.close();
 })();

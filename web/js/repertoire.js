@@ -825,8 +825,15 @@ export class RepertoirePanel {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = `explorer-move${m.transposes ? ' transposes' : ''}${m.opening ? ' into-opening' : ''}${m.reply ? ' via-reply' : ''}`;
-      btn.innerHTML = `<span class="san"></span><span class="count"></span>`;
+      btn.innerHTML = `<span class="move-main"><span class="san"></span></span><span class="count"></span>`;
       btn.querySelector('.san').textContent = m.san;
+      if (m.tag) {
+        const tag = document.createElement('span');
+        tag.className = 'move-tag';
+        tag.textContent = m.tag;
+        tag.title = `Leads to your “${m.tag}” branch${m.opening ? ` in ${m.opening.name}` : ''}`;
+        btn.querySelector('.move-main').appendChild(tag);
+      }
       const lines = `${m.lines} line${m.lines === 1 ? '' : 's'}`;
       const count = btn.querySelector('.count');
       if (m.reply) {
