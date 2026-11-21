@@ -55,6 +55,7 @@ export class RepertoirePanel {
       openingEdit: $('opening-edit'),
       openingDelete: $('opening-delete'),
       openingImport: $('opening-import-course'),
+      openingImportRep: $('opening-import-rep'),
       explorer: $('explorer'),
       lineAdd: $('line-add'),
       lineDelete: $('line-delete'),
@@ -92,6 +93,7 @@ export class RepertoirePanel {
     e.openingEdit.addEventListener('click', () => this.editOpening());
     e.openingDelete.addEventListener('click', () => this.deleteOpening());
     e.openingImport.addEventListener('click', () => this.importCourse());
+    e.openingImportRep.addEventListener('click', () => this.importFromRepertoire());
     e.lineAdd.addEventListener('click', () => this.addLine());
     e.lineDelete.addEventListener('click', () => this.deleteLines());
     e.trainDue.addEventListener('click', () => this._opening() && this.onTrain(this._opening(), 'due', this.currentTag()));
@@ -346,6 +348,53 @@ export class RepertoirePanel {
     if (o) this.onOrientation(o.color);
   }
 
+  /** Copy an opening from another repertoire into this one; the original is left as it is. */
+  async importFromRepertoire() {
+    if (!this.repId) return;
+    const others = this.repertoires.filter((r) => r.id !== this.repId);
+    let choices;
+    try {
+      choices = (await Promise.all(others.map(async (r) => (await api.openings(r.id)).map((o) => ({ ...o, rep: r.name }))))).flat();
+    } catch (err) {
+      this._fail(err);
+      return;
+    }
+    if (choices.length === 0) {
+      toast('There are no openings in your other repertoires.');
+      return;
+    }
+    const here = this.repertoires.find((r) => r.id === this.repId);
+    const values = await formDialog({
+      title: 'Import opening',
+      message: `Copies the opening into “${here?.name}” with its lines, training schedule and history, branch tags and position comments. The original stays where it is.`,
+      fields: [
+        {
+          name: 'opening',
+          label: 'Opening',
+          type: 'select',
+          options: choices.map((o) => [
+            o.id,
+            `${o.rep} › ${o.name} (${o.color === 'white' ? 'White' : 'Black'}, ${o.lines} line${o.lines === 1 ? '' : 's'})`,
+          ]),
+        },
+        { name: 'name', label: 'Name here', placeholder: 'Leave blank to keep its name', required: false },
+      ],
+      submit: 'Import',
+    });
+    if (!values) return;
+    try {
+      const o = await api.copyOpening(Number(values.opening), this.repId, values.name.trim() || null);
+      await this._setOpenings(await api.openings(this.repId), o.id);
+      const rep = this.repertoires.find((r) => r.id === this.repId);
+      if (rep) rep.openings = this.openings.length;
+      this.onOrientation(o.color);
+      const extras = [o.tags && `${o.tags} branch tag${o.tags === 1 ? '' : 's'}`, o.comments && `${o.comments} comment${o.comments === 1 ? '' : 's'}`].filter(Boolean);
+      toast(`Imported “${o.name}”: ${o.lines} line${o.lines === 1 ? '' : 's'}${extras.length ? `, ${extras.join(', ')}` : ''}`);
+    } catch (err) {
+      this._fail(err);
+    }
+  }
+
   async deleteOpening() {
     const o = this._opening();
     if (!o) return;
@@ -367,6 +416,7 @@ export class RepertoirePanel {
     const e = this.el;
     e.openingNew.disabled = !this.repId;
     e.repRename.disabled = e.repDelete.disabled = e.openingImport.disabled = !this.repId;
+    e.openingImportRep.disabled = !this.repId || this.repertoires.length < 2;
     e.openingEdit.disabled = e.openingDelete.disabled = !this.openingId;
     e.lineAdd.disabled = e.lineDelete.disabled = !this.openingId;
     e.commentCurrent.disabled = !this.repId;

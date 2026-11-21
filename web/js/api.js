@@ -56,6 +56,8 @@ export const api = {
   createOpening: (repId, name, color) => request('POST', `/repertoires/${repId}/openings`, { body: { name, color } }),
   updateOpening: (id, changes) => request('PATCH', `/openings/${id}`, { body: changes }),
   deleteOpening: (id) => request('DELETE', `/openings/${id}`),
+  copyOpening: (id, repertoireId, name = null) =>
+    request('POST', `/openings/${id}/copy`, { body: { repertoire_id: repertoireId, name } }),
 
   addLine: (openingId, moves) => request('POST', `/openings/${openingId}/lines`, { body: { moves } }),
   countLinesThrough: (openingId, fen) => request('GET', `/openings/${openingId}/lines/through`, { params: { fen } }),

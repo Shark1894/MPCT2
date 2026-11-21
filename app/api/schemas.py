@@ -39,6 +39,16 @@ class OpeningOut(BaseModel):
     next_review_on: date | None
 
 
+class OpeningCopyIn(BaseModel):
+    repertoire_id: int
+    name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None = None  # blank = keep
+
+
+class OpeningCopyOut(OpeningOut):
+    tags: int  # branch tags copied
+    comments: int  # position comments copied into the target repertoire
+
+
 class LineIn(BaseModel):
     moves: list[Uci] = Field(min_length=1, max_length=300, description="UCI moves from the initial position")
 

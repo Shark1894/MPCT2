@@ -269,3 +269,84 @@ def test_comments(client, rep):
 
     assert client.put(url, json={"fen": "bad", "comment": "x"}).status_code == 422
     assert client.get("/api/repertoires/999/comment", params={"fen": START}).status_code == 404
+
+
+# ---- copying an opening to another repertoire ---------------------------------
+
+
+def test_copy_opening_to_another_repertoire(client, rep, opening, db):
+    ruy = add(client, opening, RUY).json()["line_id"]
+    add(client, opening, ITALIAN)
+    # history: a correct review of the Ruy (white plays plies 1, 3, 5)
+    r = client.post(
+        f"/api/lines/{ruy}/reviews",
+        json={"attempts": [{"ply": 1, "uci": "e2e4"}, {"ply": 3, "uci": "g1f3"}, {"ply": 5, "uci": "f1b5"}]},
+    ).json()
+    client.put(f"/api/lines/{ruy}/bookmark", json={"note": "main line"})
+    client.post(f"/api/openings/{opening['id']}/tags", json={"name": "1.e4 e5", "fen": AFTER_E4_E5})
+    client.put(f"/api/repertoires/{rep['id']}/comment", json={"fen": AFTER_E4, "comment": "best by test"})
+    client.put(f"/api/repertoires/{rep['id']}/comment", json={"fen": AFTER_E4_E5, "comment": "theirs"})
+    with db.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO drill_attempts (opening_id, position_id, expected_uci, correct) "
+                "SELECT :o, position_before_id, uci, false FROM moves WHERE line_id = :l AND ply = 1"
+            ),
+            {"o": opening["id"], "l": ruy},
+        )
+
+    other = client.post("/api/repertoires", json={"name": "2027"}).json()
+    # the target already has its own comment on one of the positions: it's kept
+    client.put(f"/api/repertoires/{other['id']}/comment", json={"fen": AFTER_E4_E5, "comment": "mine"})
+
+    res = client.post(f"/api/openings/{opening['id']}/copy", json={"repertoire_id": other["id"]})
+    assert res.status_code == 201
+    copy = res.json()
+    assert copy["id"] != opening["id"]
+    assert copy["repertoire_id"] == other["id"]
+    assert (copy["name"], copy["color"], copy["lines"]) == ("Open Games", "white", 2)
+    assert (copy["tags"], copy["comments"]) == (1, 1)
+
+    # original untouched
+    assert [o["lines"] for o in client.get(f"/api/repertoires/{rep['id']}/openings").json()] == [2]
+    assert count(db, "lines") == 4
+    assert count(db, "moves") == 20
+    assert count(db, "line_reviews") == 2
+    assert count(db, "move_attempts") == 6
+    assert count(db, "opening_tags") == 2
+    assert count(db, "drill_attempts") == 2
+
+    lines = client.get(f"/api/openings/{copy['id']}/lines").json()
+    assert sorted(ln["moves"][-1]["uci"] for ln in lines) == ["f1b5", "f1c4"]
+    training = client.get(f"/api/openings/{copy['id']}/training", params={"mode": "all"}).json()["lines"]
+    ruy_copy = next(ln for ln in training if ln["moves"][-1]["uci"] == "f1b5")
+    assert ruy_copy["streak"] == r["streak"] == 1
+    assert ruy_copy["next_review_on"] == r["next_review_on"]
+    assert (ruy_copy["bookmarked"], ruy_copy["bookmark_note"]) == (True, "main line")
+    assert [t["name"] for t in client.get(f"/api/openings/{copy['id']}/tags").json()] == ["1.e4 e5"]
+
+    comment = lambda rid, fen: client.get(f"/api/repertoires/{rid}/comment", params={"fen": fen}).json()["comment"]
+    assert comment(other["id"], AFTER_E4) == "best by test"
+    assert comment(other["id"], AFTER_E4_E5) == "mine"
+
+    # deleting the original leaves the copy whole
+    client.delete(f"/api/openings/{opening['id']}")
+    assert client.get(f"/api/openings/{copy['id']}").json()["lines"] == 2
+    assert count(db, "line_reviews") == 1
+
+
+def test_copy_opening_name_conflict_and_rename(client, rep, opening):
+    other = client.post("/api/repertoires", json={"name": "2027"}).json()
+    client.post(f"/api/repertoires/{other['id']}/openings", json={"name": "Open Games", "color": "black"})
+    url = f"/api/openings/{opening['id']}/copy"
+    assert client.post(url, json={"repertoire_id": other["id"]}).status_code == 409
+    res = client.post(url, json={"repertoire_id": other["id"], "name": "  Open Games (old)  "})
+    assert res.status_code == 201 and res.json()["name"] == "Open Games (old)"
+    # blank name keeps the original; copying within the same repertoire needs a new name
+    assert client.post(url, json={"repertoire_id": rep["id"], "name": " "}).status_code == 409
+    assert client.post(url, json={"repertoire_id": rep["id"], "name": "Open Games 2"}).status_code == 201
+
+
+def test_copy_opening_missing(client, rep, opening):
+    assert client.post("/api/openings/9999/copy", json={"repertoire_id": rep["id"]}).status_code == 404
+    assert client.post(f"/api/openings/{opening['id']}/copy", json={"repertoire_id": 9999}).status_code == 404

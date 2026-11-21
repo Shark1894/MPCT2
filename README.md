@@ -92,6 +92,7 @@ en passant square that allows no capture are ignored, so transpositions match.
 | `PATCH/DELETE /api/repertoires/{id}` | Rename / delete (cascades to everything in it) |
 | `GET/POST /api/repertoires/{id}/openings` | List (with line, due and next-review counts) / create openings |
 | `GET/PATCH/DELETE /api/openings/{id}` | One opening: summary / rename or recolour / delete |
+| `POST /api/openings/{id}/copy` | Copy into a repertoire `{"repertoire_id": 2, "name": null}` (blank name keeps it): lines, schedule, review history, bookmarks, branch tags, drill attempts, and position comments the target lacks; the original stays. Returns the new opening plus `tags`/`comments` copied |
 | `GET /api/openings/{id}/lines` | Lines with their moves (SAN + UCI) |
 | `POST /api/openings/{id}/lines` | Save moves `{"moves": ["e2e4", ...]}`: `created`, `extended` or `exists` |
 | `GET/DELETE /api/openings/{id}/lines/through?fen=` | Count / delete the lines passing through a position |
@@ -934,6 +935,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/repertoire.e2e.cjs   # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/training.e2e.cjs     # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/dashboard.e2e.cjs    # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/tags.e2e.cjs         # empty database
+MPCT_URL=http://localhost:8010/ node tests/e2e/importopening.e2e.cjs # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/engine.e2e.cjs       # runs the real engine
 MPCT_URL=http://localhost:8010/ node tests/e2e/games.e2e.cjs        # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/play.e2e.cjs         # empty database, real engine

@@ -72,6 +72,12 @@ def delete_opening(opening_id: int, s: Db):
     return Response(status_code=204)
 
 
+@router.post("/openings/{opening_id}/copy", response_model=sch.OpeningCopyOut, status_code=201)
+def copy_opening(opening_id: int, body: sch.OpeningCopyIn, s: Db):
+    """Copy an opening (lines, schedule, history, tags, comments) into a repertoire as a new opening."""
+    return repo.copy_opening(s, opening_id, body.repertoire_id, body.name)
+
+
 # ---- lines ------------------------------------------------------------------
 
 

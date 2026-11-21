@@ -8,13 +8,24 @@ from dataclasses import dataclass
 from datetime import date
 
 import chess
-from sqlalchemy import delete, distinct, func, or_, select
+from sqlalchemy import delete, distinct, func, insert, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.positions import key_from_fen, position_key, walk_line
 from app.core.repertoire import plan_line
-from app.db.models import Line, Move, Opening, Position, PositionComment, Repertoire
+from app.db.models import (
+    DrillAttempt,
+    Line,
+    LineReview,
+    Move,
+    MoveAttempt,
+    Opening,
+    OpeningTag,
+    Position,
+    PositionComment,
+    Repertoire,
+)
 
 
 class NotFound(LookupError):
@@ -144,6 +155,158 @@ def update_opening(s: Session, opening_id: int, name: str | None = None, color: 
 def delete_opening(s: Session, opening_id: int) -> None:
     s.delete(get_opening(s, opening_id))
     s.flush()
+
+
+def _insert_rows(s: Session, model, rows: list[dict]) -> list[int]:
+    """Insert rows and return their new ids, in the same order as `rows`."""
+    if not rows:
+        return []
+    return list(s.scalars(insert(model).returning(model.id, sort_by_parameter_order=True), rows))
+
+
+def copy_opening(s: Session, opening_id: int, repertoire_id: int, name: str | None = None) -> dict:
+    """Copy an opening into a repertoire (usually another one) as a new opening.
+
+    Everything about it comes along, so it trains exactly as before: lines and moves,
+    each line's schedule, bookmark and review history (with the moves tried), branch
+    tags and position drill attempts. Position comments on its positions are copied
+    into the target repertoire where that repertoire has none for the position yet.
+    Branch tags aren't watched in tournament games in the copy (watch them again if
+    wanted). The original opening is left untouched.
+    """
+    src = get_opening(s, opening_id)
+    get_repertoire(s, repertoire_id)
+    name = (name or "").strip() or src.name
+    _check_opening_name(s, repertoire_id, name)
+
+    new = Opening(repertoire_id=repertoire_id, name=name, color=src.color)
+    s.add(new)
+    s.flush()
+
+    # lines
+    lines = s.scalars(select(Line).where(Line.opening_id == src.id).order_by(Line.id)).all()
+    new_line_ids = _insert_rows(
+        s,
+        Line,
+        [
+            {
+                "opening_id": new.id,
+                "created_on": ln.created_on,
+                "next_review_on": ln.next_review_on,
+                "bookmarked_at": ln.bookmarked_at,
+                "bookmark_note": ln.bookmark_note,
+            }
+            for ln in lines
+        ],
+    )
+    line_map = {ln.id: nid for ln, nid in zip(lines, new_line_ids)}
+
+    # moves
+    moves = s.scalars(select(Move).join(Line).where(Line.opening_id == src.id).order_by(Move.id)).all()
+    new_move_ids = _insert_rows(
+        s,
+        Move,
+        [
+            {
+                "line_id": line_map[m.line_id],
+                "ply": m.ply,
+                "uci": m.uci,
+                "san": m.san,
+                "position_before_id": m.position_before_id,
+                "position_after_id": m.position_after_id,
+            }
+            for m in moves
+        ],
+    )
+    move_map = {m.id: nid for m, nid in zip(moves, new_move_ids)}
+
+    # review history (keeps each line's streak, so the schedule carries on as before)
+    reviews = s.scalars(
+        select(LineReview).join(Line).where(Line.opening_id == src.id).order_by(LineReview.id)
+    ).all()
+    new_review_ids = _insert_rows(
+        s,
+        LineReview,
+        [
+            {
+                "line_id": line_map[r.line_id],
+                "reviewed_at": r.reviewed_at,
+                "correct": r.correct,
+                "practice": r.practice,
+                "mistakes": r.mistakes,
+                "streak": r.streak,
+            }
+            for r in reviews
+        ],
+    )
+    review_map = {r.id: nid for r, nid in zip(reviews, new_review_ids)}
+    if review_map:
+        attempts = s.scalars(
+            select(MoveAttempt).where(MoveAttempt.line_review_id.in_(review_map)).order_by(MoveAttempt.id)
+        ).all()
+        _insert_rows(
+            s,
+            MoveAttempt,
+            [
+                {
+                    "line_review_id": review_map[a.line_review_id],
+                    "move_id": move_map[a.move_id],
+                    "played_uci": a.played_uci,
+                    "correct": a.correct,
+                }
+                for a in attempts
+                if a.move_id in move_map
+            ],
+        )
+
+    # branch tags
+    tags = s.scalars(select(OpeningTag).where(OpeningTag.opening_id == src.id).order_by(OpeningTag.id)).all()
+    _insert_rows(
+        s,
+        OpeningTag,
+        [{"opening_id": new.id, "position_id": t.position_id, "name": t.name, "created_at": t.created_at} for t in tags],
+    )
+
+    # position drill attempts
+    drills = s.scalars(select(DrillAttempt).where(DrillAttempt.opening_id == src.id).order_by(DrillAttempt.id)).all()
+    _insert_rows(
+        s,
+        DrillAttempt,
+        [
+            {
+                "opening_id": new.id,
+                "position_id": d.position_id,
+                "expected_uci": d.expected_uci,
+                "correct": d.correct,
+                "wrong": d.wrong,
+                "attempted_at": d.attempted_at,
+            }
+            for d in drills
+        ],
+    )
+
+    # position comments, without overwriting the target repertoire's own
+    comments_copied = 0
+    if src.repertoire_id != repertoire_id and moves:
+        position_ids = {m.position_before_id for m in moves} | {m.position_after_id for m in moves}
+        comments = s.execute(
+            select(PositionComment.position_id, PositionComment.comment).where(
+                PositionComment.repertoire_id == src.repertoire_id,
+                PositionComment.position_id.in_(position_ids),
+            )
+        ).all()
+        if comments:
+            result = s.execute(
+                pg_insert(PositionComment)
+                .values([{"repertoire_id": repertoire_id, "position_id": pid, "comment": c} for pid, c in comments])
+                .on_conflict_do_nothing(index_elements=["repertoire_id", "position_id"])
+                .returning(PositionComment.position_id)
+            )
+            comments_copied = len(result.all())
+
+    s.flush()
+    s.refresh(new)
+    return {**_opening_summary(s, new), "tags": len(tags), "comments": comments_copied}
 
 
 # ---- positions --------------------------------------------------------------
