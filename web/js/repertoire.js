@@ -824,16 +824,25 @@ export class RepertoirePanel {
     for (const m of moves) {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = `explorer-move${m.transposes ? ' transposes' : ''}`;
+      btn.className = `explorer-move${m.transposes ? ' transposes' : ''}${m.opening ? ' into-opening' : ''}`;
       btn.innerHTML = `<span class="san"></span><span class="count"></span>`;
       btn.querySelector('.san').textContent = m.san;
       const lines = `${m.lines} line${m.lines === 1 ? '' : 's'}`;
-      btn.querySelector('.count').textContent = m.transposes ? `transposes · ${lines}` : lines;
-      if (m.transposes) btn.title = `${m.san} reaches a position in your lines by another move order (${lines} go through it)`;
+      const count = btn.querySelector('.count');
+      if (m.opening) {
+        count.textContent = `→ ${m.opening.name} · ${lines}`;
+        btn.title = `${m.san} transposes into your “${m.opening.name}” opening (${lines} go through that position)`;
+      } else if (m.transposes) {
+        count.textContent = `transposes · ${lines}`;
+        btn.title = `${m.san} reaches a position in your lines by another move order (${lines} go through it)`;
+      } else {
+        count.textContent = lines;
+      }
       btn.addEventListener('click', () => this.onPlaySan(m.san));
       box.appendChild(btn);
     }
-    this.onShapes(moves.map((m) => ({ orig: m.uci.slice(0, 2), dest: m.uci.slice(2, 4), brush: m.transposes ? 'blue' : 'green' })));
+    const brush = (m) => (m.opening ? 'intoOpening' : m.transposes ? 'blue' : 'green');
+    this.onShapes(moves.map((m) => ({ orig: m.uci.slice(0, 2), dest: m.uci.slice(2, 4), brush: brush(m) })));
   }
 
   // ---- comments -----------------------------------------------------------

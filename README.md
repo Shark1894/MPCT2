@@ -98,7 +98,7 @@ en passant square that allows no capture are ignored, so transpositions match.
 | `GET/DELETE /api/openings/{id}/lines/through?fen=` | Count / delete the lines passing through a position |
 | `DELETE /api/lines/{id}` | Delete one line |
 | `PUT/DELETE /api/lines/{id}/bookmark` | Bookmark a line (optional note) / remove the bookmark |
-| `GET /api/openings/{id}/explorer?fen=` | Repertoire moves from a position, with line counts, then moves that transpose into the lines (`transposes`) |
+| `GET /api/openings/{id}/explorer?fen=` | Repertoire moves from a position, with line counts, then moves that transpose into the lines (`transposes`, blue), then moves that transpose into another opening of the same repertoire and colour by a different move order (`opening: {id, name}`, orchid) |
 | `GET/PUT /api/repertoires/{id}/comment` | Read / save a position comment (empty comment deletes it) |
 
 Lines always start from the initial position. Extending a line makes it due for review today,
@@ -936,6 +936,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/training.e2e.cjs     # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/dashboard.e2e.cjs    # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/tags.e2e.cjs         # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/importopening.e2e.cjs # empty database
+MPCT_URL=http://localhost:8010/ node tests/e2e/transpose-opening.e2e.cjs # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/engine.e2e.cjs       # runs the real engine
 MPCT_URL=http://localhost:8010/ node tests/e2e/games.e2e.cjs        # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/play.e2e.cjs         # empty database, real engine

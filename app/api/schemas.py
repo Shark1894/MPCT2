@@ -76,11 +76,17 @@ class LineCountOut(BaseModel):
     lines: int
 
 
+class OpeningRef(BaseModel):
+    id: int
+    name: str
+
+
 class ExplorerMoveOut(BaseModel):
     uci: str
     san: str
     lines: int
     transposes: bool = False  # reaches a position in the opening's lines by another move order
+    opening: OpeningRef | None = None  # reaches a position in this other opening by another move order
 
 
 class CommentIn(BaseModel):

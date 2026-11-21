@@ -3,7 +3,7 @@
 // and reports the squares the user moved between.
 
 import { Chessground } from '../vendor/chessground/chessground.min.js';
-import { BRUSHES as ENGINE_BRUSHES } from './arrows-core.js';
+import { BRUSHES as ENGINE_BRUSHES, EXPLORER_BRUSHES } from './arrows-core.js';
 
 const PROMOTION_PIECES = [
   ['q', 'queen'],
@@ -35,7 +35,7 @@ export class BoardView {
       },
       premovable: { enabled: false },
       draggable: { showGhost: true },
-      drawable: { enabled: true, brushes: ENGINE_BRUSHES }, // right-click arrows and circles; engine brushes added to the defaults
+      drawable: { enabled: true, brushes: { ...ENGINE_BRUSHES, ...EXPLORER_BRUSHES } }, // right-click arrows and circles; engine + explorer brushes added to the defaults
     });
   }
 

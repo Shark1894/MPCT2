@@ -157,7 +157,7 @@ def test_explorer_counts_moves_from_position(client, opening):
     oid = opening["id"]
 
     start = client.get(f"/api/openings/{oid}/explorer", params={"fen": START}).json()
-    assert start == [{"uci": "e2e4", "san": "e4", "lines": 2, "transposes": False}, {"uci": "d2d4", "san": "d4", "lines": 1, "transposes": False}]
+    assert start == [{"uci": "e2e4", "san": "e4", "lines": 2, "transposes": False, "opening": None}, {"uci": "d2d4", "san": "d4", "lines": 1, "transposes": False, "opening": None}]
 
     pos = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"
     moves = client.get(f"/api/openings/{oid}/explorer", params={"fen": pos}).json()
@@ -172,7 +172,7 @@ def test_explorer_ignores_en_passant_field_and_counters(client, opening):
     add(client, opening, RUY)
     for fen in (AFTER_E4, AFTER_E4.replace(" e3 0 1", " - 5 40")):
         assert client.get(f"/api/openings/{opening['id']}/explorer", params={"fen": fen}).json() == [
-            {"uci": "e7e5", "san": "e5", "lines": 1, "transposes": False}
+            {"uci": "e7e5", "san": "e5", "lines": 1, "transposes": False, "opening": None}
         ]
 
 
@@ -191,13 +191,46 @@ def test_explorer_moves_that_transpose_into_the_lines(client, opening):
     oid = opening["id"]
     fen = "rnbqkbnr/ppp2ppp/4p3/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 0 3"  # d4 d5 Nf3 e6
     assert client.get(f"/api/openings/{oid}/explorer", params={"fen": fen}).json() == [
-        {"uci": "c2c4", "san": "c4", "lines": 2, "transposes": True}
+        {"uci": "c2c4", "san": "c4", "lines": 2, "transposes": True, "opening": None}
     ]
     # in the lines: their own moves first, then any move into another part of them
     after_c4 = "rnbqkbnr/ppp1pppp/8/3p4/2PP4/8/PP2PPPP/RNBQKBNR b KQkq - 0 2"
     moves = client.get(f"/api/openings/{oid}/explorer", params={"fen": after_c4}).json()
-    assert moves[0] == {"uci": "e7e6", "san": "e6", "lines": 2, "transposes": False}
+    assert moves[0] == {"uci": "e7e6", "san": "e6", "lines": 2, "transposes": False, "opening": None}
     assert all(m["transposes"] for m in moves[1:])
+
+
+def test_explorer_moves_that_transpose_into_another_opening(client, rep, opening):
+    """QGD (white) has d4 d5 c4 e6 Nf3; a London opening reaching d4 d5 Nf3 e6 sees c4 → QGD (purple)."""
+    qgd = client.post(f"/api/repertoires/{rep['id']}/openings", json={"name": "QGD", "color": "white"}).json()
+    add(client, qgd, ["d2d4", "d7d5", "c2c4", "e7e6", "g1f3", "g8f6"])
+    add(client, qgd, ["d2d4", "d7d5", "c2c4", "e7e6", "g1f3", "c7c5"])
+    london = client.post(f"/api/repertoires/{rep['id']}/openings", json={"name": "London", "color": "white"}).json()
+    add(client, london, ["d2d4", "d7d5", "g1f3", "e7e6", "c1f4"])
+    fen = "rnbqkbnr/ppp2ppp/4p3/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 0 3"  # d4 d5 Nf3 e6
+    moves = client.get(f"/api/openings/{london['id']}/explorer", params={"fen": fen}).json()
+    assert moves == [
+        {"uci": "c1f4", "san": "Bf4", "lines": 1, "transposes": False, "opening": None},
+        {"uci": "c2c4", "san": "c4", "lines": 2, "transposes": False, "opening": {"id": qgd["id"], "name": "QGD"}},
+    ]
+    # the same move from the same position isn't a transposition: 2.c4 after 1.d4 d5 is just the QGD
+    after_d4_d5 = "rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2"
+    moves = client.get(f"/api/openings/{london['id']}/explorer", params={"fen": after_d4_d5}).json()
+    assert [m["san"] for m in moves] == ["Nf3"]
+    # a move transposing within the opening itself stays blue, not purple
+    add(client, london, ["d2d4", "d7d5", "c2c4", "e7e6", "g1f3"])
+    moves = client.get(f"/api/openings/{london['id']}/explorer", params={"fen": fen}).json()
+    assert {m["san"]: (m["transposes"], m["opening"]) for m in moves}["c4"] == (True, None)
+    # other colour or another repertoire: ignored
+    other = client.post("/api/repertoires", json={"name": "Other"}).json()
+    o2 = client.post(f"/api/repertoires/{other['id']}/openings", json={"name": "London", "color": "white"}).json()
+    add(client, o2, ["d2d4", "d7d5", "g1f3", "e7e6", "c1f4"])
+    assert [m["san"] for m in client.get(f"/api/openings/{o2['id']}/explorer", params={"fen": fen}).json()] == ["Bf4"]
+    client.patch(f"/api/openings/{qgd['id']}", json={"color": "black"})
+    client.delete(f"/api/openings/{london['id']}")
+    london = client.post(f"/api/repertoires/{rep['id']}/openings", json={"name": "London", "color": "white"}).json()
+    add(client, london, ["d2d4", "d7d5", "g1f3", "e7e6", "c1f4"])
+    assert [m["san"] for m in client.get(f"/api/openings/{london['id']}/explorer", params={"fen": fen}).json()] == ["Bf4"]
 
 
 def test_explorer_bad_fen(client, opening):

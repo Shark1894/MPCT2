@@ -2,8 +2,9 @@
 // winning chance (Lichess win%, as on the Practical tab) it gives away against the
 // best line. Pure, so it's unit tested.
 //
-// Green (repertoire) and blue (repertoire transpositions) are left to the explorer,
-// so the engine uses purple for its best and good moves, then orange, then red.
+// Green (repertoire), blue (transpositions within the opening) and orchid (transpositions
+// into another opening) are left to the explorer, so the engine uses deep purple and
+// lavender for its best and good moves, then orange, then red.
 
 import { winPct } from './practical-core.js';
 
@@ -23,6 +24,11 @@ export const BRUSHES = {
   engineGood: { key: 'eg', color: '#9575cd', opacity: 0.6, lineWidth: 8 },
   engineDubious: { key: 'ed', color: '#e07b00', opacity: 0.8, lineWidth: 6 },
   engineBad: { key: 'ex', color: '#c62828', opacity: 0.85, lineWidth: 4 },
+};
+
+/** The explorer's arrow for a move that transposes into another opening (orchid, unlike the engine's purples). */
+export const EXPLORER_BRUSHES = {
+  intoOpening: { key: 'io', color: '#c35bd6', opacity: 0.85, lineWidth: 10 },
 };
 
 /** The Arrows setting: which lines get an arrow. */

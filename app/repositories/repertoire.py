@@ -453,8 +453,10 @@ def delete_line(s: Session, line_id: int) -> None:
 def explorer(s: Session, opening_id: int, fen: str) -> list[dict]:
     """Repertoire moves from a position in this opening, with how many lines use each; then the
     transpositions: other legal moves that reach a position somewhere in the opening's lines (by
-    another move order), with how many lines pass through it."""
-    get_opening(s, opening_id)
+    another move order), with how many lines pass through it; then the moves that transpose into
+    another opening of the same repertoire and colour (`opening` = {id, name}, lines = that
+    opening's lines through the position)."""
+    opening = get_opening(s, opening_id)
     out: list[dict] = []
     pos_id = _position_id(s, fen)
     if pos_id is not None:
@@ -466,13 +468,19 @@ def explorer(s: Session, opening_id: int, fen: str) -> list[dict]:
             .group_by(Move.uci, Move.san)
             .order_by(n_lines.desc(), Move.san)
         ).all()
-        out = [{"uci": uci, "san": san, "lines": n, "transposes": False} for uci, san, n in rows]
-    return out + _transpositions(s, opening_id, fen, {m["uci"] for m in out})
+        out = [{"uci": uci, "san": san, "lines": n, "transposes": False, "opening": None} for uci, san, n in rows]
+    after = _moves_after(fen, {m["uci"] for m in out})
+    out += _transpositions(s, opening_id, after)
+    for m in out:
+        after.pop(m.get("key"), None)
+        m.pop("key", None)
+    return out + _opening_transpositions(s, opening, pos_id, after)
 
 
-def _transpositions(s: Session, opening_id: int, fen: str, known: set[str]) -> list[dict]:
+def _moves_after(fen: str, known: set[str]) -> dict[str, tuple[str, str]]:
+    """{position key: (uci, san)} for the legal moves not in `known` (first move per position)."""
     board = chess.Board(fen)
-    after: dict[str, tuple[str, str]] = {}  # position key -> (uci, san)
+    after: dict[str, tuple[str, str]] = {}
     for move in board.legal_moves:
         uci = move.uci()
         if uci in known:
@@ -481,6 +489,10 @@ def _transpositions(s: Session, opening_id: int, fen: str, known: set[str]) -> l
         board.push(move)
         after.setdefault(position_key(board), (uci, san))
         board.pop()
+    return after
+
+
+def _transpositions(s: Session, opening_id: int, after: dict[str, tuple[str, str]]) -> list[dict]:
     if not after:
         return []
     n_lines = func.count(distinct(Move.line_id))
@@ -491,8 +503,53 @@ def _transpositions(s: Session, opening_id: int, fen: str, known: set[str]) -> l
         .where(Line.opening_id == opening_id, Position.key.in_(list(after)))
         .group_by(Position.key)
     ).all()
-    found = [{"uci": after[k][0], "san": after[k][1], "lines": n, "transposes": True} for k, n in rows]
+    found = [
+        {"uci": after[k][0], "san": after[k][1], "lines": n, "transposes": True, "opening": None, "key": k}
+        for k, n in rows
+    ]
     return sorted(found, key=lambda m: (-m["lines"], m["san"]))
+
+
+def _opening_transpositions(
+    s: Session, opening: Opening, pos_id: int | None, after: dict[str, tuple[str, str]]
+) -> list[dict]:
+    """Moves into a position of another opening (same repertoire and colour) that the other
+    opening reaches by a different move order. A move the other opening plays from this very
+    position isn't a transposition (1.d4 from the start isn't flagged for your 1.d4 opening)."""
+    if not after:
+        return []
+    n_lines = func.count(distinct(Move.line_id))
+    rows = s.execute(
+        select(Opening.id, Opening.name, Position.key, n_lines)
+        .join(Line, Line.opening_id == Opening.id)
+        .join(Move, Move.line_id == Line.id)
+        .join(Position, Position.id == Move.position_after_id)
+        .where(
+            Opening.repertoire_id == opening.repertoire_id,
+            Opening.color == opening.color,
+            Opening.id != opening.id,
+            Position.key.in_(list(after)),
+        )
+        .group_by(Opening.id, Opening.name, Position.key)
+    ).all()
+    same_path: set[tuple[int, str]] = set()
+    if rows and pos_id is not None:
+        same_path = set(
+            s.execute(
+                select(Line.opening_id, Move.uci)
+                .join(Line)
+                .where(Move.position_before_id == pos_id, Line.opening_id.in_({r[0] for r in rows}))
+            ).all()
+        )
+    best: dict[str, dict] = {}  # per move: the other opening with the most lines through it
+    for oid, name, key, n in rows:
+        uci, san = after[key]
+        if (oid, uci) in same_path:
+            continue
+        cur = best.get(uci)
+        if cur is None or n > cur["lines"] or (n == cur["lines"] and name < cur["opening"]["name"]):
+            best[uci] = {"uci": uci, "san": san, "lines": n, "transposes": False, "opening": {"id": oid, "name": name}}
+    return sorted(best.values(), key=lambda m: (-m["lines"], m["san"]))
 
 
 # ---- comments ---------------------------------------------------------------

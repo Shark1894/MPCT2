@@ -11,6 +11,7 @@
   --blue-soft: rgba(60, 127, 214, 0.22);
   --copper: #c98a4e;
   --green: #5fae6a;
+  --orchid: #c35bd6;
   --error: #e06c6c;
   --ok: #7cc47f;
   --topbar-h: 48px;
@@ -422,6 +423,14 @@ body.engine-on {
 
 .explorer-move.transposes {
   border-left-color: var(--blue);
+}
+
+.explorer-move.into-opening {
+  border-left-color: var(--orchid);
+}
+
+.explorer-move.into-opening .count {
+  color: var(--orchid);
 }
 
 .explorer-move .san {
