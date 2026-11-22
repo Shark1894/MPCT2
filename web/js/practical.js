@@ -5,6 +5,9 @@
 // how much worse the rest are on average. No model of the opponent, no game data: it works in
 // lines nobody has played. See practical-core.js for the measures.
 //
+// A second mode, "Check my moves", only looks at the positions themselves: your repertoire's move
+// against the engine's best there, highlighted when it gives away more than a chosen limit.
+//
 // The engine runs here in the browser (Stockfish, like the reviews), never on the server; its
 // lines are saved so a second run is quick.
 
@@ -13,7 +16,7 @@ import { api } from './api.js';
 import { button, el, miniBoard } from './dom.js';
 import { Engine } from './engine.js';
 import {
-  DEFAULTS, addDecision, breakEven, lineLinks, stillSharp, worthFollowing, breakEvenText, candidateMoves, decision, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
+  DEFAULTS, addDecision, breakEven, checkMoves, lineLinks, stillSharp, worthFollowing, breakEvenText, candidateMoves, decision, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, worthALook,
 } from './practical-core.js';
 import { plural, store, tagTree, toast } from './ui.js';
 
@@ -36,6 +39,17 @@ const CAPS = [
   [25, 'Up to 25 points worse'],
 ];
 const SAVE_BATCH = 20;
+const MODES = [
+  ['sharp', 'Sharp alternatives'],
+  ['check', 'Moves below the engine’s best'],
+];
+const LIMITS = [
+  [2, 'More than 2 points'],
+  [5, 'More than 5 points (inaccuracy)'],
+  [10, 'More than 10 points (mistake)'],
+  [15, 'More than 15 points (blunder)'],
+];
+const CHECK_LINES = 3; // the engine's top moves searched in each position when checking your moves
 
 /** The depth a line was searched to; amber when the time limit stopped it short of `wanted`. */
 function depthCell(depth, wanted) {
@@ -110,6 +124,20 @@ function sanOf(fen, uci) {
   } catch {
     return uci;
   }
+}
+
+/** A line of UCI moves as SAN from `fen` (as far as it stays legal, at most `max` moves). */
+function pvSans(fen, pv, max = 10) {
+  const c = new Chess(fen);
+  const out = [];
+  for (const u of (pv ?? []).slice(0, max)) {
+    try {
+      out.push(c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] }).san);
+    } catch {
+      break;
+    }
+  }
+  return out;
 }
 
 /** The FEN after a UCI move, with whether the game is over then. */
@@ -384,23 +412,68 @@ async function analysePosition(w, position, me, opts) {
   return finish(cands, opts);
 }
 
+/**
+ * Check my moves in one position: the engine's top CHECK_LINES moves, and your repertoire move(s)
+ * against the best of them. A move of yours outside those lines is scored from a search of the
+ * position after it (their best reply). Only this position is searched, nothing deeper.
+ */
+async function checkPosition(w, position, me, limit) {
+  const fen = position.fen;
+  const lines = await w.lines(fen, CHECK_LINES);
+  const extra = {};
+  for (const uci of position.repertoire) {
+    if (w.cancelled) break;
+    if (lines.some((l) => l.uci === uci)) continue;
+    let n;
+    try {
+      n = after(fen, uci);
+    } catch {
+      continue;
+    }
+    if (n.over) {
+      extra[uci] = n.mate ? { mate: me === 'white' ? 1 : -1 } : { cp: 0 };
+      continue;
+    }
+    const reply = (await w.lines(n.fen, 1))[0];
+    if (reply) extra[uci] = reply.score;
+  }
+  position.depth = w.depthOf(fen, CHECK_LINES);
+  return checkMoves(lines, position.repertoire, me, extra, limit).map((m) => ({
+    ...m,
+    san: sanOf(fen, m.uci),
+    bestSan: sanOf(fen, m.best.uci),
+    bestLine: pvSans(fen, m.best.pv),
+  }));
+}
+
 export class PracticalView {
   /** @param {{ onShowLine: (sans: string[]) => void }} deps  open moves on the Board tab */
   constructor({ onShowLine }) {
     this.onShowLine = onShowLine;
     this.box = document.getElementById('practical-view');
     const saved = store.get('practical', {});
-    this.settings = { openingId: saved.openingId ?? null, tagId: saved.tagId ?? null, depth: saved.depth ?? 16, cap: saved.cap ?? 15, decisions: saved.decisions ?? 3 };
+    this.settings = {
+      openingId: saved.openingId ?? null,
+      tagId: saved.tagId ?? null,
+      depth: saved.depth ?? 16,
+      cap: saved.cap ?? 15,
+      decisions: saved.decisions ?? 3,
+      mode: saved.mode === 'check' ? 'check' : 'sharp',
+      limit: saved.limit ?? 5,
+    };
     this.results = [];
     this.run = null;
     this.info = null;
     this.built = false;
     this.seen = new Set(); // `${position key}|${uci}` of moves you've opened on the board
     this.hideSeen = Boolean(saved.hideSeen);
+    this.onlyFlagged = Boolean(saved.onlyFlagged);
+    this.checks = []; // check my moves: [{position, moves}]
+    this.resultMode = null; // which mode the results on the page came from
   }
 
   _save() {
-    store.set('practical', { ...this.settings, hideSeen: this.hideSeen });
+    store.set('practical', { ...this.settings, hideSeen: this.hideSeen, onlyFlagged: this.onlyFlagged });
   }
 
   _isSeen(position, uci) {
@@ -450,6 +523,10 @@ export class PracticalView {
   /** Draw the results again (after a seen tick changes). */
   _redraw() {
     if (!this.info) return;
+    if (this.resultMode === 'check') {
+      this._drawCheck(!this.run);
+      return;
+    }
     this._drawWorth(!this.run);
     const cards = this.results.map((r) => this._positionCard(r));
     this.el.positions.replaceChildren(...cards);
@@ -468,15 +545,16 @@ export class PracticalView {
     const head = el('section', 'dash-card pr-head');
     head.append(
       el('h1', 'dash-h', 'Practical choices'),
-      el('p', 'pr-lead', 'Moves in your openings that take your opponent into sharp territory, even if the engine says you give a little away: few good replies, the second-best clearly worse, most others losing. All from the engine’s evaluations, so niche and never-played lines are fine.'),
     );
+    this.el = {};
+    this.el.lead = el('p', 'pr-lead');
+    head.appendChild(this.el.lead);
     const controls = el('div', 'pr-controls');
     const field = (label, control) => {
       const l = el('label', 'pr-field');
       l.append(el('span', '', label), control);
       return l;
     };
-    this.el = {};
     this.el.opening = el('select');
     this.el.opening.id = 'pr-opening';
     this.el.opening.addEventListener('change', () => {
@@ -509,15 +587,34 @@ export class PracticalView {
     this.el.depth = select('pr-depth', DEPTHS, this.settings.depth, 'depth');
     this.el.cap = select('pr-cap', CAPS, this.settings.cap, 'cap');
     this.el.decisions = select('pr-decisions', DECISIONS, this.settings.decisions, 'decisions');
+    this.el.limit = select('pr-limit', LIMITS, this.settings.limit, 'limit');
+    this.el.mode = el('select');
+    this.el.mode.id = 'pr-mode';
+    for (const [v, t] of MODES) {
+      const o = el('option', '', t);
+      o.value = v;
+      this.el.mode.appendChild(o);
+    }
+    this.el.mode.value = this.settings.mode;
+    this.el.mode.addEventListener('change', () => {
+      this.settings.mode = this.el.mode.value;
+      this._save();
+      this._applyMode();
+    });
 
     this.el.go = button('Analyse', 'primary', () => (this.run ? this.stop() : this.start()));
     this.el.go.id = 'pr-go';
+    this.el.capField = field('Moves to consider', this.el.cap);
+    this.el.decisionsField = field('Follow', this.el.decisions);
+    this.el.limitField = field('Flag when it costs', this.el.limit);
     controls.append(
+      field('Look for', this.el.mode),
       field('Opening', this.el.opening),
       field('Branch', this.el.tag),
       field('Engine depth', this.el.depth),
-      field('Moves to consider', this.el.cap),
-      field('Follow', this.el.decisions),
+      this.el.capField,
+      this.el.decisionsField,
+      this.el.limitField,
       this.el.go,
     );
     this.el.progress = el('div', 'pr-progress');
@@ -525,6 +622,9 @@ export class PracticalView {
     this.el.progress.hidden = true;
     head.append(controls, this.el.progress);
 
+    this.el.check = el('section', 'dash-card pr-worth pr-check');
+    this.el.check.id = 'pr-check';
+    this.el.check.hidden = true;
     this.el.worth = el('section', 'dash-card pr-worth');
     this.el.worth.id = 'pr-worth';
     this.el.worth.hidden = true;
@@ -541,8 +641,20 @@ export class PracticalView {
     this.el.help = el('details', 'dash-card pr-help');
     const helpSum = el('summary', 'pr-help-sum');
     helpSum.appendChild(el('h2', 'dash-h2', 'How to read it'));
-    this.el.help.append(
-      helpSum,
+    this.el.helpSharp = el('div', 'pr-help-body');
+    this.el.helpCheck = el('div', 'pr-help-body');
+    this.el.helpCheck.append(
+      this._helpList([
+        ['Yours', `your repertoire’s move, with where the engine ranks it among its top ${CHECK_LINES} here (best, 2nd, 3rd). “Not top ${CHECK_LINES}” means it’s scored from a search of the position after it instead`],
+        ['Engine’s best', 'the engine’s top move here (“same” when it’s yours). Tap it to see the engine’s line on the board; that ticks it as seen'],
+        ['Cost', 'winning chances (0–100) your move gives away against the engine’s best. Lichess counts 5 points as an inaccuracy, 10 a mistake and 15 a blunder; near equality a pawn is about 9 points, and the same pawn is worth fewer points when one side is already well ahead'],
+        ['Evals', 'the engine’s evaluation of your move and of its best, in pawns from White’s side (+ good for White)'],
+        ['Depth', 'how deep the engine searched the position (in half-moves); amber when the 30-second limit stopped it short of the depth you chose'],
+      ]),
+      el('p', 'pr-note', 'Only the position itself is searched (no following of later moves), so a run is quick, and engine lines saved by either mode are used again.'),
+    );
+    this.el.help.append(helpSum, this.el.helpSharp, this.el.helpCheck);
+    this.el.helpSharp.append(
       this._helpList([
         ['Eval', 'the engine’s evaluation after the move and their best reply, in pawns from White’s side (+ good for White)'],
         ['Engine', 'the same as your winning chances (0–100)'],
@@ -555,7 +667,30 @@ export class PracticalView {
       ]),
       el('p', 'pr-note', 'Points are winning chances (0–100) from the engine’s evaluations. ✗ marks a reply that isn’t good for them.'),
     );
-    this.box.replaceChildren(head, this.el.worth, this.el.positionsHead, this.el.positions, this.el.help);
+    this.box.replaceChildren(head, this.el.check, this.el.worth, this.el.positionsHead, this.el.positions, this.el.help);
+    this._applyMode();
+  }
+
+  /** Show the settings, lead and help for the chosen mode; results from the other mode are put away. */
+  _applyMode() {
+    const check = this.settings.mode === 'check';
+    this.el.capField.hidden = check;
+    this.el.decisionsField.hidden = check;
+    this.el.limitField.hidden = !check;
+    this.el.helpSharp.hidden = check;
+    this.el.helpCheck.hidden = !check;
+    this.el.lead.textContent = check
+      ? 'Positions in your openings where your move isn’t the engine’s choice: each of your moves against the engine’s best in that position, highlighted when it gives away more winning chances than the limit you set. Only the position itself is searched, so it’s quick.'
+      : 'Moves in your openings that take your opponent into sharp territory, even if the engine says you give a little away: few good replies, the second-best clearly worse, most others losing. All from the engine’s evaluations, so niche and never-played lines are fine.';
+    if (this.resultMode && this.resultMode !== this.settings.mode && !this.run) {
+      this.resultMode = null;
+      this.info = null;
+      this.el.check.hidden = true;
+      this.el.worth.hidden = true;
+      this.el.positionsHead.hidden = true;
+      this.el.positions.replaceChildren();
+      this.el.progress.hidden = true;
+    }
   }
 
   _helpList(rows) {
@@ -635,7 +770,13 @@ export class PracticalView {
     }
     this.info = info;
     this.results = [];
+    this.checks = [];
+    this.resultMode = this.settings.mode;
     await this._loadSeen(info.positions);
+    if (this.settings.mode === 'check') {
+      await this._runCheck(info);
+      return;
+    }
     const opts = { ...DEFAULTS, cap: this.settings.cap, depth: this.settings.depth, decisions: this.settings.decisions };
     this.opts = opts;
     const w = new Worker({ depth: this.settings.depth });
@@ -644,7 +785,9 @@ export class PracticalView {
     this.el.positions.replaceChildren();
     this.el.positionsHead.hidden = true;
     this.el.worth.hidden = true;
+    this.el.check.hidden = true;
     this.el.progress.hidden = false;
+    this.el.mode.disabled = true;
     this._keepAwake();
     let failed = null;
     try {
@@ -674,12 +817,64 @@ export class PracticalView {
       this.run = null;
       this._releaseAwake();
       this.el.go.textContent = 'Analyse';
+      this.el.mode.disabled = false;
       const secs = Math.round((performance.now() - run.started) / 1000);
       this.el.progress.textContent = failed
         ? `Stopped: ${failed.message}`
         : `${run.done === run.total ? 'Done' : 'Stopped'}: ${plural(run.done, 'position')} of ${run.total} in ${secs} s at depth ${this.settings.depth} (engine: ${w.counts.engine} new, ${w.counts.saved} saved${w.counts.limited ? `; ${w.counts.limited} stopped by the ${LIMIT_MS / 1000} s limit before reaching it` : ''}).`;
       if (failed) toast(failed.message, 'error');
       this._drawWorth(true);
+    }
+  }
+
+  /** Check my moves: each position once, your move(s) against the engine's best. */
+  async _runCheck(info) {
+    const limit = this.settings.limit;
+    this.checkLimit = limit;
+    this.checkDepth = this.settings.depth;
+    const w = new Worker({ depth: this.settings.depth });
+    this.run = { w, started: performance.now(), done: 0, total: info.positions.length };
+    this.el.go.textContent = 'Stop';
+    this.el.mode.disabled = true;
+    this.el.positions.replaceChildren();
+    this.el.positionsHead.hidden = true;
+    this.el.worth.hidden = true;
+    this.el.check.hidden = true;
+    this.el.progress.hidden = false;
+    this._keepAwake();
+    let failed = null;
+    try {
+      await w.prefetch(info.positions.map((p) => p.fen), CHECK_LINES);
+      for (const position of info.positions) {
+        if (w.cancelled) break;
+        this._progress(position);
+        let moves;
+        try {
+          moves = await checkPosition(w, position, info.color, limit);
+        } catch (err) {
+          if (w.cancelled) break;
+          failed = err;
+          break;
+        }
+        if (w.cancelled) break;
+        this.checks.push({ position, moves });
+        this.run.done += 1;
+        this._drawCheck();
+      }
+    } finally {
+      const run = this.run;
+      w.stop();
+      this.run = null;
+      this._releaseAwake();
+      this.el.go.textContent = 'Analyse';
+      this.el.mode.disabled = false;
+      const secs = Math.round((performance.now() - run.started) / 1000);
+      const flagged = this.checks.reduce((n, r) => n + r.moves.filter((m) => m.flagged).length, 0);
+      this.el.progress.textContent = failed
+        ? `Stopped: ${failed.message}`
+        : `${run.done === run.total ? 'Done' : 'Stopped'}: ${plural(run.done, 'position')} of ${run.total} in ${secs} s at depth ${this.settings.depth}, ${flagged} flagged (engine: ${w.counts.engine} new, ${w.counts.saved} saved${w.counts.limited ? `; ${w.counts.limited} stopped by the ${LIMIT_MS / 1000} s limit before reaching it` : ''}).`;
+      if (failed) toast(failed.message, 'error');
+      this._drawCheck(true);
     }
   }
 
@@ -745,6 +940,130 @@ export class PracticalView {
     const shown = this.hideSeen ? picks.filter((p) => !this._isSeen(p.position, p.cand.uci)) : picks;
     if (!shown.length) box.appendChild(el('p', 'pr-note', 'You’ve seen them all.'));
     else box.appendChild(this._worthTable(shown));
+  }
+
+  /** Check my moves: every move of yours checked so far, flagged ones highlighted. */
+  _drawCheck(final = false) {
+    const box = this.el.check;
+    const limit = this.checkLimit ?? this.settings.limit;
+    const all = this.checks.flatMap(({ position, moves }) => moves.map((m) => ({ position, m })));
+    box.hidden = !all.length && !final;
+    const flagged = all.filter((r) => r.m.flagged);
+    const sum = el('p', `pr-check-sum${flagged.length ? '' : ' ok'}`,
+      !all.length ? 'Nothing checked.'
+        : flagged.length ? `${flagged.length} of ${plural(all.length, 'move')} give away more than ${limit} points${final ? '' : ' so far'}`
+          : `All ${plural(all.length, 'move')} within ${limit} points of the engine’s best${final ? '' : ' so far'}`);
+    sum.id = 'pr-check-sum';
+    box.replaceChildren(
+      el('h2', 'dash-h2', 'Your moves against the engine'),
+      el('p', 'pr-note', `Each position in these lines where it’s your move: your repertoire’s move against the engine’s best there, highlighted when it gives away more than ${limit} points of winning chances. Tap a move to see it on the board; opening the engine’s move ticks it as seen. Tap a heading to sort.`),
+      sum,
+    );
+    if (!all.length) return;
+    const toggle = el('label', 'pr-hide-seen');
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.id = 'pr-only-flagged';
+    cb.checked = this.onlyFlagged;
+    cb.addEventListener('change', () => {
+      this.onlyFlagged = cb.checked;
+      this._save();
+      this._drawCheck(!this.run);
+    });
+    toggle.append(cb, ` Only the flagged ones (${flagged.length})`);
+    box.appendChild(toggle);
+    const shown = this.onlyFlagged ? flagged : all;
+    if (shown.length) box.appendChild(this._checkTable(shown));
+  }
+
+  _checkTable(rows) {
+    const COLS = [
+      // [heading, sort key, value for sorting, ascending]
+      ['After', 'line', (r) => (r.position.sans ?? []).join('\u0001'), true],
+      ['Yours', null],
+      ['Engine’s best', null],
+      ['Cost', 'cost', (r) => r.m.cost],
+      ['Your eval', null],
+      ['Best eval', null],
+      ['Depth', 'depth', (r) => r.position.depth ?? 0, true],
+      ['Seen', 'seen', (r) => (r.m.rank === 1 ? 2 : this._isSeen(r.position, r.m.best.uci) ? 1 : 0), true],
+    ];
+    const sortKey = this.checkSort ?? 'cost';
+    const col = COLS.find((c) => c[1] === sortKey) ?? COLS[3];
+    const order = (a, b) => {
+      const x = col[2](a);
+      const y = col[2](b);
+      if (x === y) return 0;
+      const d = typeof x === 'string' ? x.localeCompare(y) : x - y;
+      return col[3] ? d : -d;
+    };
+    const sorted = [...rows].sort((a, b) => order(a, b) || b.m.cost - a.m.cost);
+
+    const wrap = el('div', 'pr-table-wrap');
+    const table = el('table', 'pr-table pr-check-table');
+    table.id = 'pr-check-table';
+    const hr = el('tr');
+    for (const [h, key] of COLS) {
+      const th = el('th', key ? 'sortable' : '');
+      if (key) {
+        const b = button(h, `pr-sort${key === sortKey ? ' on' : ''}`, () => {
+          this.checkSort = key;
+          this._drawCheck(!this.run);
+        });
+        b.dataset.sort = key;
+        th.setAttribute('aria-sort', key === sortKey ? (col[3] ? 'ascending' : 'descending') : 'none');
+        th.appendChild(b);
+      } else th.textContent = h;
+      hr.appendChild(th);
+    }
+    const thead = el('thead');
+    thead.appendChild(hr);
+    const tbody = el('tbody');
+    const ordinal = (n) => (n === 1 ? 'best' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
+    for (const { position, m } of sorted) {
+      const isBest = m.rank === 1;
+      const seen = !isBest && this._isSeen(position, m.best.uci);
+      const tr = el('tr', [m.flagged ? 'pr-flag' : '', seen ? 'seen' : ''].filter(Boolean).join(' '));
+      const where = el('td', 'pr-where', this._last(position.sans));
+      where.title = `${movetext(position.sans)} …`;
+      const yours = el('td', 'pr-move');
+      yours.appendChild(button(m.san, 'pr-move-btn', () => this.onShowLine([...position.sans, m.san]), 'Show on board'));
+      yours.appendChild(el('span', `pr-yours pr-rank${isBest ? ' best' : ''}`, m.rank ? ordinal(m.rank) : `not top ${CHECK_LINES}`));
+      const best = el('td', 'pr-move pr-best');
+      if (isBest) best.appendChild(el('span', 'pr-same', 'same'));
+      else {
+        best.appendChild(button(m.bestSan, 'pr-move-btn', () => {
+          this._setSeen(position, m.best.uci, true);
+          this.onShowLine([...position.sans, ...(m.bestLine.length ? m.bestLine : [m.bestSan])]);
+        }, `Show the engine’s line on the board: ${movetext(m.bestLine, position.sans.length)}`));
+      }
+      const cost = el('td', `num${m.flagged ? ' pr-cost-flag' : ''}`, String(Math.round(m.cost)));
+      cost.title = `Your winning chances ${pct(m.win)} against ${pct(m.best.win)} with the engine’s best`;
+      const seenCell = el('td', 'pr-seen-cell');
+      if (isBest) seenCell.textContent = '–';
+      else {
+        const tick = button(seen ? '✓' : '', `pr-seen${seen ? ' on' : ''}`, () => this._setSeen(position, m.best.uci, !seen), seen ? 'Seen: tap to unmark' : 'Mark as seen');
+        tick.setAttribute('aria-pressed', String(seen));
+        tick.setAttribute('aria-label', seen ? 'Seen' : 'Not seen');
+        seenCell.appendChild(tick);
+      }
+      const cells = [
+        where,
+        yours,
+        best,
+        cost,
+        el('td', 'num pr-eval', evalText(m.score)),
+        el('td', 'num pr-eval', evalText(m.best.score)),
+        depthCell(position.depth, this.checkDepth ?? this.settings.depth),
+        seenCell,
+      ];
+      cells.forEach((td, i) => (td.dataset.label = COLS[i][0]));
+      tr.append(...cells);
+      tbody.appendChild(tr);
+    }
+    table.append(thead, tbody);
+    wrap.appendChild(table);
+    return wrap;
   }
 
   /** "5.Nxe2": the move that led to the position. */

@@ -48,6 +48,7 @@ The full plan, decisions and data model are in the project's
 | — | Stats tab: time spent on openings, tactics, endgames, strategy, games and analysis | Done |
 | — | Endgame studies: your own database of composed studies from PGN files, by kind of ending, with favourites | Done |
 | — | Practical tab: moves in your openings that take the opponent into sharp, only-move territory, even at an engine cost; engine-only measures (backlog item 7) | Done |
+| — | Practical tab: check my moves — flag repertoire moves that give away more than a chosen win% against the engine's best | Done |
 
 ## Using the board
 
@@ -857,6 +858,19 @@ their depth, so running the same branch again at the same or a lower depth is qu
 stopped short is saved with the depth it was asked for too (`asked_depth`), so it isn't searched again (it would
 stop at the same limit). Saved lines are looked up in batches (every position of the branch at the start, then each
 position's moves, then each of their decisions), not one request per position.
+
+### Check my moves
+
+**Look for → Moves below the engine's best** switches the tab to a quicker check: for every position in the opening
+(or branch) where it's your move, your repertoire's move against the engine's best there, highlighted when it gives
+away more winning chances than the **Flag when it costs** limit: more than 2, 5 (default; what Lichess calls an
+inaccuracy), 10 (a mistake) or 15 points (a blunder). Only the position itself is searched (the engine's top 3 moves,
+to the chosen depth); a move of yours outside those 3 is scored from a search of the position after it. Columns:
+after, **yours** (with where the engine ranks it: best, 2nd, 3rd or "not top 3"), the **engine's best** ("same" when
+it's yours; tap it to see the engine's line on the board, which ticks it as seen), **cost**, both evals, depth and
+seen. Sorted costliest first; **Only the flagged ones** hides the rest. A position with two repertoire moves (a
+transposition) gets a row for each. It shares the saved engine lines with the sharpness search, so a branch already
+analysed there is checked without the engine. The scoring is `checkMoves` in `web/js/practical-core.js`.
 
 API: `GET /api/practical/positions?opening_id=&tag_id=`, `POST /api/practical/evals/lookup`
 (`{"fens", "multipv", "movetime_ms"}`), `POST /api/practical/evals`, `POST /api/practical/seen/lookup` (`{"keys"}`),

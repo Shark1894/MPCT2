@@ -6090,6 +6090,33 @@ th[aria-sort='ascending'] .pr-sort.on::after {
   font-size: 11px;
   color: var(--green);
 }
+/* Check my moves */
+.pr-check-sum {
+  margin: 4px 0;
+  font-weight: 700;
+  color: var(--error);
+}
+.pr-check-sum.ok {
+  color: var(--green);
+}
+.pr-check-table tr.pr-flag > td {
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+}
+.pr-check-table tr.pr-flag > td:first-child {
+  box-shadow: inset 3px 0 0 var(--error);
+}
+.pr-check-table td.pr-cost-flag {
+  color: var(--error);
+  font-weight: 700;
+}
+.pr-rank.best {
+  color: var(--green);
+  border-color: var(--green);
+}
+.pr-same {
+  color: var(--text-dim);
+  font-size: 12px;
+}
 
 .pr-where {
   white-space: nowrap;
@@ -6292,5 +6319,26 @@ th[aria-sort='ascending'] .pr-sort.on::after {
 
   .pr-table tr.mine td {
     background: none;
+  }
+
+  .pr-check-table tr.pr-flag {
+    background: color-mix(in srgb, var(--error) 10%, transparent);
+    box-shadow: inset 3px 0 0 var(--error);
+    border-radius: 6px;
+    padding: 10px 8px 10px 12px;
+  }
+
+  .pr-check-table tr.pr-flag > td,
+  .pr-check-table tr.pr-flag > td:first-child {
+    background: none;
+    box-shadow: none;
+  }
+
+  /* the engine's move under yours: say which it is */
+  .pr-check-table td.pr-best::before {
+    display: inline;
+    content: 'Engine’s best:';
+    margin-right: 6px;
+    font-size: 12px;
   }
 }

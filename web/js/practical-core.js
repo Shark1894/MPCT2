@@ -226,6 +226,33 @@ export function worthALook(results, opts = DEFAULTS) {
 }
 
 /**
+ * Check my moves: your repertoire's move(s) in one position against the engine's best there.
+ * `lines`: the engine's top moves in the position (White-POV scores, as searched). `extra`: scores
+ * for your moves that aren't among them (uci -> White-POV score, from searching the position after
+ * the move). Returns one entry per repertoire move it can score:
+ *   {uci, score, win, rank (1 = the engine's best; null when outside its top lines), best: {uci,
+ *    score, win, pv}, cost (win% given away against the best, never below 0), flagged (cost > limit)}
+ */
+export function checkMoves(lines, repertoire, me, extra = {}, limit = 5) {
+  const ranked = lines
+    .filter((l) => l?.uci && l.score)
+    .map((l) => ({ uci: l.uci, score: l.score, pv: l.pv ?? [l.uci], win: winPct(l.score, me) }))
+    .sort((a, b) => b.win - a.win);
+  const best = ranked[0];
+  if (!best) return [];
+  const out = [];
+  for (const uci of repertoire) {
+    const i = ranked.findIndex((l) => l.uci === uci);
+    const score = i >= 0 ? ranked[i].score : extra[uci];
+    if (!score) continue;
+    const win = winPct(score, me);
+    const cost = Math.max(0, best.win - win); // a separate search can come out a hair above the best
+    out.push({ uci, score, win, rank: i >= 0 ? i + 1 : null, best, cost, flagged: cost > limit });
+  }
+  return out;
+}
+
+/**
  * How the eval changes if you play `cand` instead of `mine` (after their best reply each time):
  * {cp} in White's view (as evals are written) and whether that's better for you (`me`).
  * null when either is unknown or a mate.

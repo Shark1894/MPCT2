@@ -44,7 +44,7 @@ const engineShapes = (p) => p.evaluate(() => mpct.board.layers.engine ?? []);
   check((await page.$$('#engine-lines .engine-line')).length === 3, '3 lines by default');
   const evalText = await text(page, '#engine-eval');
   const evalNum = Number(evalText);
-  check(/^[+-]?\d+\.\d\d$/.test(evalText) && Math.abs(evalNum) < 1, 'start position evaluated near equal: ' + evalText);
+  check(/^[+-]?\d+\.\d$/.test(evalText) && Math.abs(evalNum) < 1, 'start position evaluated near equal: ' + evalText);
   const firstMoves = await page.$$eval('#engine-lines .engine-line .engine-move:first-child', (els) => els.map((e) => e.textContent));
   check(firstMoves.every((m) => /^1\./.test(m)), 'lines numbered from move 1: ' + firstMoves);
   const shapes = await engineShapes(page);

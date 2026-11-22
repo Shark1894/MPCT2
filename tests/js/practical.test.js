@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  DEFAULTS, addDecision, lineLinks, level, stillSharp, worthFollowing, breakEven, breakEvenText, candidateMoves, decision, lineValue, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
+  DEFAULTS, addDecision, checkMoves, lineLinks, level, stillSharp, worthFollowing, breakEven, breakEvenText, candidateMoves, decision, lineValue, evalChange, evalText, finalCandidate, finish, movetext, pct, scoreCandidate, signed, winPct, worthALook,
 } from '../../web/js/practical-core.js';
 
 const near = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
@@ -236,4 +236,53 @@ test('suggestions in the same line: earlier, later, the same position', () => {
   assert.deepEqual(l[1], { earlier: [0, 3], later: [], same: [] });
   assert.deepEqual(l[2], { earlier: [], later: [], same: [] }); // another line
   assert.deepEqual(l[4], { earlier: [0, 3], later: [], same: [] }); // a different branch from 1
+});
+
+test('checkMoves: your move against the engine’s best', () => {
+  // White to move; lines as the engine gives them (White-POV)
+  const lines = [
+    { uci: 'e2e4', score: { cp: 40 }, pv: ['e2e4', 'e7e5'] },
+    { uci: 'd2d4', score: { cp: 30 }, pv: ['d2d4'] },
+    { uci: 'g1f3', score: { cp: -60 }, pv: ['g1f3'] },
+  ];
+  const [best] = checkMoves(lines, ['e2e4'], 'white');
+  assert.equal(best.rank, 1);
+  assert.equal(best.cost, 0);
+  assert.equal(best.flagged, false);
+  assert.equal(best.best.uci, 'e2e4');
+
+  const [close] = checkMoves(lines, ['d2d4'], 'white');
+  assert.equal(close.rank, 2);
+  assert.ok(close.cost > 0 && close.cost < 2, `10cp near equality is about 1 point (${close.cost})`);
+  assert.equal(close.flagged, false);
+
+  const [poor] = checkMoves(lines, ['g1f3'], 'white', {}, 5);
+  assert.equal(poor.rank, 3);
+  assert.ok(poor.cost > 5, `a pawn worse is flagged at 5 (${poor.cost})`);
+  assert.equal(poor.flagged, true);
+  assert.equal(checkMoves(lines, ['g1f3'], 'white', {}, 15)[0].flagged, false, 'not at 15');
+});
+
+test('checkMoves: as Black, outside the top lines, and edge cases', () => {
+  const lines = [
+    { uci: 'd7d5', score: { cp: 20 } }, // fine for Black: White only slightly better
+    { uci: 'e7e5', score: { cp: 35 } },
+  ];
+  const [m] = checkMoves(lines, ['e7e5'], 'black');
+  assert.equal(m.rank, 2);
+  assert.equal(m.best.uci, 'd7d5', 'the best for Black is the lowest White score');
+  // your move isn't among the lines: scored from `extra`
+  const [out] = checkMoves(lines, ['g7g5'], 'black', { g7g5: { cp: 250 } });
+  assert.equal(out.rank, null);
+  assert.equal(out.flagged, true);
+  // a separate search a hair better than the best never makes a negative cost
+  assert.equal(checkMoves(lines, ['a7a6'], 'black', { a7a6: { cp: 10 } })[0].cost, 0);
+  // unscored moves are skipped; no lines, nothing to compare with
+  assert.deepEqual(checkMoves(lines, ['h7h5'], 'black'), []);
+  assert.deepEqual(checkMoves([], ['e7e5'], 'black'), []);
+  // two repertoire moves in one position (transposition): one entry each
+  assert.equal(checkMoves(lines, ['d7d5', 'e7e5'], 'black').length, 2);
+  // mates
+  const mate = checkMoves([{ uci: 'd8h4', score: { mate: -1 } }, { uci: 'a7a6', score: { cp: 0 } }], ['a7a6'], 'black');
+  assert.equal(mate[0].cost, 50);
 });

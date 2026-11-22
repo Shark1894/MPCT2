@@ -88,7 +88,7 @@ async function api(page, method, path, body) {
   check((await page.inputValue('#pr-decisions')) === '3', 'follows 3 of their decisions by default');
   const yours = firstRows.find((r) => r[0].includes('yours'));
   check(yours && yours[0].startsWith('Bxe2'), 'your repertoire move is marked');
-  const evalRe = /^([+−]\d+\.\d\d|0\.00|#.*)$/;
+  const evalRe = /^([+−]\d+\.\d|0\.0|#.*)$/;
   check(firstRows.every((r) => evalRe.test(r[1]) && /%/.test(r[2]) && /^\d+$/.test(r[3]) && /^(\d+(recapture)?|–)$/.test(r[7])), `eval, engine, cost and sharpness (${firstRows[0].slice(1, 8).join(' ')})`);
   const chainRe = /^((\d+|r)( → (\d+|r)){0,2}( → …)?|–)$/;
   check(firstRows.every((r) => chainRe.test(r[4]) && /^(\d|–)$/.test(r[5])), `good replies decision by decision, and in a row (${firstRows.map((r) => `${r[4]}/${r[5]}`).join('  ')})`);
@@ -240,6 +240,69 @@ async function api(page, method, path, body) {
   check(!(await page.isHidden('main.layout')), 'Show on board opens the Board tab');
   const sans = await page.evaluate(() => mpct.game.moves.map((m) => m.san).join(' '));
   check(sans === 'e4 d5 exd5 Nf6 d4 Bg4 Be2', `the position's moves (${sans})`);
+
+  // ---- check my moves ----------------------------------------------------------------------------------
+  // A blunder in the lines (5...Ne4?? hangs the knight to Qxe2-e4), beside 5...Qxd5 in the same position.
+  await api(page, 'POST', `/openings/${o.id}/lines`, { moves: [...WUSS, 'd1e2', 'f6e4'] });
+  await page.click('#view-practical');
+  await settle(page, 600);
+  await page.selectOption('#pr-mode', 'check');
+  check(await page.isHidden('#pr-cap') && await page.isHidden('#pr-decisions') && await page.isVisible('#pr-limit'), 'check mode: its own setting instead of the sharpness ones');
+  check((await page.inputValue('#pr-limit')) === '5', 'flags more than 5 points by default');
+  check(await page.isHidden('#pr-worth') && (await page.$$('.pr-pos')).length === 0, 'the sharpness results are put away');
+  check(/isn’t the engine’s choice/.test(await page.textContent('.pr-lead')), 'the lead explains the mode');
+  await page.click('#pr-go');
+  await page.waitForFunction(() => /^(Done|Stopped).*flagged/.test(document.querySelector('#pr-progress').textContent) && document.querySelector('#pr-go').textContent === 'Analyse', null, { timeout: 240000 });
+  const cProgress = await page.textContent('#pr-progress');
+  check(/^Done: 5 positions of 5 .* \d+ flagged/.test(cProgress), `checked every position once (${cProgress})`);
+  const cHeads = await page.$$eval('#pr-check-table thead th', (ths) => ths.map((t) => t.textContent.replace(/[↕▼▲]/g, '').trim()));
+  check(cHeads.join('|') === 'After|Yours|Engine’s best|Cost|Your eval|Best eval|Depth|Seen', `columns (${cHeads.join('|')})`);
+  const cRows = () => page.$$eval('#pr-check-table tbody tr', (trs) => trs.map((tr) => ({ cls: tr.className, cells: [...tr.children].map((td) => td.textContent) })));
+  let crows = await cRows();
+  console.log('  checked:', crows.map((r) => `${r.cells[0]} ${r.cells[1]} / ${r.cells[2]} ${r.cells[3]}`).join(' | '));
+  check(crows.length === 6, `a row per repertoire move: two in the position with Qxd5 and Ne4 (${crows.length})`);
+  const ne4 = crows.find((r) => r.cells[1].startsWith('Ne4'));
+  check(ne4 && ne4.cls.includes('pr-flag') && Number(ne4.cells[3]) > 15, `the blunder is highlighted (${ne4?.cells.join(' / ')})`);
+  check(crows.every((r) => r.cls.includes('pr-flag') === Number(r.cells[3]) > 5 || Math.abs(Number(r.cells[3]) - 5) < 1), 'highlighted exactly when it costs more than 5');
+  check(crows.every((r) => /(best|2nd|3rd|not top 3)$/.test(r.cells[1])), 'where the engine ranks your move');
+  check(crows.every((r) => r.cells[1].endsWith('best') === (r.cells[2] === 'same')), '“same” when yours is the engine’s best');
+  check(crows.every((r) => evalRe.test(r.cells[4]) && evalRe.test(r.cells[5])), `evals to one decimal (${crows[0].cells[4]} ${crows[0].cells[5]})`);
+  const cCosts = crows.map((r) => Number(r.cells[3]));
+  check(cCosts.every((c, i) => i === 0 || c <= cCosts[i - 1]), `costliest first (${cCosts.join(' ')})`);
+  check(/give away more than 5 points/.test(await page.textContent('#pr-check-sum')), `summary line (${await page.textContent('#pr-check-sum')})`);
+  const nFlagged = crows.filter((r) => r.cls.includes('pr-flag')).length;
+  await page.check('#pr-only-flagged');
+  check((await cRows()).length === nFlagged, `only the flagged ones (${nFlagged})`);
+  await page.uncheck('#pr-only-flagged');
+  await page.click('#pr-check-table .pr-sort[data-sort="line"]');
+  const cByLine = await page.$$eval('#pr-check-table tbody tr', (trs) => trs.map((tr) => tr.children[0].title.replace(/ …$/, '')));
+  check(cByLine.every((t, i) => i === 0 || t.startsWith(cByLine[i - 1]) || t >= cByLine[i - 1]), `sort by After groups each line, earlier first (${cByLine.join(' | ')})`);
+  await page.click('#pr-check-table .pr-sort[data-sort="cost"]');
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/practical-check.png`, fullPage: true });
+  // the engine's move on the board, then ticked as seen
+  const bestTitle = await page.getAttribute('#pr-check-table tbody tr.pr-flag .pr-move-btn >> nth=1', 'title');
+  await page.click('#pr-check-table tbody tr.pr-flag .pr-move-btn >> nth=1');
+  await settle(page, 800);
+  const cLine = await page.evaluate(() => mpct.game.moves.map((m) => m.san));
+  check(cLine.slice(0, 8).join(' ') === 'e4 d5 exd5 Nf6 d4 Bg4 Be2 Bxe2' && cLine.length > 10, `the engine’s line on the board (${cLine.slice(8).join(' ')}; ${bestTitle})`);
+  await page.click('#view-practical');
+  await settle(page, 600);
+  check((await page.$$('#pr-check-table tbody tr.seen')).length === 1, 'and ticked as seen');
+  await page.click('#pr-check-table tbody tr.seen .pr-seen');
+  await settle(page, 400);
+  check((await page.$$('#pr-check-table tbody tr.seen')).length === 0, 'untick');
+  await page.evaluate(() => (document.querySelector('#pr-progress').textContent = ''));
+  await page.click('#pr-go');
+  await page.waitForFunction(() => document.querySelector('#pr-go').textContent === 'Analyse' && /^Done.*flagged/.test(document.querySelector('#pr-progress').textContent), null, { timeout: 60000 });
+  check(/engine: 0 new/.test(await page.textContent('#pr-progress')), `a second check from saved lines (${await page.textContent('#pr-progress')})`);
+  if (SHOTS) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await settle(page, 300);
+    await page.screenshot({ path: `${SHOTS}/practical-check-mobile.png`, fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+  await page.selectOption('#pr-mode', 'sharp');
+  check(await page.isHidden('#pr-check') && await page.isVisible('#pr-decisions') && await page.isHidden('#pr-limit'), 'back to sharp alternatives');
 
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();
