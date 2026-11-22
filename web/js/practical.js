@@ -82,7 +82,7 @@ function chainCell(c, onShow) {
 
 /** How the eval moves against your own move, White's view as written, coloured by who it helps. */
 function evalChangeCell(d) {
-  const td = el('td', 'num pr-diff', d === null ? '–' : d.cp === 0 ? '0.00' : evalText({ cp: d.cp }));
+  const td = el('td', 'num pr-diff', d === null ? '–' : d.cp === 0 ? '0.0' : evalText({ cp: d.cp }));
   if (d !== null) td.classList.add(d.better ? 'up' : d.worse ? 'down' : 'same');
   td.title = 'Eval of this move minus your move’s (pawns, White’s view): green when it’s better for you, red when worse';
   return td;

@@ -30,9 +30,11 @@ test('parseInfo ignores lines without pv/score and flags bounds', () => {
 });
 
 test('formatScore', () => {
-  assert.equal(formatScore({ cp: 35 }), '+0.35');
-  assert.equal(formatScore({ cp: -120 }), '-1.20');
-  assert.equal(formatScore({ cp: 0 }), '0.00');
+  assert.equal(formatScore({ cp: 35 }), '+0.4');
+  assert.equal(formatScore({ cp: -120 }), '-1.2');
+  assert.equal(formatScore({ cp: 0 }), '0.0');
+  assert.equal(formatScore({ cp: -4 }), '0.0');
+  assert.equal(formatScore({ cp: 249 }), '+2.5');
   assert.equal(formatScore({ mate: 3 }), '#3');
   assert.equal(formatScore({ mate: -2 }), '#-2');
 });

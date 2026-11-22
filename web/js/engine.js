@@ -42,12 +42,12 @@ export function parseInfo(line, whiteToMove) {
   return out;
 }
 
-/** "+0.35", "-1.20", "#3" (White mates in 3), "#-2" (Black mates in 2). */
+/** "+0.4", "-1.2", "0.0", "#3" (White mates in 3), "#-2" (Black mates in 2). One decimal place. */
 export function formatScore(score) {
   if (!score) return '';
   if (score.mate !== undefined) return score.mate === 0 ? '#' : `#${score.mate}`;
-  const pawns = score.cp / 100;
-  return `${pawns > 0 ? '+' : ''}${pawns.toFixed(2)}`;
+  const tenths = Math.round(score.cp / 10); // sign from the rounded value, so -4cp is "0.0", not "-0.0"
+  return `${tenths > 0 ? '+' : tenths < 0 ? '-' : ''}${(Math.abs(tenths) / 10).toFixed(1)}`;
 }
 
 /** Share of the eval bar that is White's, 0..100. */

@@ -293,12 +293,12 @@ export function breakEvenText(p) {
   return `${Math.max(1, Math.round(p * 100))}%`;
 }
 
-/** An eval as players write it, White's view: "+0.35", "−1.20", "#3", "#−2" ("–" when unknown). */
+/** An eval as players write it, White's view, one decimal place: "+0.4", "−1.2", "0.0", "#3", "#−2" ("–" when unknown). */
 export function evalText(score) {
   if (!score) return '–';
   if (score.mate != null) return score.mate === 0 ? '#' : `#${score.mate < 0 ? '−' : ''}${Math.abs(score.mate)}`;
-  const p = score.cp / 100;
-  return `${p > 0 ? '+' : p < 0 ? '−' : ''}${Math.abs(p).toFixed(2)}`;
+  const tenths = Math.round(score.cp / 10); // sign from the rounded value, so −4cp is "0.0", not "−0.0"
+  return `${tenths > 0 ? '+' : tenths < 0 ? '−' : ''}${(Math.abs(tenths) / 10).toFixed(1)}`;
 }
 
 /** "1.e4 d5 2.exd5" from SAN moves (from the start). */

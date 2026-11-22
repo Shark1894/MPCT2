@@ -86,7 +86,7 @@ test('the change in eval against your move, and who it helps', () => {
   // You're Black: yours leaves −0.50, the suggestion 0.00 after their best reply: half a pawn worse for you.
   const worse = evalChange({ score: { cp: 0 } }, { score: { cp: -50 } }, 'black');
   assert.deepEqual(worse, { cp: 50, better: false, worse: true });
-  assert.equal(evalText({ cp: worse.cp }), '+0.50');
+  assert.equal(evalText({ cp: worse.cp }), '+0.5');
   assert.deepEqual(evalChange({ score: { cp: -80, mate: null } }, { score: { cp: -50 } }, 'black'), { cp: -30, better: true, worse: false });
   assert.deepEqual(evalChange({ score: { cp: 20 } }, { score: { cp: 20 } }, 'white'), { cp: 0, better: false, worse: false });
   assert.equal(evalChange({ score: { mate: 3 } }, { score: { cp: 0 } }, 'white'), null);
@@ -166,9 +166,10 @@ test('break-even over several decisions', () => {
 });
 
 test('text helpers', () => {
-  assert.equal(evalText({ cp: 35 }), '+0.35');
-  assert.equal(evalText({ cp: -120, mate: null }), '−1.20');
-  assert.equal(evalText({ cp: 0 }), '0.00');
+  assert.equal(evalText({ cp: 35 }), '+0.4');
+  assert.equal(evalText({ cp: -120, mate: null }), '−1.2');
+  assert.equal(evalText({ cp: 0 }), '0.0');
+  assert.equal(evalText({ cp: -4 }), '0.0');
   assert.equal(evalText({ mate: 3 }), '#3');
   assert.equal(evalText({ mate: -2 }), '#−2');
   assert.equal(evalText(null), '–');
