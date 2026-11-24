@@ -337,13 +337,8 @@ body.engine-on {
 
 .nav {
   display: grid;
-  grid-template-columns: repeat(4, 1fr) auto;
+  grid-template-columns: repeat(4, 1fr);
   gap: 6px;
-}
-
-.nav .nav-pass {
-  padding: 6px 12px;
-  font-weight: 600;
 }
 
 .nav button {
@@ -502,7 +497,7 @@ body.engine-on {
 }
 
 .tool-buttons {
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
 }
 
 #btn-sound[aria-pressed='false'] {

@@ -58,7 +58,7 @@ The full plan, decisions and data model are in the project's
 - Navigate with the buttons, the move list, or keys: **←/→** step, **↑** end, **↓** start, **Home/End**, **F** flips.
   The mouse wheel over the board also steps through moves.
 - Stepping back and playing a different move replaces the moves after it; replaying the same move keeps them.
-- **Pass** (beside the move buttons) skips the side to move, so the other side moves again: turn the engine on to see
+- **Pass move** (with New board / Flip board under the board) skips the side to move, so the other side moves again: turn the engine on to see
   what they'd play here, i.e. what they're threatening. The pass shows as **--** in the move list and you can play on
   after it. It can't happen in a real game, so while the moves up to the board position include a pass nothing can be
   saved from them: no Add line, branch tag, position note, engine review, saving to Games, or playing the engine from
