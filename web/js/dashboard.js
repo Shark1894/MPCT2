@@ -10,6 +10,7 @@ import {
   renderActivity,
   renderForecast,
   renderOverview,
+  renderStreaks,
   viewLines,
   weakestLines,
 } from './insights.js';
@@ -56,6 +57,7 @@ export class DashboardView {
       menu: $('dash-menu'),
       trainWeak: $('dash-train-weak'),
       mastery: $('dash-mastery'),
+      streaks: $('dash-streaks'),
       fcChart: $('fc-chart'),
       fcNote: $('fc-note'),
       ovList: $('ov-list'),
@@ -215,6 +217,7 @@ export class DashboardView {
     for (const v of Object.values(this.el.stats)) v.textContent = '—';
     this.el.trainWeak.disabled = true;
     this.el.mastery.innerHTML = '';
+    this.el.streaks.innerHTML = '';
     this.el.fcChart.innerHTML = '';
     this.el.fcNote.textContent = '';
     this.el.showing.textContent = '';
@@ -242,6 +245,7 @@ export class DashboardView {
     e.trainWeak.disabled = weak.length === 0;
     e.mastery.innerHTML = '';
     e.mastery.appendChild(masteryBar(stats.mastery));
+    renderStreaks(e.streaks, lines, (rows, label) => this.onTrain(this._opening(), 'all', rows.map((l) => l.id), null, label));
     renderForecast(e.fcChart, e.fcNote, this.data.forecast);
     this._renderOverview();
     this._renderLines();

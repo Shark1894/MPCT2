@@ -2444,6 +2444,56 @@ button.star[aria-pressed='true'] {
   margin: 10px 0 0;
 }
 
+/* lines by streak */
+.sb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sb-row {
+  display: grid;
+  grid-template-columns: 7.5em 1fr 2em auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.sb-label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  font-size: 13px;
+}
+
+.sb-gap {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.sb-track {
+  height: 14px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.sb-bar {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+
+.sb-count {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.sb-row.zero .sb-count,
+.sb-row.zero .sb-name {
+  color: var(--text-dim);
+}
+
 /* activity heatmap */
 .act-scroll {
   overflow-x: auto;

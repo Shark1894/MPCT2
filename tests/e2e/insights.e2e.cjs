@@ -86,6 +86,8 @@ async function seed(page) {
   await settle(page, 200);
   check((await text(page, '#dash-mastery .mastery-text')) === '1 mastered · 1 known · 2 learning', 'progress: ' + (await text(page, '#dash-mastery .mastery-text')));
   check((await page.$$('#dash-mastery .seg')).length === 3, 'three stage segments');
+  const streakRows = await page.$$eval('#dash-streaks .sb-row', (rs) => rs.map((r) => `${r.dataset.key}:${r.querySelector('.sb-count').textContent}`).join(' '));
+  check(streakRows === 'new:0 0:2 1:0 2:1 3:0 4:0 5:1 6:0', 'lines by streak: ' + streakRows);
   await page.hover('#dash-mastery .seg.m-mastered');
   await settle(page, 200);
   check((await text(page, '.tip')) === 'Mastered: 1 line (25%)' && (await page.isVisible('.tip')), 'hover tooltip on a segment');

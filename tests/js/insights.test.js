@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatMoves, weakness, viewLines, weakestLines, activityLevel, activityWeeks } from '../../web/js/insights.js';
+import { formatMoves, weakness, viewLines, weakestLines, activityLevel, activityWeeks, streakBreakdown } from '../../web/js/insights.js';
 
 const iso = (offset) => {
   const d = new Date();
@@ -76,4 +76,25 @@ test('activity levels and week layout from Monday', () => {
   assert.equal(weeks.length, 2);
   assert.deepEqual(weeks[0].map((d) => d?.date ?? null), [null, null, '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01']);
   assert.deepEqual(weeks[1].map((d) => d?.date ?? null), ['2026-11-02', null, null, null, null, null, null]);
+});
+
+test('streakBreakdown: new row, one row per streak, 6+ lumped together', () => {
+  const lines = [
+    line(1, [], { reviews: 0 }),
+    line(2, [], { recent: [true, false], streak: 0 }),
+    line(3, [], { recent: [true], streak: 1 }),
+    line(4, [], { recent: [true], streak: 1 }),
+    line(5, [], { recent: [true], streak: 3 }),
+    line(6, [], { recent: [true], streak: 6 }),
+    line(7, [], { recent: [true], streak: 9 }),
+  ];
+  const rows = streakBreakdown(lines);
+  assert.deepEqual(rows.map((r) => r.key), ['new', '0', '1', '2', '3', '4', '5', '6']);
+  assert.deepEqual(rows.map((r) => r.lines.map((l) => l.id)), [[1], [2], [3, 4], [], [5], [], [], [6, 7]]);
+  assert.deepEqual(rows.map((r) => r.stage), ['new', 'learning', 'learning', 'known', 'known', 'known', 'mastered', 'mastered']);
+  assert.equal(rows[2].gap, 'next in 1 day');
+  assert.equal(rows[4].gap, 'next in 7 days');
+  assert.equal(rows[7].gap, 'every 60 days');
+  assert.equal(rows[1].gap, 'last had a mistake');
+  assert.equal(rows[7].label, '6+× correct');
 });

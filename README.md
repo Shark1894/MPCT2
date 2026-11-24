@@ -313,7 +313,9 @@ between them):
   and **Delete**. On phones lines are cards. When Show or the search narrows the list, **Train shown (n)** trains
   exactly those lines in that order (**Train bookmarked (n)** with the Bookmarked filter).
 - **Progress**: **learning progress**, lines by stage. New (never reviewed), learning (streak 0–1), known (2–4,
-  comments hidden in training), mastered (5+, next review a month or more away). **Due over the next 2 weeks**:
+  comments hidden in training), mastered (5+, next review a month or more away). **Lines by streak**: how many
+  lines sit at each number of correct reviews in a row (new, 0×, 1× … 5×, 6+×), with when each row is next due
+  and a **Train** button for that row's lines. **Due over the next 2 weeks**:
   lines due each day (overdue lines count as today), plus how many are due later.
 - **Gaps**: the repertoire gap finder (see below).
 

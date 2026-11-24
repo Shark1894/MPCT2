@@ -11,6 +11,8 @@ export const STAGES = [
   ['new', 'New'],
 ];
 export const WEAKEST_LIMIT = 15;
+// Days until the next review after N correct in a row (mirrors app/core/scheduling.py).
+export const INTERVALS = [0, 1, 3, 7, 14, 30, 60];
 
 // ---- pure helpers -------------------------------------------------------------
 
@@ -67,6 +69,33 @@ export function viewLines(lines, { sort = 'due', filter = 'all', search = '' } =
 /** The lines Train weakest uses: any mistake in the last 5 reviews, weakest first. */
 export function weakestLines(lines, limit = WEAKEST_LIMIT) {
   return lines.filter((l) => weakness(l) > 0).sort(SORTS.weak).slice(0, limit);
+}
+
+/**
+ * Lines grouped by how many times in a row they've been right: a 'new' row (never
+ * reviewed), then one row per streak 0..5 and a last '6+' row (the gap stops growing
+ * there). Each row: { key, streak, label, gap, stage, lines }.
+ */
+export function streakBreakdown(lines) {
+  const top = INTERVALS.length - 1;
+  const stageOf = (n) => (n >= 5 ? 'mastered' : n >= 2 ? 'known' : 'learning');
+  const gapText = (days) => `next in ${plural(days, 'day')}`;
+  const rows = [{ key: 'new', streak: null, label: 'New', gap: 'never reviewed', stage: 'new', lines: [] }];
+  for (let n = 0; n <= top; n++) {
+    rows.push({
+      key: String(n),
+      streak: n,
+      label: n === top ? `${n}+× correct` : `${n}× correct`,
+      gap: n === 0 ? 'last had a mistake' : n === top ? `every ${INTERVALS[n]} days` : gapText(INTERVALS[n]),
+      stage: stageOf(n),
+      lines: [],
+    });
+  }
+  for (const l of lines) {
+    const row = l.reviews === 0 ? rows[0] : rows[1 + Math.min(Math.max(l.streak, 0), top)];
+    row.lines.push(l);
+  }
+  return rows;
 }
 
 /** Heatmap shade 0-4 for a number of reviews. */
@@ -166,6 +195,34 @@ export function masteryBar(m, { compact = false } = {}) {
   wrap.setAttribute('aria-label', total ? `Learning progress: ${text}` : 'No lines');
   if (!compact) wrap.appendChild(el('p', 'mastery-text', total ? text : 'No lines yet'));
   return wrap;
+}
+
+/** Horizontal bar per streak count; `onTrain(lines, label)` trains one row's lines. */
+export function renderStreaks(box, lines, onTrain) {
+  box.innerHTML = '';
+  const rows = streakBreakdown(lines);
+  const max = Math.max(1, ...rows.map((r) => r.lines.length));
+  for (const r of rows) {
+    const n = r.lines.length;
+    const row = el('div', n ? 'sb-row' : 'sb-row zero');
+    row.dataset.key = r.key;
+    const name = el('div', 'sb-label');
+    name.append(el('span', 'sb-name', r.label), el('span', 'sb-gap', r.gap));
+    const track = el('div', 'sb-track');
+    const bar = el('span', `sb-bar m-${r.stage}`);
+    bar.style.width = n ? `max(4px, ${(n / max) * 100}%)` : '0';
+    track.appendChild(bar);
+    const count = el('div', 'sb-count', String(n));
+    count.setAttribute('aria-label', plural(n, 'line'));
+    const train = el('button', 'small sb-train', 'Train');
+    train.type = 'button';
+    train.disabled = !n;
+    const what = r.key === 'new' ? 'new lines' : `lines at ${r.label}`;
+    train.title = `Train the ${plural(n, 'line')} here`;
+    train.addEventListener('click', () => onTrain(r.lines, what));
+    row.append(name, track, count, train);
+    box.appendChild(row);
+  }
 }
 
 /** Vertical bars: lines due per day; today includes overdue lines. */
