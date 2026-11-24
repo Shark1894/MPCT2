@@ -1,7 +1,7 @@
 // Page wiring: connects Game (rules/state), BoardView (chessground), the side
 // panels and the repertoire panel.
 
-import { Game, START_FEN } from './game.js';
+import { Game, START_FEN, PASS_NO_SAVE } from './game.js';
 import { BoardView } from './board.js';
 import { renderMoveList } from './movelist.js';
 import { RepertoirePanel } from './repertoire.js';
@@ -525,6 +525,7 @@ const ui = {
     back: $('nav-back'),
     forward: $('nav-forward'),
     end: $('nav-end'),
+    pass: $('nav-pass'),
   },
 };
 
@@ -543,7 +544,9 @@ function render() {
     canMove: trainer.active ? trainer.canMove() : drill.active ? drill.canMove() : puzzles.locked ? puzzles.canMove() : courseTrainer.locked ? courseTrainer.canMove() : endgameTrainer.locked ? endgameTrainer.canMove() : play?.active ? play.canMove() : true,
   });
   const status = game.status();
-  ui.status.textContent = status.text;
+  const passed = game.hasPass(game.ply);
+  ui.status.textContent = passed ? `${status.text} · after a pass: analysis only` : status.text;
+  ui.status.title = passed ? PASS_NO_SAVE : '';
   ui.status.classList.toggle('over', status.over);
   review?.update();
   // Hidden when something else already shows the evaluation (review panel, live engine) or it would give answers away.
@@ -567,6 +570,7 @@ function render() {
   ui.nav.back.disabled = atStart;
   ui.nav.forward.disabled = atEnd;
   ui.nav.end.disabled = atEnd;
+  ui.nav.pass.disabled = locked() || Boolean(play?.active) || !game.canPass();
 
   saveGame();
   gamePanel?.updateState();
@@ -590,7 +594,7 @@ function restoreGame() {
   try {
     game.load(saved.startFen);
     for (const uci of saved.moves) {
-      if (!game.play(uci.slice(0, 2), uci.slice(2, 4), uci[4])) break;
+      if (!game.playUci(uci)) break; // passes ('--') included
     }
     game.goTo(saved.ply);
   } catch {
@@ -641,6 +645,11 @@ ui.nav.start.addEventListener('click', () => step(() => game.toStart()));
 ui.nav.back.addEventListener('click', () => step(() => game.back()));
 ui.nav.forward.addEventListener('click', () => step(() => game.forward()));
 ui.nav.end.addEventListener('click', () => step(() => game.toEnd()));
+// Pass: the other side moves again, to see what they'd play in this position. Analysis only.
+ui.nav.pass.addEventListener('click', () => {
+  if (play.active) return;
+  step(() => game.pass());
+});
 
 // Same keys as the desktop app: Left/Right step, Up = end, Down = start.
 document.addEventListener('keydown', (e) => {

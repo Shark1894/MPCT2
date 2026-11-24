@@ -159,6 +159,10 @@ export class PlayController {
       submit: 'Play',
     });
     if (!values) return;
+    if (hasPosition && values.from === 'board' && g.hasPass(g.ply)) {
+      toast('The moves on the board include a passed move (--), so a game can’t start from here. Step back to before the pass, or start from the starting position.', 'error');
+      return;
+    }
     if (!(await this.beforeStart())) return;
     this.settings = { ...this.settings, ...values, level: Number(values.level), from: values.from ?? 'start' };
     store.set('playSettings', this.settings);

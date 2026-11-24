@@ -337,8 +337,13 @@ body.engine-on {
 
 .nav {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, 1fr) auto;
   gap: 6px;
+}
+
+.nav .nav-pass {
+  padding: 6px 12px;
+  font-weight: 600;
 }
 
 .nav button {
@@ -1574,6 +1579,12 @@ button.move:hover {
 
 .move-blank {
   color: var(--text-dim);
+}
+
+/* A passed move: not a real move, so it reads as a gap in the line. */
+.move.pass {
+  color: var(--text-dim);
+  font-style: italic;
 }
 
 /* On desktop the move list fills the column height left over beside the board. */

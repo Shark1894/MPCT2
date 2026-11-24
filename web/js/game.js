@@ -9,6 +9,12 @@ import { Chess, DEFAULT_POSITION, validateFen } from '../vendor/chess.js/chess.j
 
 export const START_FEN = DEFAULT_POSITION;
 
+/** A passed move (null move): the side to move skips its turn. SAN and UCI are both '--'. */
+export const PASS = '--';
+
+/** Shown when something would save a line that contains a pass. */
+export const PASS_NO_SAVE = 'This line has a passed move (--), which can’t happen in a real game, so it can’t be saved. Step back to before the pass to save.';
+
 export class Game {
   constructor(fen = START_FEN) {
     this.load(fen);
@@ -47,7 +53,7 @@ export class Game {
   /** [from, to] of the move that led to the shown position, or undefined at the start. */
   lastMove() {
     const m = this.moves[this.ply - 1];
-    return m ? [m.from, m.to] : undefined;
+    return m && m.from ? [m.from, m.to] : undefined; // a pass moves nothing
   }
 
   /** Legal moves in the current position (chess.js verbose moves, plus uci). */
@@ -119,6 +125,38 @@ export class Game {
     return this.moves[this.ply - 1];
   }
 
+  /** Passing is allowed unless the side to move is in check or the game is over. */
+  canPass() {
+    return !this._chess.isCheck() && !this._chess.isGameOver();
+  }
+
+  /**
+   * Pass: hand the move to the other side without moving (to see what they'd play here).
+   * Same branching as play(). Returns the record, or null if passing isn't allowed.
+   */
+  pass() {
+    if (!this.canPass()) return null;
+    this._chess.move(null);
+    const record = { san: PASS, uci: PASS, from: null, to: null, promotion: undefined, fen: this._chess.fen() };
+    const next = this.moves[this.ply];
+    if (!(next && next.uci === PASS)) {
+      this.moves.length = this.ply;
+      this.moves.push(record);
+    }
+    this.ply += 1;
+    return this.moves[this.ply - 1];
+  }
+
+  /** Play a move given in UCI ('e2e4', 'e7e8q') or a pass ('--'). Returns the record or null. */
+  playUci(uci) {
+    return uci === PASS ? this.pass() : this.play(uci.slice(0, 2), uci.slice(2, 4), uci[4]);
+  }
+
+  /** True if any of the first `ply` moves (default: all of them) is a pass. */
+  hasPass(ply = this.moves.length) {
+    return this.moves.slice(0, ply).some((m) => m.uci === PASS);
+  }
+
   /** Play a move given in SAN (e.g. 'Nf3'). Returns the record or null if illegal. */
   playSan(san) {
     const legal = this._chess.moves({ verbose: true }).find((m) => m.san === san);
@@ -136,7 +174,7 @@ export class Game {
     const target = Math.max(0, Math.min(ply, this.moves.length));
     // Rebuild from the start so chess.js keeps the history it needs for repetition draws.
     const chess = new Chess(this.startFen);
-    for (const m of this.moves.slice(0, target)) chess.move({ from: m.from, to: m.to, promotion: m.promotion });
+    for (const m of this.moves.slice(0, target)) chess.move(m.uci === PASS ? null : { from: m.from, to: m.to, promotion: m.promotion });
     this._chess = chess;
     this.ply = target;
   }
@@ -161,7 +199,7 @@ export class Game {
 
   /**
    * Moves grouped into numbered rows for display:
-   * [{ number, white: {ply, san} | null, black: {ply, san} | null }]
+   * [{ number, white: {ply, san, pass?} | null, black: {ply, san, pass?} | null }] (pass: true on a passed move)
    * `ply` is the cursor value that shows the position after that move.
    */
   moveRows() {
@@ -172,7 +210,7 @@ export class Game {
     let colour = side === 'b' ? 'black' : 'white';
     this.moves.forEach((m, i) => {
       if (!row) row = { number, white: null, black: null };
-      row[colour] = { ply: i + 1, san: m.san };
+      row[colour] = m.uci === PASS ? { ply: i + 1, san: m.san, pass: true } : { ply: i + 1, san: m.san };
       if (colour === 'black') {
         rows.push(row);
         row = null;

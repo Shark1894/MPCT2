@@ -3,7 +3,7 @@
 // of where the game left your repertoire).
 
 import { api } from './api.js';
-import { START_FEN } from './game.js';
+import { PASS_NO_SAVE, START_FEN } from './game.js';
 import { BATCH_MS, GameReviewer } from './gamereview.js';
 import { describeDuration } from './review-core.js';
 import { confirmDialog, formDialog, plural, store, toast } from './ui.js';
@@ -428,6 +428,10 @@ export class GamePanel {
 
   async save() {
     if (!this.isOpen) return;
+    if (this.game.hasPass()) {
+      toast(PASS_NO_SAVE, 'error');
+      return;
+    }
     const body = { ...this._meta(), start_fen: this.game.startFen, moves: this.game.moves.map((m) => m.uci) };
     try {
       const saved = await api.updateGame(this.current.id, body);
@@ -452,6 +456,10 @@ export class GamePanel {
     }
     if (this.game.startFen !== START_FEN) {
       box.textContent = 'This game starts from a set-up position, so it can’t be compared with a repertoire.';
+      return;
+    }
+    if (this.game.hasPass()) {
+      box.textContent = 'These moves include a passed move (--), so they can’t be compared with a repertoire.';
       return;
     }
     let res;
@@ -789,6 +797,10 @@ export class GamesView {
     const values = await formDialog({ title: 'New game', fields, submit: 'Create' });
     if (!values) return;
     const useBoard = values.moves_from === 'board';
+    if (useBoard && this.game.hasPass()) {
+      toast(PASS_NO_SAVE, 'error');
+      return;
+    }
     const body = {
       ...Object.fromEntries(META.map((f) => [f, values[f]])),
       played_on: values.played_on || null,

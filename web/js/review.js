@@ -101,6 +101,10 @@ export class ReviewController {
       toast('Play or open some moves first: the review covers the moves up to the board position.');
       return;
     }
+    if (g.hasPass(ply)) {
+      toast('These moves include a passed move (--), so they can’t be reviewed or saved. Turn on the engine to analyse the position instead.', 'error');
+      return;
+    }
     const moves = g.moves.slice(0, ply).map((m) => ({ san: m.san, uci: m.uci }));
     const positions = reviewPositions(g.startFen, g.moves, ply);
     const terminals = positions.map((fen) => terminalEval(fen));

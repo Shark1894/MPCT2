@@ -30,6 +30,10 @@ export function renderMoveList(container, game, onSelect, annotations = new Map(
         el.type = 'button';
         el.textContent = cell.san;
         el.dataset.ply = cell.ply;
+        if (cell.pass) {
+          el.classList.add('pass');
+          el.title = 'Passed move: the other side moved again (analysis only)';
+        }
         const note = annotations.get(cell.ply); // engine review marks
         if (note) {
           if (note.symbol) {

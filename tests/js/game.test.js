@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Game, START_FEN } from '../../web/js/game.js';
+import { Game, START_FEN, PASS } from '../../web/js/game.js';
 
 const playUci = (game, ...ucis) => {
   for (const u of ucis) {
@@ -147,4 +147,57 @@ test('playSan', () => {
   const g = new Game();
   assert.equal(g.playSan('Nf3').uci, 'g1f3');
   assert.equal(g.playSan('Qh5'), null);
+});
+
+test('passing hands the move to the other side without moving', () => {
+  const g = new Game();
+  playUci(g, 'e2e4');
+  const r = g.pass();
+  assert.equal(r.san, PASS);
+  assert.equal(r.uci, PASS);
+  assert.equal(g.turn(), 'white');
+  assert.equal(g.fen().split(' ')[0], 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR');
+  assert.equal(g.lastMove(), undefined);
+  assert.ok(g.play('d2', 'd4'));
+  assert.deepEqual(g.moveRows(), [
+    { number: 1, white: { ply: 1, san: 'e4' }, black: { ply: 2, san: PASS, pass: true } },
+    { number: 2, white: { ply: 3, san: 'd4' }, black: null },
+  ]);
+});
+
+test('a pass survives navigation and follows the same branching rules', () => {
+  const g = new Game();
+  playUci(g, 'e2e4');
+  g.pass();
+  playUci(g, 'd2d4');
+  g.toStart();
+  g.toEnd();
+  assert.equal(g.turn(), 'black');
+  g.goTo(1);
+  g.pass(); // same "move" again keeps the continuation
+  assert.equal(g.moves.length, 3);
+  g.goTo(1);
+  playUci(g, 'e7e5'); // a real move instead replaces it
+  assert.equal(g.moves.length, 2);
+  assert.equal(g.hasPass(), false);
+});
+
+test('no passing in check or when the game is over', () => {
+  const g = new Game();
+  playUci(g, 'e2e4', 'f7f6', 'd2d4', 'g7g5', 'd1h5'); // check
+  assert.equal(g.canPass(), false);
+  assert.equal(g.pass(), null);
+  assert.equal(g.moves.length, 5);
+  const mate = new Game();
+  playUci(mate, 'f2f3', 'e7e5', 'g2g4', 'd8h4');
+  assert.equal(mate.pass(), null);
+});
+
+test('hasPass looks only at the moves up to a ply; playUci accepts a pass', () => {
+  const g = new Game();
+  for (const u of ['e2e4', 'e7e5', PASS, 'b8c6']) assert.ok(g.playUci(u));
+  assert.equal(g.hasPass(), true);
+  assert.equal(g.hasPass(2), false);
+  assert.equal(g.hasPass(3), true);
+  assert.equal(g.turn(), 'white');
 });

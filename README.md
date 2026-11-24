@@ -49,6 +49,7 @@ The full plan, decisions and data model are in the project's
 | — | Endgame studies: your own database of composed studies from PGN files, by kind of ending, with favourites | Done |
 | — | Practical tab: moves in your openings that take the opponent into sharp, only-move territory, even at an engine cost; engine-only measures (backlog item 7) | Done |
 | — | Practical tab: check my moves — flag repertoire moves that give away more than a chosen win% against the engine's best | Done |
+| — | Pass a move on the analysis board, to see what the other side would play (analysis only) | Done |
 
 ## Using the board
 
@@ -57,6 +58,12 @@ The full plan, decisions and data model are in the project's
 - Navigate with the buttons, the move list, or keys: **←/→** step, **↑** end, **↓** start, **Home/End**, **F** flips.
   The mouse wheel over the board also steps through moves.
 - Stepping back and playing a different move replaces the moves after it; replaying the same move keeps them.
+- **Pass** (beside the move buttons) skips the side to move, so the other side moves again: turn the engine on to see
+  what they'd play here, i.e. what they're threatening. The pass shows as **--** in the move list and you can play on
+  after it. It can't happen in a real game, so while the moves up to the board position include a pass nothing can be
+  saved from them: no Add line, branch tag, position note, engine review, saving to Games, or playing the engine from
+  there (the status line says *after a pass: analysis only*). Step back to before the pass and saving works again.
+  Not allowed in check, and not while training, solving or playing the engine.
 - Paste a FEN and press **Load FEN** (or Enter) to set up a position; **Copy FEN** copies the current one.
 - Right-click drag draws arrows; right-click a square draws a circle.
 - The current game is kept in the browser, so reloading the page (or a phone dropping the tab) doesn't lose it.
@@ -962,6 +969,7 @@ MPCT_URL=http://localhost:8010/ node tests/e2e/continue.e2e.cjs     # empty data
 MPCT_URL=http://localhost:8010/ node tests/e2e/insights.e2e.cjs     # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/bookmarks.e2e.cjs    # empty database
 MPCT_URL=http://localhost:8010/ node tests/e2e/review.e2e.cjs       # empty database, real engine
+MPCT_URL=http://localhost:8010/ node tests/e2e/pass.e2e.cjs         # empty database (passing a move)
 # empty database, server started with WILD_FETCH=false; loads games with the import tool:
 MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/wild.e2e.cjs
 MPCT_URL=http://localhost:8010/ MPCT_DATABASE_URL=postgresql+psycopg://... node tests/e2e/puzzles.e2e.cjs   # empty database

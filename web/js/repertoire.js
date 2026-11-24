@@ -3,7 +3,7 @@
 
 import { importCourse } from './courseimport.js';
 import { api } from './api.js';
-import { START_FEN } from './game.js';
+import { PASS_NO_SAVE, START_FEN } from './game.js';
 import { confirmDialog, fillOpeningSelect, fillTagSelect, formDialog, store, tagFilterOf, toast } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -419,7 +419,14 @@ export class RepertoirePanel {
     e.openingImportRep.disabled = !this.repId || this.repertoires.length < 2;
     e.openingEdit.disabled = e.openingDelete.disabled = !this.openingId;
     e.lineAdd.disabled = e.lineDelete.disabled = !this.openingId;
-    e.commentCurrent.disabled = !this.repId;
+    this._lockComment();
+  }
+
+  /** No notes on a position reached by passing: it can't come up in a real game. */
+  _lockComment() {
+    const passed = this.game.hasPass(this.game.ply);
+    this.el.commentCurrent.disabled = !this.repId || passed;
+    this.el.commentCurrent.placeholder = passed ? 'No notes after a passed move (analysis only)' : 'Notes on this position';
   }
 
   // ---- lines ------------------------------------------------------------
@@ -429,6 +436,10 @@ export class RepertoirePanel {
     if (!o) return;
     if (this.game.startFen !== START_FEN) {
       toast('Lines start from the initial position; this board was set up from a FEN.', 'error');
+      return;
+    }
+    if (this.game.hasPass(this.game.ply)) {
+      toast(PASS_NO_SAVE, 'error');
       return;
     }
     const moves = this.game.moves.slice(0, this.game.ply).map((m) => m.uci);
@@ -634,6 +645,10 @@ export class RepertoirePanel {
   async addTag() {
     const o = this._opening();
     if (!o) return;
+    if (this.game.hasPass(this.game.ply)) {
+      toast(PASS_NO_SAVE, 'error');
+      return;
+    }
     const values = await formDialog({
       title: 'Tag this position',
       message: `Every line in ${o.name} that passes through this position will carry the tag, including lines added later.`,
@@ -713,6 +728,7 @@ export class RepertoirePanel {
     if (!this.available) return;
     this._renderBranches();
     this.flushComment();
+    this._lockComment();
     if (!this.training) this.onShapes([]);
     this.refresh(this.training); // no debounce in training: positions change one at a time
   }
@@ -860,7 +876,7 @@ export class RepertoirePanel {
   // ---- comments -----------------------------------------------------------
 
   _commentEdited() {
-    if (!this.repId) return;
+    if (!this.repId || this.game.hasPass(this.game.ply)) return;
     const p = this.pendingComment ?? { repId: this.repId, fen: this.game.fen() };
     p.text = this.el.commentCurrent.value;
     clearTimeout(p.timer);
