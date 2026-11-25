@@ -24,6 +24,15 @@ class Mastery(BaseModel):
     mastered: int  # streak 5+
 
 
+class BranchStages(BaseModel):
+    id: int | None  # None: lines in no branch
+    name: str
+    parent_id: int | None
+    lines: int
+    due: int
+    mastery: Mastery
+
+
 class DashboardStats(BaseModel):
     lines: int
     due: int
@@ -80,6 +89,7 @@ class DashboardOut(BaseModel):
     rest: bool = False
     stats: DashboardStats
     forecast: Forecast
+    branches: list[BranchStages]  # learning stages per branch tag, over the lines shown
     problems: list[ProblemPosition]
     lines: list[DashboardLine]
 
@@ -88,6 +98,7 @@ class OverviewOpening(BaseModel):
     id: int
     name: str
     color: str
+    branches: list[BranchStages]
     lines: int
     due: int
     next_review_on: date | None

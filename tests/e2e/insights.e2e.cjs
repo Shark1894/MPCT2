@@ -1,5 +1,7 @@
 // Browser checks for the dashboard insights. Needs a server with an EMPTY database.
-// Usage: MPCT_URL=http://localhost:8010/ node tests/e2e/insights.e2e.cjs
+// Usage: MPCT_URL=http://localhost:8010/ MPCT_DB=postgresql://postgres@localhost:5432/mpct_e2e node tests/e2e/insights.e2e.cjs
+// (MPCT_DB: the server's database, to make lines due between seeded reviews; see db.cjs)
+const { makeDue } = require('./db.cjs');
 const { chromium, devices } = require('playwright');
 
 const URL = process.env.MPCT_URL || 'http://localhost:8010/';
@@ -21,7 +23,7 @@ const CARO = [
 ];
 
 async function seed(page) {
-  return page.evaluate(async (CARO) => {
+  const seeded = await page.evaluate(async (CARO) => {
     const post = (url, body) =>
       fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
     const rep = await post('/api/repertoires', { name: 'Main' });
@@ -38,16 +40,32 @@ async function seed(page) {
       }
       return post(`/api/lines/${id}/reviews`, { attempts });
     };
-    // Advance: 5 clean reviews -> mastered. Classical: 2 clean -> known.
-    for (let i = 0; i < 5; i++) await review(ids[0], CARO[0]);
-    await review(ids[1], CARO[1]);
-    await review(ids[1], CARO[1]);
     // Exchange: 3...cxd5 wrong twice (Qxd5), 2...c6 wrong once (e5). Panov line: 2...c6 wrong (e5).
     await review(ids[2], CARO[2], { 6: 'd8d5' });
     await review(ids[2], CARO[2], { 6: 'd8d5', 2: 'e7e5' });
     await review(ids[3], CARO[3], { 2: 'e7e5' });
     return { rep: rep.id, caro: caro.id, london: london.id, ids };
   }, CARO);
+  // Advance: 5 clean reviews -> mastered. Classical: 2 clean -> known. Each made due first,
+  // as early reviews don't move the streak on.
+  const clean = (id, moves) =>
+    page.evaluate(
+      async ({ id, moves }) => {
+        const attempts = [];
+        for (let p = 2; p <= moves.length; p += 2) attempts.push({ ply: p, uci: moves[p - 1] });
+        await fetch(`/api/lines/${id}/reviews`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attempts }) });
+      },
+      { id, moves },
+    );
+  for (let i = 0; i < 5; i++) {
+    makeDue([seeded.ids[0]]);
+    await clean(seeded.ids[0], CARO[0]);
+  }
+  for (let i = 0; i < 2; i++) {
+    makeDue([seeded.ids[1]]);
+    await clean(seeded.ids[1], CARO[1]);
+  }
+  return seeded;
 }
 
 (async () => {
@@ -75,10 +93,11 @@ async function seed(page) {
   check(JSON.stringify(await selected()) === '["Overview"]' && (await page.isVisible('#ov-list')) && (await page.isHidden('#dash-lines')), 'Overview tab shows openings + activity');
 
   // ---- overview -------------------------------------------------------------------
-  const ov = await page.$$eval('.ov-row', (rows) => rows.map((r) => r.textContent));
+  const ov = await page.$$eval('.ov-row:not(.ov-total)', (rows) => rows.map((r) => r.textContent));
   check(ov.length === 2 && ov[0].startsWith('London') && ov[1].startsWith('Caro-Kann'), 'overview lists openings, White first: ' + ov);
   check(ov[1].includes('4 lines') && ov[1].includes('2 due') && ov[1].includes('70%'), 'Caro row: lines, due, accuracy: ' + ov[1]);
-  check((await page.getAttribute('.ov-row:nth-child(2)', 'aria-pressed')) === 'true', 'selected opening highlighted');
+  check((await page.$$eval('.ov-row:not(.ov-total)', (rs) => rs.map((r) => r.getAttribute('aria-pressed')))).join() === 'false,true', 'selected opening highlighted');
+  check((await text(page, '.ov-total')).startsWith('All openings') && (await text(page, '.ov-total')).includes('5 lines') && (await text(page, '.ov-total')).includes('3 due'), 'whole-repertoire row: ' + (await text(page, '.ov-total')));
   check((await text(page, '#ov-rep')) === '· Main', 'repertoire named');
 
   // ---- learning progress -------------------------------------------------------------

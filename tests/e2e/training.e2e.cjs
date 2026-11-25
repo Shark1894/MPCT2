@@ -1,5 +1,7 @@
 // Browser checks for the opening trainer. Needs a server with an EMPTY database.
-// Usage: MPCT_URL=http://localhost:8010/ node tests/e2e/training.e2e.cjs
+// Usage: MPCT_URL=http://localhost:8010/ MPCT_DB=postgresql://postgres@localhost:5432/mpct_e2e node tests/e2e/training.e2e.cjs
+// (MPCT_DB: the server's database, to make lines due between seeded reviews; see db.cjs)
+const { makeDue } = require('./db.cjs');
 const { chromium, devices } = require('playwright');
 
 const URL = process.env.MPCT_URL || 'http://localhost:8010/';
@@ -172,14 +174,21 @@ const text = (page, sel) => page.textContent(sel);
   check(stillDue === 0, 'abandoned line not recorded');
 
   // ---- well-known line: comments hidden, and it says so ---------------------
-  await page.evaluate(async () => {
+  const knownReview = (line) =>
+    page.evaluate(async (line) => {
+      const perfect = [{ ply: 1, uci: 'g1f3' }, { ply: 3, uci: 'g2g3' }];
+      await fetch(`/api/lines/${line}/reviews`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attempts: perfect }) });
+    }, line);
+  const knownLine = await page.evaluate(async () => {
     const post = (url, body) =>
       fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
     const o = await post('/api/repertoires/1/openings', { name: 'Known', color: 'white' });
-    const line = (await post(`/api/openings/${o.id}/lines`, { moves: ['g1f3', 'd7d5', 'g2g3'] })).line_id;
-    const perfect = [{ ply: 1, uci: 'g1f3' }, { ply: 3, uci: 'g2g3' }];
-    await post(`/api/lines/${line}/reviews`, { attempts: perfect });
-    await post(`/api/lines/${line}/reviews`, { attempts: perfect });
+    return (await post(`/api/openings/${o.id}/lines`, { moves: ['g1f3', 'd7d5', 'g2g3'] })).line_id;
+  });
+  await knownReview(knownLine);
+  makeDue([knownLine]); // a review only moves the streak on once the line is due
+  await knownReview(knownLine);
+  await page.evaluate(async () => {
     await fetch('/api/repertoires/1/comment', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

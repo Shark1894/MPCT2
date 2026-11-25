@@ -128,7 +128,8 @@ class LineReview(Base):
 
     `streak` is the line's consecutive-correct count after this review. Practice
     reviews (retries straight after a mistake) are recorded but don't change the
-    streak or the schedule.
+    streak or the schedule. Neither do clean early reviews (the line wasn't due yet):
+    they're recorded with the streak unchanged.
     """
 
     __tablename__ = "line_reviews"

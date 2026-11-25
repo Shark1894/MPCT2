@@ -74,10 +74,11 @@ def test_correct_reviews_build_streak_and_push_review_date(client, rep, db):
     o, (line,) = make_opening(client, rep, "Caro", "black", CARO)
     expected_days = [1, 3, 7, 14, 30, 60, 60]
     for n, days in enumerate(expected_days, start=1):
+        set_review_date(db, line, TODAY)  # due: only due reviews move the schedule
         r = review(client, line, perfect(CARO, "black"))
         assert r.status_code == 201
         body = r.json()
-        assert (body["correct"], body["mistakes"], body["streak"]) == (True, 0, n)
+        assert (body["correct"], body["mistakes"], body["streak"], body["early"]) == (True, 0, n, False)
         assert body["next_review_on"] == (TODAY + timedelta(days=days)).isoformat()
     assert count(db, "line_reviews") == 7
     assert count(db, "move_attempts") == 14
@@ -87,6 +88,7 @@ def test_correct_reviews_build_streak_and_push_review_date(client, rep, db):
 def test_mistake_resets_streak_and_makes_line_due_today(client, rep, db):
     o, (line,) = make_opening(client, rep, "Caro", "black", CARO)
     for _ in range(3):
+        set_review_date(db, line, TODAY)
         review(client, line, perfect(CARO, "black"))
     r = review(client, line, [(2, "c7c6"), (4, "e7e6"), (4, "d7d6"), (4, "d7d5")]).json()
     assert (r["correct"], r["mistakes"], r["streak"]) == (False, 2, 0)
@@ -109,6 +111,35 @@ def test_practice_retry_does_not_change_schedule(client, rep):
     # The next real review continues from the reset streak, ignoring the practice run
     r = review(client, line, perfect(CARO, "black")).json()
     assert (r["streak"], r["next_review_on"]) == (1, (TODAY + timedelta(days=1)).isoformat())
+
+
+def test_early_clean_review_leaves_schedule_alone(client, rep, db):
+    """Training a line before it's due can't skip it up the stages."""
+    o, (line,) = make_opening(client, rep, "Caro", "black", CARO)
+    first = review(client, line, perfect(CARO, "black")).json()  # new lines are due: streak 1
+    assert (first["streak"], first["early"]) == (1, False)
+    for _ in range(3):  # trained again (e.g. from a dashboard row) while not due
+        r = review(client, line, perfect(CARO, "black")).json()
+        assert (r["correct"], r["early"], r["practice"], r["streak"]) == (True, True, False, 1)
+        assert r["next_review_on"] == (TODAY + timedelta(days=1)).isoformat()
+    assert count(db, "line_reviews") == 4  # still recorded: they count towards accuracy
+    dash = client.get(f"/api/openings/{o['id']}/dashboard").json()
+    assert (dash["stats"]["reviews"], dash["stats"]["accuracy"]) == (4, 1.0)
+    # Once due, the next review moves it on from where it was
+    set_review_date(db, line, TODAY)
+    r = review(client, line, perfect(CARO, "black")).json()
+    assert (r["early"], r["streak"], r["next_review_on"]) == (False, 2, (TODAY + timedelta(days=3)).isoformat())
+
+
+def test_early_review_with_a_mistake_still_resets(client, rep, db):
+    o, (line,) = make_opening(client, rep, "Caro", "black", CARO)
+    set_review_date(db, line, TODAY)
+    review(client, line, perfect(CARO, "black"))
+    set_review_date(db, line, TODAY)
+    review(client, line, perfect(CARO, "black"))  # streak 2, due in 3 days
+    r = review(client, line, [(2, "c7c5"), (2, "c7c6"), (4, "d7d5")]).json()
+    assert (r["correct"], r["early"], r["streak"], r["next_review_on"]) == (False, True, 0, TODAY.isoformat())
+    assert [x["id"] for x in client.get(f"/api/openings/{o['id']}/training").json()["lines"]] == [line]
 
 
 def test_white_line_review(client, rep):

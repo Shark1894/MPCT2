@@ -42,6 +42,39 @@ def mastery(line_ids: list[int], streaks: dict[int, int], reviewed: set[int]) ->
     return counts
 
 
+def branch_breakdown(
+    s: Session, opening_id: int, line_ids: list[int], streaks: dict[int, int], reviewed: set[int], due_ids: set[int]
+) -> list[dict]:
+    """Learning stages per branch tag of the opening, over `line_ids`. A branch counts every line
+    through it (so sub-branches' lines count in their parents too); `parent_id` nests them. Lines
+    in no branch come last as a row with id None, when the opening has tags at all. Branches with
+    none of the lines are left out."""
+    from app.repositories.tags import list_tags, tagged_line_ids
+
+    tags = list_tags(s, opening_id)
+    if not tags:
+        return []
+    members = tagged_line_ids(s, opening_id)
+    ids = set(line_ids)
+
+    def row(tag_id, name, parent_id, mine):
+        return {
+            "id": tag_id,
+            "name": name,
+            "parent_id": parent_id,
+            "lines": len(mine),
+            "due": len(mine & due_ids),
+            "mastery": mastery(sorted(mine), streaks, reviewed),
+        }
+
+    out = [row(t["id"], t["name"], t["parent_id"], members[t["id"]] & ids) for t in tags]
+    out = [r for r in out if r["lines"]]
+    untagged = ids - set().union(*members.values())
+    if untagged:
+        out.append(row(None, "No branch", None, untagged))
+    return out
+
+
 def reviewed_line_ids(s: Session, line_ids: list[int]) -> set[int]:
     if not line_ids:
         return set()
@@ -216,11 +249,13 @@ def overview(s: Session, repertoire_id: int) -> list[dict]:
         mine_ids = [line_id for line_id, _ in mine]
         reviews = sum(totals.get(i, [0, 0])[0] for i in mine_ids)
         correct = sum(totals.get(i, [0, 0])[1] for i in mine_ids)
+        due_ids = {line_id for line_id, d in mine if d <= today}
         out.append(
             {
                 "id": o.id,
                 "name": o.name,
                 "color": o.color,
+                "branches": branch_breakdown(s, o.id, mine_ids, streaks, reviewed, due_ids),
                 "lines": len(mine),
                 "due": sum(1 for _, d in mine if d <= today),
                 "next_review_on": min((d for _, d in mine), default=None),

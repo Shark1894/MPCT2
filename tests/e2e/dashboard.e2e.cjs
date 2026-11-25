@@ -1,5 +1,7 @@
 // Browser checks for the review dashboard. Needs a server with an EMPTY database.
-// Usage: MPCT_URL=http://localhost:8010/ node tests/e2e/dashboard.e2e.cjs
+// Usage: MPCT_URL=http://localhost:8010/ MPCT_DB=postgresql://postgres@localhost:5432/mpct_e2e node tests/e2e/dashboard.e2e.cjs
+// (MPCT_DB: the server's database, to make lines due between seeded reviews; see db.cjs)
+const { makeDue } = require('./db.cjs');
 const { chromium, devices } = require('playwright');
 
 const URL = process.env.MPCT_URL || 'http://localhost:8010/';
@@ -22,7 +24,7 @@ const rows = (p) => p.$$eval('#dash-lines .dash-line', (els) => els.map((e) => e
   await page.evaluate(() => localStorage.clear());
 
   // Data: a Black opening with 3 lines and some review history, plus a second opening
-  await page.evaluate(async () => {
+  const { ids, lines } = await page.evaluate(async () => {
     const call = (method, url, body) =>
       fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) }).then((r) =>
         r.status === 204 ? null : r.json(),
@@ -37,14 +39,22 @@ const rows = (p) => p.$$eval('#dash-lines .dash-line', (els) => els.map((e) => e
     ];
     const ids = [];
     for (const m of lines) ids.push((await call('POST', `/api/openings/${caro.id}/lines`, { moves: m })).line_id);
-    const black = (m) => m.flatMap((uci, i) => (i % 2 ? [{ ply: i + 1, uci }] : []));
-    for (const ok of [true, false, true, true]) {
-      const attempts = black(lines[0]);
-      if (!ok) attempts.unshift({ ply: 2, uci: 'e7e5' });
-      await call('POST', `/api/lines/${ids[0]}/reviews`, { attempts });
-    }
-    await call('POST', `/api/lines/${ids[1]}/reviews`, { attempts: [{ ply: 2, uci: 'e7e5' }, ...black(lines[1])] });
+    return { ids, lines };
   });
+  const reviewLine = (id, moves, ok) =>
+    page.evaluate(
+      async ({ id, moves, ok }) => {
+        const attempts = moves.flatMap((uci, i) => (i % 2 ? [{ ply: i + 1, uci }] : []));
+        if (!ok) attempts.unshift({ ply: 2, uci: 'e7e5' });
+        await fetch(`/api/lines/${id}/reviews`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attempts }) });
+      },
+      { id, moves, ok },
+    );
+  for (const ok of [true, false, true, true]) {
+    makeDue([ids[0]]); // only due reviews move the streak on
+    await reviewLine(ids[0], lines[0], ok);
+  }
+  await reviewLine(ids[1], lines[1], false);
   await page.reload();
   await settle(page, 700);
 

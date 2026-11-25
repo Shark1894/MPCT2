@@ -2,7 +2,7 @@
 // the openings overview, and sorting/filtering the line list. The helpers at the top
 // are pure (unit tested); the render functions build DOM.
 
-import { daysFromToday, plural } from './ui.js';
+import { daysFromToday, describeDue, plural, tagTree } from './ui.js';
 
 export const STAGES = [
   ['mastered', 'Mastered'],
@@ -96,6 +96,31 @@ export function streakBreakdown(lines) {
     row.lines.push(l);
   }
   return rows;
+}
+
+/**
+ * Branch rows (from the server's `branches`) nested under their parents: [{ branch, depth }].
+ * The "No branch" row (id null) goes last.
+ */
+export function branchRows(branches) {
+  const tagged = branches.filter((b) => b.id !== null);
+  const rows = tagTree(tagged).map(({ tag, depth }) => ({ branch: tag, depth }));
+  for (const b of branches) if (b.id === null) rows.push({ branch: b, depth: 0 });
+  return rows;
+}
+
+/** Totals over every opening in the overview, for the whole-repertoire row. */
+export function repertoireTotals(openings) {
+  const m = { new: 0, learning: 0, known: 0, mastered: 0 };
+  let lines = 0, due = 0, reviews = 0, correct = 0;
+  for (const o of openings) {
+    for (const k of Object.keys(m)) m[k] += o.mastery[k];
+    lines += o.lines;
+    due += o.due;
+    reviews += o.reviews;
+    correct += Math.round((o.accuracy ?? 0) * o.reviews);
+  }
+  return { lines, due, reviews, accuracy: reviews ? correct / reviews : null, mastery: m };
 }
 
 /** Heatmap shade 0-4 for a number of reviews. */
@@ -197,8 +222,12 @@ export function masteryBar(m, { compact = false } = {}) {
   return wrap;
 }
 
-/** Horizontal bar per streak count; `onTrain(lines, label)` trains one row's lines. */
-export function renderStreaks(box, lines, onTrain) {
+/**
+ * Horizontal bar per streak count; `onTrain(lines, label)` trains one row's lines. Tapping a row's
+ * name lists its lines (soonest review first); `open` is a Set of row keys kept open across redraws,
+ * `tagNames` a Map of branch names for the chips, `onShowLine(sans)` puts a line on the board.
+ */
+export function renderStreaks(box, lines, onTrain, { open = new Set(), tagNames = new Map(), onShowLine } = {}) {
   box.innerHTML = '';
   const rows = streakBreakdown(lines);
   const max = Math.max(1, ...rows.map((r) => r.lines.length));
@@ -206,7 +235,8 @@ export function renderStreaks(box, lines, onTrain) {
     const n = r.lines.length;
     const row = el('div', n ? 'sb-row' : 'sb-row zero');
     row.dataset.key = r.key;
-    const name = el('div', 'sb-label');
+    const name = el(n ? 'button' : 'div', 'sb-label');
+    if (n) name.type = 'button';
     name.append(el('span', 'sb-name', r.label), el('span', 'sb-gap', r.gap));
     const track = el('div', 'sb-track');
     const bar = el('span', `sb-bar m-${r.stage}`);
@@ -218,9 +248,76 @@ export function renderStreaks(box, lines, onTrain) {
     train.type = 'button';
     train.disabled = !n;
     const what = r.key === 'new' ? 'new lines' : `lines at ${r.label}`;
-    train.title = `Train the ${plural(n, 'line')} here`;
+    train.title = `Revise the ${plural(n, 'line')} here (lines not due yet don't move up a stage)`;
     train.addEventListener('click', () => onTrain(r.lines, what));
     row.append(name, track, count, train);
+    box.appendChild(row);
+    if (!n) continue;
+
+    const list = el('ul', 'sb-lines');
+    list.id = `sb-lines-${r.key}`;
+    const sorted = [...r.lines].sort((a, b) => a.next_review_on.localeCompare(b.next_review_on) || a.id - b.id);
+    for (const l of sorted) {
+      const item = el('li');
+      const btn = el('button', 'sb-line');
+      btn.type = 'button';
+      btn.title = 'Show this line on the board';
+      const moves = el('span', 'sb-line-moves', formatMoves(l.moves));
+      const chips = el('span', 'sb-line-tags');
+      for (const id of l.tags ?? []) if (tagNames.has(id)) chips.appendChild(el('span', 'line-tag', tagNames.get(id)));
+      const due = daysFromToday(l.next_review_on) <= 0;
+      btn.append(moves, chips, el('span', due ? 'sb-line-due is-due' : 'sb-line-due', describeDue(l.next_review_on)));
+      btn.addEventListener('click', () => onShowLine?.(l.moves));
+      item.appendChild(btn);
+      list.appendChild(item);
+    }
+    const setOpen = (on) => {
+      list.hidden = !on;
+      name.setAttribute('aria-expanded', String(on));
+      row.classList.toggle('open', on);
+      if (on) open.add(r.key);
+      else open.delete(r.key);
+    };
+    name.setAttribute('aria-controls', list.id);
+    name.title = 'Show the lines here';
+    setOpen(open.has(r.key));
+    name.addEventListener('click', () => setOpen(list.hidden));
+    box.appendChild(list);
+  }
+}
+
+/**
+ * One stacked learning-stage bar per branch, nested under its parent, bar length by line count.
+ * `onPick(branch)` (optional) runs when a branch is tapped; the "No branch" row isn't tappable.
+ */
+export function renderBranches(box, branches, { onPick, selectedId = null } = {}) {
+  box.innerHTML = '';
+  const rows = branchRows(branches);
+  if (!rows.length) {
+    box.appendChild(el('p', 'meta', 'No branch tags in this opening yet. Tag a position on the Board to group its lines.'));
+    return;
+  }
+  const max = Math.max(1, ...rows.map(({ branch }) => branch.lines));
+  for (const { branch: b, depth } of rows) {
+    const clickable = onPick && b.id !== null;
+    const row = el(clickable ? 'button' : 'div', b.id === null ? 'br-row other' : 'br-row');
+    if (clickable) {
+      row.type = 'button';
+      row.title = `Show only ${b.name}`;
+      row.setAttribute('aria-pressed', String(b.id === selectedId));
+      row.addEventListener('click', () => onPick(b));
+    }
+    const name = el('span', 'br-name', b.name);
+    name.style.paddingLeft = `${depth * 14}px`;
+    if (depth) name.classList.add('sub');
+    const track = el('span', 'br-track');
+    const bar = masteryBar(b.mastery, { compact: true });
+    bar.style.width = `max(12px, ${(b.lines / max) * 100}%)`;
+    track.appendChild(bar);
+    const count = el('span', 'br-count', String(b.lines));
+    count.title = plural(b.lines, 'line');
+    const due = el('span', b.due ? 'br-due is-due' : 'br-due', b.due ? `${b.due} due` : '');
+    row.append(name, track, count, due);
     box.appendChild(row);
   }
 }
@@ -298,24 +395,64 @@ export function renderActivity(grid, summary, act) {
 }
 
 /** Repertoire overview: one row per opening. Clicking a row selects it. */
-export function renderOverview(list, openings, selectedId, onSelect) {
+export function renderOverview(list, openings, selectedId, onSelect, { open = new Set(), onPickBranch } = {}) {
   list.innerHTML = '';
   if (!openings.length) {
     list.appendChild(el('p', 'meta', 'No openings yet.'));
     return;
   }
+  const cells = (row, o, label) => {
+    const due = el('span', o.due ? 'ov-due is-due' : 'ov-due', o.due ? `${o.due} due` : 'none due');
+    const acc = el('span', 'ov-acc', o.accuracy === null ? '—' : `${Math.round(o.accuracy * 100)}%`);
+    acc.title = 'Accuracy: reviews without mistakes';
+    const lines = el('span', 'ov-lines meta', plural(o.lines, 'line'));
+    row.append(label, lines, due, acc, masteryBar(o.mastery, { compact: true }));
+  };
+
+  if (openings.length > 1) {
+    const total = el('div', 'ov-row ov-total');
+    const name = el('span', 'ov-name');
+    name.append(el('span', 'ov-label', 'All openings'));
+    cells(total, repertoireTotals(openings), name);
+    const item = el('div', 'ov-item');
+    item.append(total, el('span', 'ov-expand-spacer'));
+    list.appendChild(item);
+  }
+
   for (const o of openings) {
+    const item = el('div', 'ov-item');
     const row = el('button', 'ov-row');
     row.type = 'button';
     row.setAttribute('aria-pressed', String(o.id === selectedId));
     const name = el('span', 'ov-name');
     name.append(el('span', `ov-colour ${o.color}`), el('span', 'ov-label', o.name));
-    const due = el('span', o.due ? 'ov-due is-due' : 'ov-due', o.due ? `${o.due} due` : 'none due');
-    const acc = el('span', 'ov-acc', o.accuracy === null ? '—' : `${Math.round(o.accuracy * 100)}%`);
-    acc.title = 'Accuracy: reviews without mistakes';
-    const lines = el('span', 'ov-lines meta', plural(o.lines, 'line'));
-    row.append(name, lines, due, acc, masteryBar(o.mastery, { compact: true }));
+    cells(row, o, name);
     row.addEventListener('click', () => onSelect(o.id));
-    list.appendChild(row);
+    item.appendChild(row);
+
+    const branches = o.branches ?? [];
+    if (!branches.length) {
+      item.appendChild(el('span', 'ov-expand-spacer'));
+      list.appendChild(item);
+      continue;
+    }
+    const toggle = el('button', 'ov-expand', '▸');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-label', `Branches of ${o.name}`);
+    const box = el('div', 'ov-branches');
+    box.id = `ov-branches-${o.id}`;
+    toggle.setAttribute('aria-controls', box.id);
+    renderBranches(box, branches, { onPick: onPickBranch && ((b) => onPickBranch(o.id, b.id)) });
+    const setOpen = (on) => {
+      box.hidden = !on;
+      toggle.setAttribute('aria-expanded', String(on));
+      toggle.textContent = on ? '▾' : '▸';
+      if (on) open.add(o.id);
+      else open.delete(o.id);
+    };
+    setOpen(open.has(o.id));
+    toggle.addEventListener('click', () => setOpen(box.hidden));
+    item.appendChild(toggle);
+    list.append(item, box);
   }
 }

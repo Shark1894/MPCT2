@@ -50,6 +50,7 @@ class ReviewOut(BaseModel):
     correct: bool
     mistakes: int
     practice: bool
+    early: bool  # the line wasn't due: a clean run leaves the schedule unchanged
     streak: int
     next_review_on: date
 

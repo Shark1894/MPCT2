@@ -8,6 +8,7 @@ import {
   enableTips,
   masteryBar,
   renderActivity,
+  renderBranches,
   renderForecast,
   renderOverview,
   renderStreaks,
@@ -34,6 +35,8 @@ export class DashboardView {
   constructor({ repertoire, onTrain, onShowLine }) {
     Object.assign(this, { repertoire, onTrain, onShowLine });
     this.data = null;
+    this.openStreaks = new Set(); // streak rows listing their lines
+    this.openOpenings = new Set(); // overview openings showing their branches
     this.gaps = new GapsCard({ onShow: (sans) => this.onShowLine(sans) });
     this.view = { sort: 'due', filter: 'all', search: '', ...store.get('dashView', {}) };
     this.el = {
@@ -58,6 +61,7 @@ export class DashboardView {
       trainWeak: $('dash-train-weak'),
       mastery: $('dash-mastery'),
       streaks: $('dash-streaks'),
+      branches: $('dash-branches'),
       fcChart: $('fc-chart'),
       fcNote: $('fc-note'),
       ovList: $('ov-list'),
@@ -204,10 +208,26 @@ export class DashboardView {
   }
 
   _renderOverview() {
-    renderOverview(this.el.ovList, this.overview ?? [], this._opening()?.id, async (id) => {
-      this.repertoire.selectOpening(id, true);
-      await this.refresh();
-    });
+    renderOverview(
+      this.el.ovList,
+      this.overview ?? [],
+      this._opening()?.id,
+      async (id) => {
+        this.repertoire.selectOpening(id, true);
+        await this.refresh();
+      },
+      { open: this.openOpenings, onPickBranch: (openingId, tagId) => this._showBranch(openingId, tagId) },
+    );
+  }
+
+  /** From the overview: open an opening's dashboard on one branch, at its progress. */
+  async _showBranch(openingId, tagId) {
+    if (openingId !== this._opening()?.id) {
+      this.repertoire.selectOpening(openingId, true);
+      await this.repertoire.loadTags();
+    }
+    this.showTab('progress');
+    this.repertoire.setTagFilter(tagId); // refreshes the dashboard through onTagsChanged
   }
 
   _renderEmpty(text) {
@@ -218,6 +238,7 @@ export class DashboardView {
     this.el.trainWeak.disabled = true;
     this.el.mastery.innerHTML = '';
     this.el.streaks.innerHTML = '';
+    this.el.branches.innerHTML = '';
     this.el.fcChart.innerHTML = '';
     this.el.fcNote.textContent = '';
     this.el.showing.textContent = '';
@@ -245,7 +266,17 @@ export class DashboardView {
     e.trainWeak.disabled = weak.length === 0;
     e.mastery.innerHTML = '';
     e.mastery.appendChild(masteryBar(stats.mastery));
-    renderStreaks(e.streaks, lines, (rows, label) => this.onTrain(this._opening(), 'all', rows.map((l) => l.id), null, label));
+    const tagNames = new Map(this.repertoire.tags.map((t) => [t.id, t.name]));
+    renderStreaks(e.streaks, lines, (rows, label) => this.onTrain(this._opening(), 'all', rows.map((l) => l.id), null, label), {
+      open: this.openStreaks,
+      tagNames,
+      onShowLine: (sans) => this.onShowLine(sans),
+    });
+    const tagId = this.repertoire.tagId;
+    renderBranches(e.branches, this.data.branches ?? [], {
+      selectedId: tagId,
+      onPick: (b) => this.repertoire.setTagFilter(b.id === tagId ? null : b.id), // tap again for all lines
+    });
     renderForecast(e.fcChart, e.fcNote, this.data.forecast);
     this._renderOverview();
     this._renderLines();

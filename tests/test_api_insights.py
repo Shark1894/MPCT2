@@ -2,10 +2,12 @@
 
 from datetime import date, datetime, timedelta, timezone
 
+import chess
 import pytest
 from sqlalchemy import text
 
 from app.repositories.insights import forecast, stage
+from tests.conftest import make_due
 
 TODAY = date.today()
 CARO_ADV = ["e2e4", "c7c6", "d2d4", "d7d5", "e4e5", "c8f5"]
@@ -48,12 +50,14 @@ def test_forecast_counts_overdue_as_today():
     assert f["later"] == 1
 
 
-def test_dashboard_mastery_and_forecast(client, setup):
+def test_dashboard_mastery_and_forecast(client, setup, db):
     _, o, (a, b, c) = setup
     for _ in range(5):
+        make_due(db, a)
         review(client, a, CARO_ADV)  # streak 5: mastered, due in 30 days
-    review(client, b, CARO_CLASSIC)
-    review(client, b, CARO_CLASSIC)  # streak 2: known, due in 3 days
+    for _ in range(2):
+        make_due(db, b)
+        review(client, b, CARO_CLASSIC)  # streak 2: known, due in 3 days
     d = client.get(f"/api/openings/{o['id']}/dashboard").json()
     assert d["stats"]["mastery"] == {"new": 1, "learning": 0, "known": 1, "mastered": 1}
     days = d["forecast"]["days"]
@@ -122,6 +126,43 @@ def test_overview(client, setup):
     assert caro["mastery"] == {"new": 1, "learning": 2, "known": 0, "mastered": 0}
     assert ov[0]["id"] == w["id"] and ov[0]["lines"] == 0 and ov[0]["accuracy"] is None
     assert client.get("/api/repertoires/999/overview").status_code == 404
+
+
+def tag(client, o, name, moves):
+    b = chess.Board()
+    for m in moves:
+        b.push_uci(m)
+    r = client.post(f"/api/openings/{o['id']}/tags", json={"name": name, "fen": b.fen()})
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def test_branch_breakdown(client, setup, db):
+    rep, o, (a, b, c) = setup
+    assert client.get(f"/api/openings/{o['id']}/dashboard").json()["branches"] == []  # no tags yet
+    main = tag(client, o, "Main", CARO_ADV[:4])  # 1.e4 c6 2.d4 d5: all three lines
+    adv = tag(client, o, "Advance", CARO_ADV)  # line a only
+    for _ in range(2):
+        make_due(db, a)
+        review(client, a, CARO_ADV)  # known
+    review(client, b, CARO_CLASSIC, wrong={2: "e7e5"})  # learning
+
+    d = client.get(f"/api/openings/{o['id']}/dashboard").json()
+    rows = {r["name"]: r for r in d["branches"]}
+    assert list(rows) == ["Main", "Advance"]  # every line is under Main: no "No branch" row
+    assert rows["Main"]["parent_id"] is None and rows["Advance"]["parent_id"] == main["id"]
+    assert rows["Main"]["mastery"] == {"new": 1, "learning": 1, "known": 1, "mastered": 0}
+    assert (rows["Main"]["lines"], rows["Main"]["due"]) == (3, 2)
+    assert (rows["Advance"]["lines"], rows["Advance"]["due"], rows["Advance"]["mastery"]["known"]) == (1, 0, 1)
+
+    # Filtered to a branch: only its lines count
+    d = client.get(f"/api/openings/{o['id']}/dashboard", params={"tag_id": adv["id"]}).json()
+    assert {r["name"]: r["lines"] for r in d["branches"]} == {"Main": 1, "Advance": 1}
+
+    # The overview has the same per opening; untagged lines get their own row
+    client.delete(f"/api/tags/{main['id']}")
+    ov = client.get(f"/api/repertoires/{rep['id']}/overview").json()["openings"][0]
+    assert [(r["id"], r["name"], r["lines"]) for r in ov["branches"]] == [(adv["id"], "Advance", 1), (None, "No branch", 2)]
 
 
 def test_activity_days_and_runs(client, setup, db):

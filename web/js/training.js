@@ -259,7 +259,9 @@ export class TrainingController {
       const saved = await api.recordReview(review.lineId, review.practice, review.attempts);
       resultText += review.practice
         ? ' Practice run: the schedule is unchanged.'
-        : ` Streak ${saved.streak}, ${describeReviewDate(saved.next_review_on)}.`;
+        : saved.early && saved.correct
+          ? ` Early review (not due yet): streak stays at ${saved.streak}, ${describeReviewDate(saved.next_review_on)}.`
+          : ` Streak ${saved.streak}, ${describeReviewDate(saved.next_review_on)}.`;
     } catch (err) {
       resultText += ` (Not saved: ${err.message})`;
     }

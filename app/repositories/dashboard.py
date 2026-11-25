@@ -46,7 +46,7 @@ def dashboard(s: Session, opening_id: int, tag_id: int | None = None, rest: bool
         for line_id, correct, reviewed_at in rows:
             history[line_id].append((correct, reviewed_at))
 
-    from app.repositories.insights import forecast, mastery, problem_positions, reviewed_line_ids
+    from app.repositories.insights import branch_breakdown, forecast, mastery, problem_positions, reviewed_line_ids
 
     today = date.today()
     reviewed = reviewed_line_ids(s, ids)
@@ -65,6 +65,9 @@ def dashboard(s: Session, opening_id: int, tag_id: int | None = None, rest: bool
             "mastery": mastery(ids, streaks, reviewed),
         },
         "forecast": forecast([line.next_review_on for line in lines], today),
+        "branches": branch_breakdown(
+            s, opening_id, ids, streaks, reviewed, {line.id for line in lines if line.next_review_on <= today}
+        ),
         "problems": problem_positions(s, ids, moves),
         "lines": [
             {

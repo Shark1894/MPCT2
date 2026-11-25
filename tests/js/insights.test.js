@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatMoves, weakness, viewLines, weakestLines, activityLevel, activityWeeks, streakBreakdown } from '../../web/js/insights.js';
+import { formatMoves, weakness, viewLines, weakestLines, activityLevel, activityWeeks, streakBreakdown, branchRows, repertoireTotals } from '../../web/js/insights.js';
 
 const iso = (offset) => {
   const d = new Date();
@@ -97,4 +97,27 @@ test('streakBreakdown: new row, one row per streak, 6+ lumped together', () => {
   assert.equal(rows[7].gap, 'every 60 days');
   assert.equal(rows[1].gap, 'last had a mistake');
   assert.equal(rows[7].label, '6+× correct');
+});
+
+test('branchRows: branches nested under their parents, "No branch" last', () => {
+  const m = { new: 0, learning: 0, known: 0, mastered: 0 };
+  const rows = branchRows([
+    { id: null, name: 'No branch', parent_id: null, lines: 2, due: 0, mastery: m },
+    { id: 1, name: 'Main', parent_id: null, lines: 5, due: 1, mastery: m },
+    { id: 3, name: 'Wuss', parent_id: 1, lines: 2, due: 0, mastery: m },
+    { id: 2, name: 'Other', parent_id: null, lines: 1, due: 0, mastery: m },
+  ]);
+  assert.deepEqual(
+    rows.map((r) => [r.branch.name, r.depth]),
+    [['Main', 0], ['Wuss', 1], ['Other', 0], ['No branch', 0]],
+  );
+});
+
+test('repertoireTotals: sums openings, accuracy weighted by reviews', () => {
+  const t = repertoireTotals([
+    { lines: 10, due: 2, reviews: 10, accuracy: 0.5, mastery: { new: 1, learning: 2, known: 3, mastered: 4 } },
+    { lines: 4, due: 0, reviews: 30, accuracy: 0.9, mastery: { new: 4, learning: 0, known: 0, mastered: 0 } },
+    { lines: 0, due: 0, reviews: 0, accuracy: null, mastery: { new: 0, learning: 0, known: 0, mastered: 0 } },
+  ]);
+  assert.deepEqual(t, { lines: 14, due: 2, reviews: 40, accuracy: 32 / 40, mastery: { new: 5, learning: 2, known: 3, mastered: 4 } });
 });

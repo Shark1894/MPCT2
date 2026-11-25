@@ -59,3 +59,9 @@ def client(db):
 def count(db, table: str) -> int:
     with db.connect() as conn:
         return conn.execute(text(f"SELECT count(*) FROM {table}")).scalar_one()
+
+
+def make_due(db, line_id: int) -> None:
+    """Make a line due today, so the next review moves its schedule (early reviews don't)."""
+    with db.begin() as conn:
+        conn.execute(text("UPDATE lines SET next_review_on = CURRENT_DATE WHERE id = :id"), {"id": line_id})

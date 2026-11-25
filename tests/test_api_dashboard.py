@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import pytest
 from sqlalchemy import text
 
-from tests.conftest import count
+from tests.conftest import count, make_due
 
 TODAY = date.today()
 CARO_ADV = ["e2e4", "c7c6", "d2d4", "d7d5", "e4e5", "c8f5"]
@@ -41,9 +41,10 @@ def test_dashboard_empty_history(client, setup):
     assert (line["streak"], line["recent"], line["reviews"], line["last_reviewed_at"]) == (0, [], 0, None)
 
 
-def test_dashboard_history_stats_and_order(client, setup):
+def test_dashboard_history_stats_and_order(client, setup, db):
     o, a, b = setup
     for ok in (True, False, True, True, True, True):  # 6 reviews: last 5 shown
+        make_due(db, a)
         review(client, a, CARO_ADV, ok)
     review(client, b, CARO_CLASSIC, ok=False)
     review(client, b, CARO_CLASSIC, practice=True)  # practice: excluded

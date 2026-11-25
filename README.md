@@ -50,6 +50,7 @@ The full plan, decisions and data model are in the project's
 | — | Practical tab: moves in your openings that take the opponent into sharp, only-move territory, even at an engine cost; engine-only measures (backlog item 7) | Done |
 | — | Practical tab: check my moves — flag repertoire moves that give away more than a chosen win% against the engine's best | Done |
 | — | Pass a move on the analysis board, to see what the other side would play (analysis only) | Done |
+| — | Dashboard: early reviews don't move the schedule; streak rows list their lines; progress by branch and for the whole repertoire | Done |
 
 ## Using the board
 
@@ -312,7 +313,9 @@ Below that, four sub-tabs (opens on Overview; after that the last one used is re
 between them):
 
 - **Overview**: **Openings**, every opening in the repertoire (White first) with lines, due, accuracy and a
-  learning-progress bar; click one to select it. **Training activity**: a grid of the last 26 weeks (shade =
+  learning-progress bar; click one to select it. With more than one opening, an **All openings** row on top totals
+  the whole repertoire. **▸** next to an opening with branch tags opens its learning progress per branch; tap a
+  branch to open that opening's Progress tab filtered to it. **Training activity**: a grid of the last 26 weeks (shade =
   reviews that day), your current and longest run of consecutive training days, and how many days you trained.
 - **Lines**: sort (next review, weakest, lowest streak, move order), show (all, due, not reviewed yet, recent
   mistakes, bookmarked) and search by move (`Bf5`, `3.e5`). Choices are remembered. Each line shows its next review,
@@ -320,9 +323,14 @@ between them):
   and **Delete**. On phones lines are cards. When Show or the search narrows the list, **Train shown (n)** trains
   exactly those lines in that order (**Train bookmarked (n)** with the Bookmarked filter).
 - **Progress**: **learning progress**, lines by stage. New (never reviewed), learning (streak 0–1), known (2–4,
-  comments hidden in training), mastered (5+, next review a month or more away). **Lines by streak**: how many
-  lines sit at each number of correct reviews in a row (new, 0×, 1× … 5×, 6+×), with when each row is next due
-  and a **Train** button for that row's lines. **Due over the next 2 weeks**:
+  comments hidden in training), mastered (5+, next review a month or more away). **By branch**: one stacked
+  stage bar per branch tag, nested under its parent (a branch counts its sub-branches' lines too), its length set
+  by the number of lines, with how many are due; lines in no branch come last. Tap a branch to show only its lines
+  (tap again for all). **Lines by streak**: how many lines sit at each number of correct reviews in a row (new, 0×,
+  1× … 5×, 6+×), with when each row is next due and a **Train** button for that row's lines. Tap a row's name to
+  list its lines (moves, branch tags, next review; soonest first); tap a line to see it on the board.
+  Training from here is revision: a line only moves up a row when it was due (see early reviews below).
+  **Due over the next 2 weeks**:
   lines due each day (overdue lines count as today), plus how many are due later.
 - **Gaps**: the repertoire gap finder (see below).
 
@@ -334,6 +342,11 @@ add or edit a short note (up to 500 characters). Bookmarks survive extending or 
 bookmark deletes its note, and asks first if there is one.
 API: `PUT /api/lines/{id}/bookmark` with `{"note": "..."}` (bookmarks, or changes the note; empty = no note),
 `DELETE /api/lines/{id}/bookmark`. Dashboard and training lines include `bookmarked` and `bookmark_note`.
+
+**Early reviews.** Only a review of a line that is due (next review today or earlier) moves it up a stage, so
+training lines early (Train all, Train weakest, a streak row, a single line) can't skip the waits. A clean early
+review is recorded and counts towards accuracy, but the streak and next review stay as they were (the end card says
+so); a mistake still resets the line, as always. The review API returns `early: true` for these.
 
 Practice retries (of a line already played correctly) are left out of everything here. Hover or tap a bar, segment
 or day for its numbers.

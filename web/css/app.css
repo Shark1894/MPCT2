@@ -2382,6 +2382,53 @@ button.star[aria-pressed='true'] {
 .ov-due { color: var(--text-dim); }
 .ov-due.is-due { color: var(--copper); font-weight: 600; }
 
+.ov-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ov-item > .ov-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.ov-total {
+  border-bottom: 1px solid var(--surface-2);
+  border-radius: 8px 8px 0 0;
+  margin-bottom: 2px;
+}
+
+.ov-expand,
+.ov-expand-spacer {
+  flex: none;
+  width: 30px;
+  height: 30px;
+}
+
+.ov-expand {
+  padding: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.ov-expand:hover {
+  background: var(--surface-2);
+}
+
+.ov-branches {
+  margin: 0 34px 8px 22px;
+  padding-left: 8px;
+  border-left: 2px solid var(--surface-2);
+}
+
+.ov-branches[hidden] {
+  display: none;
+}
+
 /* forecast */
 .fc-bars {
   display: grid;
@@ -2498,6 +2545,168 @@ button.star[aria-pressed='true'] {
 .sb-row.zero .sb-count,
 .sb-row.zero .sb-name {
   color: var(--text-dim);
+}
+
+button.sb-label {
+  align-items: flex-start;
+  text-align: left;
+  font-weight: 400;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  position: relative;
+}
+
+button.sb-label::before {
+  content: '▸';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.sb-row.open button.sb-label::before {
+  content: '▾';
+}
+
+button.sb-label:hover {
+  background: var(--surface-2);
+}
+
+.sb-row .sb-label {
+  padding: 2px 4px 2px 14px;
+}
+
+.sb-lines {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 4px 0 4px 10px;
+  border-left: 2px solid var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.sb-lines[hidden] {
+  display: none;
+}
+
+.sb-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 8px;
+  text-align: left;
+  font-weight: 400;
+  font-size: 13px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+}
+
+.sb-line:hover {
+  background: var(--surface-2);
+}
+
+.sb-line-moves {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sb-line-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sb-line-due {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  min-width: 6.5em;
+  text-align: right;
+}
+
+.sb-line-due.is-due {
+  color: var(--copper);
+  font-weight: 600;
+}
+
+/* learning stages by branch */
+.br-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.br-row {
+  display: grid;
+  grid-template-columns: minmax(7em, 13em) minmax(0, 1fr) 2.5em 4.5em;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 8px;
+  text-align: left;
+  font-weight: 400;
+  font-size: 13px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+button.br-row:hover {
+  background: var(--surface-2);
+}
+
+.br-row[aria-pressed='true'] {
+  background: var(--blue-soft);
+  border-color: var(--blue);
+}
+
+.br-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.br-name.sub {
+  font-weight: 400;
+}
+
+.br-row.other .br-name {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--text-dim);
+}
+
+.br-track {
+  min-width: 0;
+}
+
+.br-count {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.br-due {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.br-due.is-due {
+  color: var(--copper);
+  font-weight: 600;
 }
 
 /* activity heatmap */
@@ -2726,6 +2935,31 @@ button.star[aria-pressed='true'] {
   .ov-acc { grid-area: acc; }
   .ov-lines { display: none; }
   .ov-row .mastery { grid-area: bar; }
+
+  .br-row {
+    grid-template-columns: minmax(0, 1fr) 2em 4em;
+    grid-template-areas: 'name count due' 'bar bar bar';
+    row-gap: 4px;
+  }
+
+  .br-name { grid-area: name; }
+  .br-track { grid-area: bar; }
+  .br-count { grid-area: count; }
+  .br-due { grid-area: due; }
+
+  .sb-line {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .sb-line-moves {
+    grid-column: 1 / -1;
+    white-space: normal;
+  }
+
+  .ov-branches {
+    margin-right: 0;
+    margin-left: 8px;
+  }
 
   .pp-item {
     grid-template-columns: minmax(0, 1fr);

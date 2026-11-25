@@ -91,7 +91,8 @@ def record_review(s: Session, line_id: int, attempts: list[dict], practice: bool
 
     attempts: every move the user tried, in order: [{"ply": 3, "uci": "g1f3"}, ...].
     Correctness is decided here against the stored line. The line counts as correct
-    only if no wrong move was played. Every one of the user's moves must have been
+    only if no wrong move was played. A review of a line that isn't due yet is early: if
+    clean it leaves the streak and schedule alone; a mistake resets them as usual. Every one of the user's moves must have been
     played correctly in the end (hints guarantee that), otherwise the review is
     incomplete and rejected.
     """
@@ -116,8 +117,12 @@ def record_review(s: Session, line_id: int, attempts: list[dict], practice: bool
     mistakes = sum(1 for _, _, ok in checked if not ok)
     correct = mistakes == 0
     previous = current_streaks(s, [line_id])[line_id]
-    if practice:
-        streak = previous  # retries are practice: no change to the streak or schedule
+    # Early: the line isn't due yet. A clean early run counts towards accuracy but can't
+    # move the line up a stage (otherwise training it repeatedly would skip the waits);
+    # a mistake still resets it, because it shows the line isn't known.
+    early = not practice and line.next_review_on > date.today()
+    if practice or (early and correct):
+        streak = previous  # no change to the streak or schedule
     else:
         streak = next_streak(previous, correct)
         line.next_review_on = next_review_on(streak)
@@ -134,6 +139,7 @@ def record_review(s: Session, line_id: int, attempts: list[dict], practice: bool
         "correct": correct,
         "mistakes": mistakes,
         "practice": practice,
+        "early": early,
         "streak": streak,
         "next_review_on": line.next_review_on,
     }

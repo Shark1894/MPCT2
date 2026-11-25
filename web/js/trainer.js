@@ -9,7 +9,8 @@
 //
 // Any mistake makes the line count as failed. Retrying a failed line is a real
 // review: get it right and it counts as correct. Retrying a line you got right
-// is practice: recorded, but it doesn't change the schedule.
+// is practice: recorded, but it doesn't change the schedule. The server also leaves the
+// schedule alone for a clean run of a line that wasn't due yet (an early review).
 
 export const HINT_PIECE_AFTER = 2;
 export const HINT_MOVE_AFTER = 3;
